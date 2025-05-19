@@ -4,6 +4,7 @@ import './globals.css';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider } from '@/hooks/useAuth'; // Import AuthProvider
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -28,15 +29,17 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <SidebarProvider defaultOpen={true}>
-          <AppSidebar />
-          <SidebarInset>
-            <main className="min-h-screen p-4 md:p-6 lg:p-8">
-              {children}
-            </main>
-          </SidebarInset>
-        </SidebarProvider>
-        <Toaster />
+        <AuthProvider> {/* Wrap with AuthProvider */}
+          <SidebarProvider defaultOpen={true}>
+            <AppSidebar />
+            <SidebarInset>
+              <main className="min-h-screen p-4 md:p-6 lg:p-8">
+                {children}
+              </main>
+            </SidebarInset>
+          </SidebarProvider>
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   );
