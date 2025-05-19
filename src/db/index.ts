@@ -1,27 +1,30 @@
-
-import { drizzle } from 'drizzle-orm/node-postgres';
+// index.ts
+import { drizzle as drizzlePostgres } from 'drizzle-orm/node-postgres';
 import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
 import postgres from 'postgres';
 import Database from 'better-sqlite3';
-import * as schema from './schema'; // This schema is PG-focused
+import * as schema from './schema';
 
-// Ensure environment variables are loaded (e.g., by next.config.js or a .env file)
-// require('dotenv').config(); // Uncomment if not handled elsewhere
+// ✅ Extend globalThis for custom caching variables
+declare global {
+  // biome-ignore lint/style/noVar: This is needed for global declarations
+  var DrizzlePostgresClient: postgres.Sql | undefined;
+  var DrizzleSqliteClient: ReturnType<typeof Database> | undefined;
+}
 
-let dbInstance: any; // Using any for simplicity, could be a union type of Drizzle clients
+// ✅ Ensure this file is treated as a module
+export {};
 
-const dbType = process.env.DB_TYPE || 'postgres'; // Default to postgres
+let dbInstance: ReturnType<typeof drizzlePostgres> | ReturnType<typeof drizzleSqlite>;
+
+const dbType = process.env.DB_TYPE || 'postgres'; // Default to PostgreSQL
 
 if (dbType === 'postgres') {
   if (!process.env.POSTGRES_URL) {
     throw new Error('POSTGRES_URL environment variable is not set for DB_TYPE="postgres".');
   }
-  console.log("Connecting to PostgreSQL database...");
-  // For persistent connection in development, and a new connection in production per serverless function instance.
-  declare global {
-    // biome-ignore lint/style/noVar: This is to allow global declaration for connection caching.
-    var DrizzlePostgresClient: postgres.Sql | undefined;
-  }
+
+  console.log('🔌 Connecting to PostgreSQL database...');
 
   let sqlClient: postgres.Sql;
   if (process.env.NODE_ENV === 'production') {
@@ -32,20 +35,19 @@ if (dbType === 'postgres') {
     }
     sqlClient = global.DrizzlePostgresClient;
   }
-  // The schema is PG-focused. This will work fine.
-  dbInstance = drizzle(sqlClient, { schema, logger: process.env.NODE_ENV === 'development' });
+
+  dbInstance = drizzlePostgres(sqlClient, {
+    schema,
+    logger: process.env.NODE_ENV === 'development',
+  });
 
 } else if (dbType === 'sqlite') {
   if (!process.env.SQLITE_DB_PATH) {
     throw new Error('SQLITE_DB_PATH environment variable is not set for DB_TYPE="sqlite".');
   }
-  console.log(`Connecting to SQLite database at: ${process.env.SQLITE_DB_PATH}`);
 
-  declare global {
-    // biome-ignore lint/style/noVar: This is to allow global declaration for connection caching.
-    var DrizzleSqliteClient: ReturnType<typeof Database> | undefined;
-  }
-  
+  console.log(`🔌 Connecting to SQLite database at: ${process.env.SQLITE_DB_PATH}`);
+
   let sqliteClient: ReturnType<typeof Database>;
 
   if (process.env.NODE_ENV === 'production') {
@@ -56,14 +58,11 @@ if (dbType === 'postgres') {
     }
     sqliteClient = global.DrizzleSqliteClient;
   }
-  
-  // IMPORTANT: The imported 'schema' is PG-focused (uses pgTable).
-  // Drizzle's SQLite driver might handle basic cases, but for complex PG-specific
-  // features or types in your schema, this could lead to runtime errors or
-  // unexpected behavior with SQLite.
-  // For robust multi-dialect support, you'd typically have separate schema files
-  // (e.g., schema.postgres.ts, schema.sqlite.ts) and a dynamic drizzle.config.ts.
-  dbInstance = drizzleSqlite(sqliteClient, { schema, logger: process.env.NODE_ENV === 'development' });
+
+  dbInstance = drizzleSqlite(sqliteClient, {
+    schema,
+    logger: process.env.NODE_ENV === 'development',
+  });
 
 } else {
   throw new Error(`Unsupported DB_TYPE: ${dbType}. Must be "postgres" or "sqlite".`);

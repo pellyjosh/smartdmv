@@ -9,7 +9,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:up": "npx drizzle-kit up",
+    "db:push": "npx drizzle-kit push",
+    "db:generate": "npx drizzle-kit generate",
+    "db:studio": "npx drizzle-kit studio",
+    "db:migrate": "npx drizzle-kit migrate"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.8.0",
@@ -42,7 +47,8 @@
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "dotenv": "^16.5.0",
-    "drizzle-orm": "^0.32.0",
+    "drizzle-kit": "^0.31.1",
+    "drizzle-orm": "^0.43.1",
     "firebase": "^11.7.3",
     "genkit": "^1.8.0",
     "lucide-react": "^0.475.0",
