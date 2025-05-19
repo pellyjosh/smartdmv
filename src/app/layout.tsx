@@ -4,7 +4,9 @@ import './globals.css';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from '@/hooks/useAuth'; // Import AuthProvider
+import { AuthProvider } from '@/hooks/useAuth';
+import { ThemeProvider } from '@/context/ThemeContext'; // Import ThemeProvider
+import { ThemeSwitcherWidget } from '@/components/ThemeSwitcherWidget'; // Import Widget
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -29,16 +31,19 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <AuthProvider> {/* Wrap with AuthProvider */}
-          <SidebarProvider defaultOpen={true}>
-            <AppSidebar />
-            <SidebarInset>
-              <main className="min-h-screen p-4 md:p-6 lg:p-8">
-                {children}
-              </main>
-            </SidebarInset>
-          </SidebarProvider>
-          <Toaster />
+        <AuthProvider>
+          <ThemeProvider> {/* Wrap with ThemeProvider */}
+            <SidebarProvider defaultOpen={true}>
+              <AppSidebar />
+              <SidebarInset>
+                <main className="min-h-screen p-4 md:p-6 lg:p-8">
+                  {children}
+                </main>
+              </SidebarInset>
+            </SidebarProvider>
+            <Toaster />
+            <ThemeSwitcherWidget /> {/* Add the widget here */}
+          </ThemeProvider>
         </AuthProvider>
       </body>
     </html>
