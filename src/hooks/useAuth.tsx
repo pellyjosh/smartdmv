@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return new Promise<void>((resolve, reject) => {
       setTimeout(() => {
         let userData: User | null = null;
-        if (email === 'admin@vetconnect.pro' && password === 'password') {
+        if (email === 'ççç' && password === 'password') {
           userData = {
             email,
             role: 'ADMINISTRATOR',
