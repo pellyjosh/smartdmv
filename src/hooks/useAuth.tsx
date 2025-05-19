@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const storedUser: User = JSON.parse(storedUserString);
         setUser(storedUser);
         // If user is on login page but already authenticated, redirect them
-        if (pathname === '/login') {
+        if (pathname === '/auth/login') {
           navigateBasedOnRole(storedUser.role);
         }
       }
@@ -95,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setUser(null);
     sessionStorage.removeItem('vetconnectpro-user');
-    router.push('/login');
+    router.push('/auth/login');
     setIsLoading(false);
   };
 

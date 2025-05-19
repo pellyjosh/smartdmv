@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -38,7 +39,7 @@ export function AppSidebar() {
   const { user, logout, initialAuthChecked } = useAuth();
 
   // Hide sidebar on login page
-  if (pathname === '/login') {
+  if (pathname === '/auth/login') {
     return null;
   }
 
@@ -128,11 +129,11 @@ export function AppSidebar() {
         ) : initialAuthChecked ? (
            <SidebarMenuButton
               asChild
-              isActive={pathname === "/login"}
+              isActive={pathname === "/auth/login"}
               tooltip={{ children: "Login", className:"bg-primary text-primary-foreground"}}
-              className={cn(pathname === "/login" && "bg-sidebar-accent text-sidebar-accent-foreground", "w-full justify-start group-data-[collapsible=icon]:justify-center")}
+              className={cn(pathname === "/auth/login" && "bg-sidebar-accent text-sidebar-accent-foreground", "w-full justify-start group-data-[collapsible=icon]:justify-center")}
             >
-            <Link href="/login">
+            <Link href="/auth/login">
               <LogIn className="h-5 w-5" />
               <span className="group-data-[collapsible=icon]:hidden">Login</span>
             </Link>
