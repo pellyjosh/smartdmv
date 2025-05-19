@@ -9,7 +9,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PawPrint, LogIn, Eye, EyeOff } from "lucide-react"; // Eye icons for password visibility if implemented
+import { PawPrint, LogIn as LogInIcon, Eye, EyeOff } from "lucide-react"; // Renamed LogIn to LogInIcon
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -47,7 +47,7 @@ export default function LoginPage() {
         description: "Redirecting to your dashboard...",
         variant: "default",
       });
-      // Redirection is handled by the useAuth hook or useEffect below
+      // Redirection is handled by the useAuth hook or useEffect
     } catch (error: any) {
       toast({
         title: "Login Failed",
@@ -57,17 +57,16 @@ export default function LoginPage() {
     }
   };
 
+  // User already logged in, redirection handled by useAuth typically
   if (user && !authIsLoading) {
-    if (typeof window !== "undefined") {
-      // Redirection logic is in useAuth, but this is a fallback
-      // It might be better to show a loading spinner here until redirection completes
-      // For simplicity, we'll allow useAuth to handle it primarily.
-    }
+    // This return null relies on useAuth to redirect.
+    // A loading spinner could be shown here while useAuth processes the redirect.
     return null; 
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-100 dark:bg-slate-900">
+    <div className="min-h-screen flex flex-col bg-background"> {/* Overall page container */}
+      {/* Header */}
       <header className="w-full p-4 flex justify-start items-center border-b border-border bg-card shadow-sm">
         <div className="flex items-center">
           <PawPrint className="h-8 w-8 text-primary mr-2" />
@@ -75,13 +74,14 @@ export default function LoginPage() {
         </div>
       </header>
 
-      <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
-        <div className="w-full max-w-4xl flex flex-col md:flex-row rounded-xl shadow-2xl bg-card overflow-hidden min-h-[600px]">
-          {/* Left column - Login Form */}
-          <div className="w-full md:w-2/5 p-8 md:p-12 flex flex-col justify-center">
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Welcome back</h1>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+      {/* Main content with two columns */}
+      <main className="flex-1 flex flex-col md:flex-row">
+        {/* Left Column: Form */}
+        <div className="w-full md:w-2/5 bg-card p-8 md:p-12 lg:p-16 flex flex-col justify-center">
+          <div className="max-w-md mx-auto w-full">
+            <div className="mb-10 text-left">
+              <h1 className="text-3xl font-bold text-foreground">Welcome back</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
                 Sign in to access your veterinary practice
               </p>
             </div>
@@ -93,7 +93,7 @@ export default function LoginPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Email</FormLabel>
+                      <FormLabel className="text-sm font-medium text-foreground">Email</FormLabel>
                       <FormControl>
                         <Input 
                           placeholder="Enter your email" 
@@ -111,19 +111,19 @@ export default function LoginPage() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                       <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">Password</FormLabel>
+                       <FormLabel className="text-sm font-medium text-foreground">Password</FormLabel>
                       <FormControl>
                         <div className="relative">
                           <Input 
                             type={showPassword ? "text" : "password"} 
                             placeholder="Enter your password" 
                             {...field} 
-                            className="text-base md:text-sm pr-10"
+                            className="text-base md:text-sm pr-10" // Space for the icon
                           />
                           <button
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
-                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground"
                             aria-label={showPassword ? "Hide password" : "Show password"}
                           >
                             {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -148,7 +148,7 @@ export default function LoginPage() {
                             className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                           />
                         </FormControl>
-                        <FormLabel className="text-sm font-normal text-gray-700 dark:text-gray-300 cursor-pointer">
+                        <FormLabel className="text-sm font-normal text-muted-foreground cursor-pointer">
                           Remember me
                         </FormLabel>
                       </FormItem>
@@ -156,7 +156,7 @@ export default function LoginPage() {
                   />
                   <Button 
                     variant="link" 
-                    className="p-0 h-auto text-xs sm:text-sm font-normal text-primary hover:underline"
+                    className="p-0 h-auto text-sm font-normal text-primary hover:underline"
                     type="button"
                     onClick={() => toast({ title: "Forgot Password", description: "Password recovery is not yet implemented."})}
                   >
@@ -171,7 +171,7 @@ export default function LoginPage() {
                 >
                   {authIsLoading ? (
                     <>
-                      <LogIn className="mr-2 h-4 w-4 animate-spin" />
+                      <LogInIcon className="mr-2 h-4 w-4 animate-spin" />
                       Signing in...
                     </>
                   ) : "Sign in"}
@@ -179,27 +179,27 @@ export default function LoginPage() {
               </form>
             </Form>
           </div>
+        </div>
 
-          {/* Right column - Image and Branding */}
-          <div className="hidden md:flex md:w-3/5 relative bg-slate-200 dark:bg-slate-800 rounded-r-xl">
-            <Image
-              src="https://placehold.co/800x1000.png"
-              alt="Illustration of a veterinary clinic scene with pets and vets"
-              layout="fill"
-              objectFit="cover"
-              className="rounded-r-xl opacity-50"
-              data-ai-hint="veterinary clinic illustration"
-              priority
-            />
-            <div className="absolute inset-0 flex items-end p-8">
-              <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm p-6 rounded-lg shadow-md text-gray-800 dark:text-gray-200">
-                <h2 className="text-2xl font-semibold mb-3 text-primary">
-                  Comprehensive Pet Wellness
-                </h2>
-                <p className="text-sm leading-relaxed">
-                  VetConnectPro simplifies managing your pet's health with easy appointment booking, centralized records, and helpful AI insights for a proactive approach to their care.
-                </p>
-              </div>
+        {/* Right Column: Image and Branding */}
+        <div className="hidden md:flex md:w-3/5 relative">
+          <Image
+            src="https://placehold.co/800x1200.png" 
+            alt="Illustration of a veterinary clinic scene with pets and vets"
+            layout="fill"
+            objectFit="cover"
+            className="opacity-90" // Slight opacity to match image if needed, or remove
+            data-ai-hint="veterinary clinic illustration"
+            priority
+          />
+          <div className="absolute inset-x-0 bottom-0 p-8 lg:p-12"> {/* More padding on larger screens */}
+            <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm p-6 rounded-lg shadow-md text-gray-800 dark:text-gray-200">
+              <h2 className="text-xl lg:text-2xl font-semibold mb-3 text-primary">
+                Complete Veterinary Management
+              </h2>
+              <p className="text-xs lg:text-sm leading-relaxed">
+                VetConnectPro provides a comprehensive solution for modern veterinary practices with appointment scheduling, medical records, lab integration, and AI-powered diagnostic assistance.
+              </p>
             </div>
           </div>
         </div>
@@ -207,3 +207,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
