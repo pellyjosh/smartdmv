@@ -1,8 +1,11 @@
+
 // schema/usersSchema.ts
 import { dbTable, text, timestamp, primaryKey } from '@/db/db.config';
 import { relations } from 'drizzle-orm';
 import { practices } from './practicesSchema';
 import { sessions } from './sessionsSchema';
+
+const isSqlite = process.env.DB_TYPE === 'sqlite';
 
 export const userRoleEnum = ['CLIENT', 'PRACTICE_ADMINISTRATOR', 'ADMINISTRATOR'] as const;
 
@@ -14,15 +17,24 @@ export const users = dbTable('users', {
   role: text('role', { enum: userRoleEnum }).notNull(),
   practiceId: text('practice_id').references(() => practices.id, { onDelete: 'set null' }),
   currentPracticeId: text('current_practice_id').references(() => practices.id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow(),
-  updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow(),
+
+  createdAt: isSqlite
+    ? timestamp('created_at').notNull().$defaultFn(() => Math.floor(Date.now() / 1000))
+    : timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+
+  updatedAt: isSqlite
+    ? timestamp('updated_at').notNull().$defaultFn(() => Math.floor(Date.now() / 1000))
+    : timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
 });
 
 export const administratorAccessiblePractices = dbTable('administrator_accessible_practices', {
   administratorId: text('administrator_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
-  assignedAt: timestamp('assigned_at', { mode: 'date' }).defaultNow(),
-}, (table: { administratorId: any; practiceId: any; }) => ({
+
+  assignedAt: isSqlite
+    ? timestamp('assigned_at').notNull().$defaultFn(() => Math.floor(Date.now() / 1000))
+    : timestamp('assigned_at', { mode: 'date' }).notNull().defaultNow(),
+}, (table) => ({
   pk: primaryKey({ columns: [table.administratorId, table.practiceId] }),
 }));
 
@@ -53,4 +65,3 @@ export const administratorAccessiblePracticesRelations = relations(administrator
     references: [practices.id],
   }),
 }));
-
