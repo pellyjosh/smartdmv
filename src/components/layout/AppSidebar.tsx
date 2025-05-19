@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { PawPrint, Stethoscope, Heart, Sparkles, LogIn, LogOut, UserCircle } from 'lucide-react';
+import { HeartPulse, Stethoscope, Heart, Sparkles, LogIn, LogOut, UserCircle } from 'lucide-react';
 import {
   Sidebar,
   SidebarHeader,
@@ -12,16 +12,16 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarTrigger,
-  SidebarFooter, // Added for logout button
+  SidebarFooter, 
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/hooks/useAuth'; // Import useAuth
+import { useAuth } from '@/hooks/useAuth'; 
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 
 const navItems = [
-  { href: '/', label: 'Services', icon: Stethoscope, roles: ['CLIENT', 'PRACTICE_ADMINISTRATOR', 'ADMINISTRATOR', null] }, // null for unauthenticated
+  { href: '/', label: 'Services', icon: Stethoscope, roles: ['CLIENT', 'PRACTICE_ADMINISTRATOR', 'ADMINISTRATOR', null] }, 
   { href: '/favorites', label: 'Favorites', icon: Heart, roles: ['CLIENT', null] },
   { href: '/symptom-checker', label: 'Symptom Checker', icon: Sparkles, roles: ['CLIENT', null] },
 ];
@@ -58,14 +58,14 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" variant="sidebar" side="left">
       <SidebarHeader className="flex items-center justify-between p-4">
         <Link href="/" className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
-          <PawPrint className="h-8 w-8 text-primary" />
-          <h1 className="text-xl font-semibold text-primary">VetConnectPro</h1>
+          <HeartPulse className="h-8 w-8 text-primary" />
+          <h1 className="text-xl font-semibold text-primary">SmartDVM</h1>
         </Link>
          <div className="group-data-[collapsible=icon]:hidden">
           <SidebarTrigger />
         </div>
         <Link href="/" className="hidden items-center gap-2 group-data-[collapsible=icon]:flex">
-           <PawPrint className="h-8 w-8 text-primary" />
+           <HeartPulse className="h-8 w-8 text-primary" />
         </Link>
       </SidebarHeader>
       <SidebarContent>

@@ -19,8 +19,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'VetConnectPro',
-  description: 'Your trusted partner in pet health.',
+  title: 'SmartDVM',
+  description: 'Your trusted partner in pet health management.',
 };
 
 export default function RootLayout({

@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Login - VetConnectPro',
-  description: 'Login to VetConnectPro.',
+  title: 'Login - SmartDVM',
+  description: 'Login to SmartDVM.',
 };
 
 export default function AuthLayout({

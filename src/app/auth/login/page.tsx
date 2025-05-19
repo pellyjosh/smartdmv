@@ -9,7 +9,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PawPrint, LogIn as LogInIcon, Eye, EyeOff } from "lucide-react"; // Renamed LogIn to LogInIcon
+import { HeartPulse, LogIn as LogInIcon, Eye, EyeOff } from "lucide-react"; 
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -69,8 +69,8 @@ export default function LoginPage() {
       {/* Header */}
       <header className="w-full p-4 flex justify-start items-center border-b border-border bg-card shadow-sm">
         <div className="flex items-center">
-          <PawPrint className="h-8 w-8 text-primary mr-2" />
-          <span className="font-bold text-xl text-foreground">VetConnectPro</span>
+          <HeartPulse className="h-8 w-8 text-primary mr-2" />
+          <span className="font-bold text-xl text-foreground">SmartDVM</span>
         </div>
       </header>
 
@@ -188,17 +188,17 @@ export default function LoginPage() {
             alt="Illustration of a veterinary clinic scene with pets and vets"
             layout="fill"
             objectFit="cover"
-            className="opacity-90" // Slight opacity to match image if needed, or remove
+            className="opacity-90" 
             data-ai-hint="veterinary clinic illustration"
             priority
           />
-          <div className="absolute inset-x-0 bottom-0 p-8 lg:p-12"> {/* More padding on larger screens */}
+          <div className="absolute inset-x-0 bottom-0 p-8 lg:p-12"> 
             <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm p-6 rounded-lg shadow-md text-gray-800 dark:text-gray-200">
               <h2 className="text-xl lg:text-2xl font-semibold mb-3 text-primary">
                 Complete Veterinary Management
               </h2>
               <p className="text-xs lg:text-sm leading-relaxed">
-                VetConnectPro provides a comprehensive solution for modern veterinary practices with appointment scheduling, medical records, lab integration, and AI-powered diagnostic assistance.
+                SmartDVM provides a comprehensive solution for modern veterinary practices with appointment scheduling, medical records, lab integration, and AI-powered diagnostic assistance.
               </p>
             </div>
           </div>
