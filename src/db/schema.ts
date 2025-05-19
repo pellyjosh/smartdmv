@@ -1,40 +1,36 @@
 
-import { sqliteTable, text, integer, primaryKey } from 'drizzle-orm/sqlite-core';
+import { pgTable, text, timestamp, primaryKey, integer } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
 // Practices Table
-export const practices = sqliteTable('practices', {
+export const practices = pgTable('practices', {
   id: text('id').primaryKey(), // e.g., 'practice_MAIN_HQ', 'practice_NORTH'
   name: text('name').notNull(),
-  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow(),
 });
 
 export const practicesRelations = relations(practices, ({ many }) => ({
-  clients: many(users, { relationName: 'clientPractice' }),
-  practiceAdmins: many(users, { relationName: 'practiceAdminPractice' }),
+  usersPractice: many(users, { relationName: 'usersPracticeRelation' }), // For clients/practice admins
+  usersCurrentPractice: many(users, {relationName: 'usersCurrentPracticeRelation'}), // For admins current practice
   accessibleToAdmins: many(administratorAccessiblePractices),
 }));
 
 // Users Table
 export const userRoleEnum = ['CLIENT', 'PRACTICE_ADMINISTRATOR', 'ADMINISTRATOR'] as const;
 
-export const users = sqliteTable('users', {
+export const users = pgTable('users', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   email: text('email').notNull().unique(),
   name: text('name'),
   passwordHash: text('password_hash').notNull(),
   role: text('role', { enum: userRoleEnum }).notNull(),
   // For CLIENT and PRACTICE_ADMINISTRATOR, this links to their single practice
-  // For ADMINISTRATOR, this could be null or represent their primary/default practice,
-  // but true multi-practice access is handled by the join table.
-  // We'll make it nullable and rely on currentPracticeId logic for admins.
   practiceId: text('practice_id').references(() => practices.id, { onDelete: 'set null' }),
   // For ADMINISTRATOR role, this indicates their currently selected practice for viewing data.
-  // This is more of an application-level preference than a strict DB relation for this field.
   currentPracticeId: text('current_practice_id').references(() => practices.id, { onDelete: 'set null' }),
-  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow(),
 });
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -42,13 +38,13 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   assignedPractice: one(practices, {
     fields: [users.practiceId],
     references: [practices.id],
-    relationName: 'userAssignedPractice', // Unique name if practiceId is used by multiple roles differently
+    relationName: 'usersPracticeRelation',
   }),
   // Relation for ADMINISTRATOR's current selected practice view
   currentSelectedPractice: one(practices, {
     fields: [users.currentPracticeId],
     references: [practices.id],
-    relationName: 'adminCurrentPractice',
+    relationName: 'usersCurrentPracticeRelation',
   }),
   // For ADMINISTRATOR role, linking to practices they can access
   accessiblePractices: many(administratorAccessiblePractices),
@@ -57,10 +53,10 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 
 
 // Join Table for Administrator's Accessible Practices (Many-to-Many)
-export const administratorAccessiblePractices = sqliteTable('administrator_accessible_practices', {
+export const administratorAccessiblePractices = pgTable('administrator_accessible_practices', {
   administratorId: text('administrator_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
-  assignedAt: text('assigned_at').default(sql`CURRENT_TIMESTAMP`),
+  assignedAt: timestamp('assigned_at', { mode: 'date' }).defaultNow(),
 }, (table) => ({
   pk: primaryKey({ columns: [table.administratorId, table.practiceId] }),
 }));
@@ -77,12 +73,12 @@ export const administratorAccessiblePracticesRelations = relations(administrator
 }));
 
 // Sessions Table (for database-backed cookies)
-export const sessions = sqliteTable('sessions', {
+export const sessions = pgTable('sessions', {
   id: text('id').primaryKey(), // Session ID stored in the cookie
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(), // Store as Unix timestamp (seconds)
+  expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }).notNull(), // Store as full timestamp
   data: text('data'), // Can store JSON stringified session data
-  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow(),
 });
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
