@@ -9,9 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 
 export default function AdministratorDashboardPage() {
-  const { user, logout, isLoading, initialAuthChecked, switchBranch } = useAuth();
+  const { user, logout, isLoading, initialAuthChecked, switchPractice } = useAuth();
   const router = useRouter();
-  const [currentBranchSelection, setCurrentBranchSelection] = useState<string | undefined>(undefined);
+  const [currentPracticeSelection, setCurrentPracticeSelection] = useState<string | undefined>(undefined);
 
   useEffect(() => {
      if (initialAuthChecked && !isLoading) {
@@ -20,8 +20,7 @@ export default function AdministratorDashboardPage() {
         } else if (user.role !== 'ADMINISTRATOR') {
           logout();
         } else {
-           // User is Administrator, set current branch for select
-           setCurrentBranchSelection(user.currentBranchId);
+           setCurrentPracticeSelection(user.currentPracticeId);
         }
     }
   }, [user, isLoading, initialAuthChecked, router, logout]);
@@ -36,10 +35,10 @@ export default function AdministratorDashboardPage() {
 
   const adminUser = user as Extract<User, { role: 'ADMINISTRATOR' }>;
 
-  const handleBranchChange = (newBranchId: string) => {
-    if (switchBranch) {
-      switchBranch(newBranchId);
-      setCurrentBranchSelection(newBranchId); // Update local state for select
+  const handlePracticeChange = (newPracticeId: string) => {
+    if (switchPractice) {
+      switchPractice(newPracticeId);
+      setCurrentPracticeSelection(newPracticeId); 
     }
   };
 
@@ -50,15 +49,15 @@ export default function AdministratorDashboardPage() {
             <h1 className="text-3xl font-bold text-primary">Administrator Dashboard</h1>
             {adminUser && (
               <div className="mt-2">
-                <span className="text-sm text-muted-foreground mr-2">Viewing Branch:</span>
-                <Select value={currentBranchSelection} onValueChange={handleBranchChange}>
+                <span className="text-sm text-muted-foreground mr-2">Viewing Practice:</span>
+                <Select value={currentPracticeSelection} onValueChange={handlePracticeChange}>
                   <SelectTrigger className="w-[280px]">
-                    <SelectValue placeholder="Select branch to view" />
+                    <SelectValue placeholder="Select practice to view" />
                   </SelectTrigger>
                   <SelectContent>
-                    {adminUser.accessibleBranchIds.map(branchId => (
-                      <SelectItem key={branchId} value={branchId}>
-                        {branchId.replace('branch_', '')} {/* Display cleaner name */}
+                    {adminUser.accessiblePracticeIds.map(practiceId => (
+                      <SelectItem key={practiceId} value={practiceId}>
+                        {practiceId.replace('practice_', '')} {/* Display cleaner name */}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -70,10 +69,10 @@ export default function AdministratorDashboardPage() {
       </header>
       <p className="text-lg text-foreground">Welcome, Administrator {user.name || user.email}!</p>
       <p className="text-muted-foreground">
-        You are currently managing: <span className="font-semibold">{adminUser.currentBranchId.replace('branch_', '')}</span>.
+        You are currently managing: <span className="font-semibold">{adminUser.currentPracticeId.replace('practice_', '')}</span>.
       </p>
-      <p className="text-sm text-muted-foreground">Accessible branches: {adminUser.accessibleBranchIds.join(', ')}</p>
-      {/* Add administrator-specific components and features here, filtered by adminUser.currentBranchId */}
+      <p className="text-sm text-muted-foreground">Accessible practices: {adminUser.accessiblePracticeIds.map(id => id.replace('practice_', '')).join(', ')}</p>
+      {/* Add administrator-specific components and features here, filtered by adminUser.currentPracticeId */}
     </div>
   );
 }

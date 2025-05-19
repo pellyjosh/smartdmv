@@ -38,8 +38,8 @@ export default function PracticeAdministratorDashboardPage() {
         <Button onClick={logout} variant="outline">Logout</Button>
       </header>
       <p className="text-lg text-foreground">Welcome, Practice Admin {user.name || user.email}!</p>
-      <p className="text-muted-foreground">You are managing branch: <span className="font-semibold">{practiceAdminUser.branchId}</span>.</p>
-      {/* Add practice administrator-specific components and features here, specific to practiceAdminUser.branchId */}
+      <p className="text-muted-foreground">You are managing practice: <span className="font-semibold">{practiceAdminUser.practiceId.replace('practice_', '')}</span>.</p>
+      {/* Add practice administrator-specific components and features here, specific to practiceAdminUser.practiceId */}
     </div>
   );
 }

@@ -11,18 +11,18 @@ interface BaseUser {
 
 interface ClientUser extends BaseUser {
   role: 'CLIENT';
-  branchId: string; // Client belongs to a specific branch
+  practiceId: string; // Client belongs to a specific practice
 }
 
 interface PracticeAdminUser extends BaseUser {
   role: 'PRACTICE_ADMINISTRATOR';
-  branchId: string; // Practice Admin manages a specific branch
+  practiceId: string; // Practice Admin manages a specific practice
 }
 
 interface AdministratorUser extends BaseUser {
   role: 'ADMINISTRATOR';
-  accessibleBranchIds: string[]; // Admin can access multiple branches
-  currentBranchId: string; // Admin's currently active branch view
+  accessiblePracticeIds: string[]; // Admin can access multiple practices
+  currentPracticeId: string; // Admin's currently active practice view
 }
 
 export type User = ClientUser | PracticeAdminUser | AdministratorUser;
@@ -33,7 +33,7 @@ interface AuthContextType {
   logout: () => void;
   isLoading: boolean;
   initialAuthChecked: boolean;
-  switchBranch?: (branchId: string) => void; // For Administrator
+  switchPractice?: (practiceId: string) => void; // For Administrator
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -91,21 +91,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedUserString) {
         const storedUser: User = JSON.parse(storedUserString);
         setUser(storedUser);
-        // If user is on login page but already authenticated, redirect them
-        // This check should ideally happen after initialAuthChecked is true
-        // and user is confirmed.
       }
     } catch (error) {
       console.error("Failed to parse stored user", error);
       sessionStorage.removeItem('vetconnectpro-user');
-      setCookie(MOCK_AUTH_COOKIE_NAME, null); // Clear cookie too
+      setCookie(MOCK_AUTH_COOKIE_NAME, null); 
     }
     setInitialAuthChecked(true);
     setIsLoading(false);
   }, []);
 
 
-  // Effect to redirect if user is already logged in and on the login page
   useEffect(() => {
     if (initialAuthChecked && user && pathname === '/auth/login') {
       navigateBasedOnRole(user.role);
@@ -123,29 +119,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email,
             role: 'ADMINISTRATOR',
             name: 'Admin User',
-            accessibleBranchIds: ['branch_MAIN_HQ', 'branch_NORTH', 'branch_SOUTH'],
-            currentBranchId: 'branch_MAIN_HQ',
+            accessiblePracticeIds: ['practice_MAIN_HQ', 'practice_NORTH', 'practice_SOUTH'],
+            currentPracticeId: 'practice_MAIN_HQ',
           };
         } else if (email === 'vet@vetconnect.pro' && password === 'password') {
           userData = {
             email,
             role: 'PRACTICE_ADMINISTRATOR',
             name: 'Dr. Vet',
-            branchId: 'branch_NORTH',
+            practiceId: 'practice_NORTH',
           };
         } else if (email === 'client@vetconnect.pro' && password === 'password') {
           userData = {
             email,
             role: 'CLIENT',
             name: 'Pet Owner',
-            branchId: 'branch_NORTH',
+            practiceId: 'practice_NORTH',
           };
         } else if (email.endsWith('@example.com') && password === 'password') {
           userData = {
             email,
             role: 'CLIENT',
             name: email.split('@')[0],
-            branchId: 'branch_SOUTH', // Assign a default branch for example.com users
+            practiceId: 'practice_SOUTH', 
           };
         }
 
@@ -153,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(userData);
           const userString = JSON.stringify(userData);
           sessionStorage.setItem('vetconnectpro-user', userString);
-          setCookie(MOCK_AUTH_COOKIE_NAME, userString); // Set cookie for middleware
+          setCookie(MOCK_AUTH_COOKIE_NAME, userString); 
           navigateBasedOnRole(userData.role);
           resolve();
         } else {
@@ -168,34 +164,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setUser(null);
     sessionStorage.removeItem('vetconnectpro-user');
-    setCookie(MOCK_AUTH_COOKIE_NAME, null); // Clear cookie
+    setCookie(MOCK_AUTH_COOKIE_NAME, null); 
     router.push('/auth/login');
     setIsLoading(false);
   };
 
-  const switchBranch = (branchId: string) => {
+  const switchPractice = (practiceId: string) => {
     if (user && user.role === 'ADMINISTRATOR') {
-      if (user.accessibleBranchIds.includes(branchId)) {
-        const updatedUser = { ...user, currentBranchId: branchId };
+      if (user.accessiblePracticeIds.includes(practiceId)) {
+        const updatedUser = { ...user, currentPracticeId: practiceId };
         setUser(updatedUser);
         const userString = JSON.stringify(updatedUser);
         sessionStorage.setItem('vetconnectpro-user', userString);
         setCookie(MOCK_AUTH_COOKIE_NAME, userString);
-        // Optional: force a re-render or data fetch if needed after branch switch
-        // router.refresh(); // or similar, depending on how data is fetched
       } else {
-        console.warn("Admin tried to switch to an inaccessible branch.");
+        console.warn("Admin tried to switch to an inaccessible practice.");
       }
     }
   };
 
 
-  // Provide a combined loading state. Loading is true if operations are in progress OR initial check isn't done.
   const combinedIsLoading = isLoading || !initialAuthChecked;
 
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading: combinedIsLoading, initialAuthChecked, switchBranch }}>
+    <AuthContext.Provider value={{ user, login, logout, isLoading: combinedIsLoading, initialAuthChecked, switchPractice }}>
       {children}
     </AuthContext.Provider>
   );

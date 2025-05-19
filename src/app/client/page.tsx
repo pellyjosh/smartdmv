@@ -15,7 +15,6 @@ export default function ClientDashboardPage() {
       if (!user) {
         router.push('/auth/login');
       } else if (user.role !== 'CLIENT') {
-        // If wrong role, logout and redirect to login. Middleware should ideally catch this first.
         logout(); 
       }
     }
@@ -26,7 +25,6 @@ export default function ClientDashboardPage() {
     return <div className="flex justify-center items-center h-screen">Loading...</div>;
   }
   
-  // This check is a fallback, middleware should handle primary redirection
   if (user.role !== 'CLIENT') {
      return <div className="flex justify-center items-center h-screen">Access Denied. Redirecting...</div>;
   }
@@ -41,7 +39,7 @@ export default function ClientDashboardPage() {
         <Button onClick={logout} variant="outline">Logout</Button>
       </header>
       <p className="text-lg text-foreground">Welcome, {user.name || user.email}!</p>
-      <p className="text-muted-foreground">This is your personal dashboard. You are associated with branch: <span className="font-semibold">{clientUser.branchId}</span>.</p>
+      <p className="text-muted-foreground">This is your personal dashboard. You are associated with practice: <span className="font-semibold">{clientUser.practiceId.replace('practice_', '')}</span>.</p>
       {/* Add client-specific components and features here */}
     </div>
   );
