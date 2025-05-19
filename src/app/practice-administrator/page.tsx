@@ -1,5 +1,7 @@
+
 "use client";
 import { useAuth } from "@/hooks/useAuth";
+import type { User } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -9,10 +11,12 @@ export default function PracticeAdministratorDashboardPage() {
   const router = useRouter();
 
  useEffect(() => {
-    if (initialAuthChecked && !isLoading && !user) {
-      router.push('/login');
-    } else if (user && user.role !== 'PRACTICE_ADMINISTRATOR') {
-       logout();
+    if (initialAuthChecked && !isLoading) {
+        if (!user) {
+          router.push('/auth/login');
+        } else if (user.role !== 'PRACTICE_ADMINISTRATOR') {
+           logout();
+        }
     }
   }, [user, isLoading, initialAuthChecked, router, logout]);
 
@@ -24,6 +28,8 @@ export default function PracticeAdministratorDashboardPage() {
   if (user.role !== 'PRACTICE_ADMINISTRATOR') {
      return <div className="flex justify-center items-center h-screen">Access Denied. Redirecting...</div>;
   }
+  
+  const practiceAdminUser = user as Extract<User, { role: 'PRACTICE_ADMINISTRATOR' }>;
 
   return (
     <div className="container mx-auto py-8">
@@ -32,8 +38,8 @@ export default function PracticeAdministratorDashboardPage() {
         <Button onClick={logout} variant="outline">Logout</Button>
       </header>
       <p className="text-lg text-foreground">Welcome, Practice Admin {user.name || user.email}!</p>
-      <p className="text-muted-foreground">Manage your practice's staff, services, appointments, and settings.</p>
-      {/* Add practice administrator-specific components and features here */}
+      <p className="text-muted-foreground">You are managing branch: <span className="font-semibold">{practiceAdminUser.branchId}</span>.</p>
+      {/* Add practice administrator-specific components and features here, specific to practiceAdminUser.branchId */}
     </div>
   );
 }
