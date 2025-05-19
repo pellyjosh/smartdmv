@@ -65,15 +65,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background"> {/* Overall page container */}
+    <div className="min-h-screen flex flex-col bg-slate-100"> {/* Overall page container */}
       {/* Header */}
       <header className="w-full p-4 flex justify-start items-center border-b border-border bg-card shadow-sm">
         <div className="flex items-center">
           <HeartPulse className="h-8 w-8 text-primary mr-2" />
-          <span className="font-bold text-xl text-foreground">SmartDVM</span>
+          <span className="font-bold text-xl text-foreground">Smart<span className="text-primary">DVM</span></span>
         </div>
       </header>
-
       {/* Main content with two columns */}
       <main className="flex-1 flex flex-col md:flex-row">
         {/* Left Column: Form */}
@@ -207,4 +206,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

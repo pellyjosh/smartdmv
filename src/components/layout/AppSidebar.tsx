@@ -59,7 +59,9 @@ export function AppSidebar() {
       <SidebarHeader className="flex items-center justify-between p-4">
         <Link href="/" className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
           <HeartPulse className="h-8 w-8 text-primary" />
-          <h1 className="text-xl font-semibold text-primary">SmartDVM</h1>
+          <h1 className="text-xl font-semibold">
+            <span className="text-foreground">Smart</span><span className="text-primary">DVM</span>
+          </h1>
         </Link>
          <div className="group-data-[collapsible=icon]:hidden">
           <SidebarTrigger />
