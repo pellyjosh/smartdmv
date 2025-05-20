@@ -2,32 +2,34 @@
 "use client";
 import { useState, createContext, useContext, ReactNode, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import bcrypt from 'bcryptjs';
-import { db } from '@/db';
-import { users as usersTable, administratorAccessiblePractices as adminPracticesTable } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+// import bcrypt from 'bcryptjs'; // No longer needed here
+// import { db } from '@/db'; // No longer needed here
+// import { users as usersTable, administratorAccessiblePractices as adminPracticesTable } from '@/db/schema'; // No longer needed here
+// import { eq } from 'drizzle-orm'; // No longer needed here
+import { loginUserAction, switchPracticeAction } from '@/actions/authActions';
+
 
 // Define base user and role-specific user types for multi-location
 interface BaseUser {
-  id: string; // Add id to BaseUser
+  id: string; 
   email: string;
   name?: string;
 }
 
 interface ClientUser extends BaseUser {
   role: 'CLIENT';
-  practiceId: string; // Client belongs to a specific practice
+  practiceId: string; 
 }
 
 interface PracticeAdminUser extends BaseUser {
   role: 'PRACTICE_ADMINISTRATOR';
-  practiceId: string; // Practice Admin manages a specific practice
+  practiceId: string; 
 }
 
 interface AdministratorUser extends BaseUser {
   role: 'ADMINISTRATOR';
-  accessiblePracticeIds: string[]; // Admin can access multiple practices
-  currentPracticeId: string; // Admin's currently active practice view
+  accessiblePracticeIds: string[]; 
+  currentPracticeId: string; 
 }
 
 export type User = ClientUser | PracticeAdminUser | AdministratorUser;
@@ -38,12 +40,11 @@ interface AuthContextType {
   logout: () => void;
   isLoading: boolean;
   initialAuthChecked: boolean;
-  switchPractice?: (practiceId: string) => Promise<void>; // For Administrator, make it async
+  switchPractice?: (practiceId: string) => Promise<void>; 
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Helper to manage the mock auth cookie (still used for middleware simplicity)
 const MOCK_AUTH_COOKIE_NAME = 'mock-auth-user';
 
 const getCookie = (name: string): string | null => {
@@ -114,84 +115,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, initialAuthChecked, pathname, navigateBasedOnRole]);
 
 
-  const login = async (email: string, passwordInput: string) => {
+  const login = async (emailInput: string, passwordInput: string) => {
     setIsLoading(true);
     try {
-      const result = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
-      const dbUser = result[0];
-
-      if (!dbUser || !dbUser.password) {
-        throw new Error('User not found or password not set.');
-      }
-
-      const passwordMatch = bcrypt.compareSync(passwordInput, dbUser.password);
-      if (!passwordMatch) {
-        throw new Error('Invalid credentials. Please try again.');
-      }
-
-      let userData: User;
-
-      if (dbUser.role === 'ADMINISTRATOR') {
-        const adminPractices = await db.select({ practiceId: adminPracticesTable.practiceId })
-          .from(adminPracticesTable)
-          .where(eq(adminPracticesTable.administratorId, dbUser.id));
-        
-        const accessiblePracticeIds = adminPractices.map(p => p.practiceId);
-        let currentPracticeId = dbUser.currentPracticeId;
-        if (!currentPracticeId && accessiblePracticeIds.length > 0) {
-          currentPracticeId = accessiblePracticeIds[0]; // Default to first accessible practice if none set
-        } else if (!currentPracticeId && accessiblePracticeIds.length === 0) {
-          // This case should ideally not happen if an admin is expected to manage practices
-          console.warn(`Administrator ${dbUser.email} has no current or accessible practices configured.`);
-          // Fallback or handle appropriately - for now, let's use a placeholder or throw error
-          // For demo, let's allow login but currentPracticeId might be problematic
-           currentPracticeId = 'practice_NONE'; // Or handle as error
-        }
-
-
-        userData = {
-          id: dbUser.id,
-          email: dbUser.email,
-          name: dbUser.name || undefined,
-          role: 'ADMINISTRATOR',
-          accessiblePracticeIds,
-          currentPracticeId: currentPracticeId!, // Assert non-null after logic
-        };
-      } else if (dbUser.role === 'PRACTICE_ADMINISTRATOR') {
-        if (!dbUser.practiceId) {
-          throw new Error('Practice Administrator is not associated with a practice.');
-        }
-        userData = {
-          id: dbUser.id,
-          email: dbUser.email,
-          name: dbUser.name || undefined,
-          role: 'PRACTICE_ADMINISTRATOR',
-          practiceId: dbUser.practiceId,
-        };
-      } else if (dbUser.role === 'CLIENT') {
-        if (!dbUser.practiceId) {
-          throw new Error('Client is not associated with a practice.');
-        }
-        userData = {
-          id: dbUser.id,
-          email: dbUser.email,
-          name: dbUser.name || undefined,
-          role: 'CLIENT',
-          practiceId: dbUser.practiceId,
-        };
-      } else {
-        throw new Error('Unknown user role.');
-      }
-
+      const userData = await loginUserAction(emailInput, passwordInput);
       setUser(userData);
       const userString = JSON.stringify(userData);
       sessionStorage.setItem('vetconnectpro-user', userString);
-      setCookie(MOCK_AUTH_COOKIE_NAME, userString);
+      setCookie(MOCK_AUTH_COOKIE_NAME, userString); // For middleware
       navigateBasedOnRole(userData.role);
 
     } catch (error) {
       console.error("Login error:", error);
-      // Propagate error to be caught by the form
       if (error instanceof Error) throw error;
       throw new Error("An unknown login error occurred.");
     } finally {
@@ -213,15 +148,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (user.accessiblePracticeIds.includes(newPracticeId)) {
         setIsLoading(true);
         try {
-          await db.update(usersTable)
-            .set({ currentPracticeId: newPracticeId })
-            .where(eq(usersTable.id, user.id));
-
-          const updatedUser = { ...user, currentPracticeId: newPracticeId };
-          setUser(updatedUser);
-          const userString = JSON.stringify(updatedUser);
-          sessionStorage.setItem('vetconnectpro-user', userString);
-          setCookie(MOCK_AUTH_COOKIE_NAME, userString);
+          const { success, updatedUser: refreshedUser } = await switchPracticeAction(user.id, newPracticeId);
+          if (success && refreshedUser) {
+            setUser(refreshedUser);
+            const userString = JSON.stringify(refreshedUser);
+            sessionStorage.setItem('vetconnectpro-user', userString);
+            setCookie(MOCK_AUTH_COOKIE_NAME, userString); // Update cookie for middleware if needed
+          } else {
+            console.error("Failed to switch practice via server action or user data not returned.");
+            // Optionally: show a toast to the user
+          }
         } catch (error) {
           console.error("Failed to switch practice:", error);
           // Optionally: show a toast to the user
@@ -230,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else {
         console.warn("Admin tried to switch to an inaccessible practice.");
+        // Optionally show error to user
       }
     }
   };
