@@ -15,7 +15,7 @@ import {
   SidebarFooter, 
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/hooks/useAuth'; 
+import { useUser } from '@/context/UserContext'; // Use UserContext
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
@@ -36,7 +36,7 @@ const dashboardLinks = {
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { user, logout, initialAuthChecked } = useAuth();
+  const { user, logout, initialAuthChecked, isLoading } = useUser(); // Use useUser
 
   // Hide sidebar on login page
   if (pathname === '/auth/login') {
@@ -108,11 +108,11 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter className="p-2 mt-auto border-t border-sidebar-border">
-        {initialAuthChecked && user ? (
+        { isLoading ? <div className="text-xs text-center p-2">Loading user...</div> :
+          initialAuthChecked && user ? (
           <div className="flex flex-col items-center group-data-[collapsible=icon]:items-center w-full">
             <div className="flex items-center gap-2 mb-2 w-full px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
                 <Avatar className="h-8 w-8 group-data-[collapsible=icon]:h-7 group-data-[collapsible=icon]:w-7">
-                  {/* <AvatarImage src="https://github.com/shadcn.png" alt={user.email} /> */}
                   <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                     {getInitials(user.email)}
                   </AvatarFallback>

@@ -12,7 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { HeartPulse, LogIn as LogInIcon, Eye, EyeOff } from "lucide-react"; 
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
+import { useUser } from "@/context/UserContext"; // Import useUser
 import { Checkbox } from "@/components/ui/checkbox";
 
 // Login form schema
@@ -25,10 +25,11 @@ const loginFormSchema = z.object({
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export default function LoginPage() {
-  const { user, login, isLoading: authIsLoading } = useAuth();
+  const { user, login, isLoading: authIsLoading, initialAuthChecked } = useUser(); // Use useUser
   const { toast } = useToast();
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Local loading state for form
 
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -40,29 +41,44 @@ export default function LoginPage() {
   });
   
   const onLoginSubmit = async (data: LoginFormValues) => {
+    setIsSubmitting(true);
     try {
-      await login(data.email, data.password);
-      toast({
-        title: "Login Successful",
-        description: "Redirecting to your dashboard...",
-        variant: "default",
-      });
-      // Redirection is handled by the useAuth hook or useEffect
+      const loggedInUser = await login(data.email, data.password); // login from useUser
+      if (loggedInUser) {
+        toast({
+          title: "Login Successful",
+          description: "Redirecting to your dashboard...",
+          variant: "default",
+        });
+        // Navigation is handled by UserProvider's useEffect
+      } else {
+        // Should not happen if login throws error, but as a fallback
+        toast({
+            title: "Login Failed",
+            description: "An unexpected issue occurred.",
+            variant: "destructive",
+        });
+      }
     } catch (error: any) {
       toast({
         title: "Login Failed",
         description: error.message || "Invalid credentials. Please try again.",
         variant: "destructive",
       });
+    } finally {
+        setIsSubmitting(false);
     }
   };
 
-  // User already logged in, redirection handled by useAuth typically
-  if (user && !authIsLoading) {
-    // This return null relies on useAuth to redirect.
-    // A loading spinner could be shown here while useAuth processes the redirect.
-    return null; 
+  // User already logged in, redirection handled by UserProvider's useEffect
+  if (user && initialAuthChecked && !authIsLoading) {
+    // Redirect is handled by UserProvider effect, render nothing or a loader
+    return <div className="min-h-screen flex items-center justify-center bg-slate-100">Redirecting...</div>; 
   }
+   if (!initialAuthChecked || authIsLoading) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-100">Loading authentication status...</div>;
+  }
+
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-100"> {/* Overall page container */}
@@ -166,9 +182,9 @@ export default function LoginPage() {
                 <Button 
                   type="submit" 
                   className="w-full py-3 bg-primary text-primary-foreground hover:bg-primary/90"
-                  disabled={authIsLoading}
+                  disabled={isSubmitting || authIsLoading}
                 >
-                  {authIsLoading ? (
+                  {(isSubmitting || authIsLoading) ? (
                     <>
                       <LogInIcon className="mr-2 h-4 w-4 animate-spin" />
                       Signing in...
@@ -182,6 +198,7 @@ export default function LoginPage() {
 
         {/* Right Column: Image and Branding */}
         <div className="hidden md:flex md:w-3/5 relative">
+           {/* Placeholder for generated image or static image */}
           <Image
             src="https://placehold.co/800x1200.png" 
             alt="Illustration of a veterinary clinic scene with pets and vets"

@@ -1,34 +1,12 @@
 
 "use client";
-import { useAuth } from "@/hooks/useAuth";
-import type { User, PracticeAdminUser } from "@/hooks/useAuth"; // Ensure PracticeAdminUser is imported
+import { useUser, type PracticeAdminUser } from "@/context/UserContext"; // Use UserContext
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useRouter } from "next/navigation"; // Keep for now
 
 export default function PracticeAdministratorDashboardPage() {
-  const { user, logout, isLoading, initialAuthChecked } = useAuth();
-  const router = useRouter();
-
- useEffect(() => {
-    if (isLoading || !initialAuthChecked) {
-        return; // Wait for auth state to be resolved
-    }
-
-    if (!user) {
-      router.push('/auth/login'); // Redirect if no user
-      return;
-    }
-    
-    // If user is present but not a PRACTICE_ADMINISTRATOR, rely on render guards and middleware.
-    // This useEffect is for practice-admin-specific setup if needed.
-    if (user.role === 'PRACTICE_ADMINISTRATOR') {
-        // Practice Admin specific logic can go here
-    } else {
-        // If role is incorrect, render guards below will handle display.
-    }
-  }, [user, isLoading, initialAuthChecked, router]);
-
+  const { user, logout, isLoading, initialAuthChecked } = useUser(); // Use useUser
+  const router = useRouter(); // Keep for now
 
   if (isLoading || !initialAuthChecked) {
     return <div className="flex justify-center items-center h-screen">Loading...</div>;
@@ -42,7 +20,7 @@ export default function PracticeAdministratorDashboardPage() {
      return <div className="flex justify-center items-center h-screen">Access Denied. You do not have permission to view this page.</div>;
   }
   
-  const practiceAdminUser = user as PracticeAdminUser;
+  const practiceAdminUser = user as PracticeAdminUser; // Safe to cast
 
   return (
     <div className="container mx-auto py-8">

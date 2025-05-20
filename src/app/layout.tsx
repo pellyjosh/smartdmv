@@ -1,12 +1,13 @@
+
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from '@/hooks/useAuth';
-import { ThemeProvider } from '@/context/ThemeContext'; // Import ThemeProvider
-import { ThemeSwitcherWidget } from '@/components/ThemeSwitcherWidget'; // Import Widget
+import { UserProvider } from '@/context/UserContext'; // Import UserProvider
+import { ThemeProvider } from '@/context/ThemeContext'; 
+import { ThemeSwitcherWidget } from '@/components/ThemeSwitcherWidget'; 
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -31,8 +32,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <AuthProvider>
-          <ThemeProvider> {/* Wrap with ThemeProvider */}
+        <UserProvider> {/* Use UserProvider */}
+          <ThemeProvider> 
             <SidebarProvider defaultOpen={true}>
               <AppSidebar />
               <SidebarInset>
@@ -42,9 +43,9 @@ export default function RootLayout({
               </SidebarInset>
             </SidebarProvider>
             <Toaster />
-            <ThemeSwitcherWidget /> {/* Add the widget here */}
+            <ThemeSwitcherWidget /> 
           </ThemeProvider>
-        </AuthProvider>
+        </UserProvider>
       </body>
     </html>
   );

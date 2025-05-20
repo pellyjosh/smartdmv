@@ -1,40 +1,20 @@
 
 "use client";
-import { useAuth } from "@/hooks/useAuth";
-import type { User, ClientUser } from "@/hooks/useAuth"; // Ensure ClientUser is imported
+import { useUser, type ClientUser } from "@/context/UserContext"; // Use UserContext
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useRouter } from "next/navigation"; // Keep for potential client-side nav if needed
 
 export default function ClientDashboardPage() {
-  const { user, logout, isLoading, initialAuthChecked } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (isLoading || !initialAuthChecked) {
-      return; // Wait for auth state to be resolved
-    }
-
-    if (!user) {
-      router.push('/auth/login'); // Redirect if no user
-      return;
-    }
-
-    // If user is present but not a CLIENT, rely on render guards and middleware.
-    // This useEffect is for client-specific setup if needed in the future.
-    if (user.role === 'CLIENT') {
-      // Client-specific logic can go here
-    } else {
-        // If role is incorrect, render guards below will handle display.
-    }
-  }, [user, isLoading, initialAuthChecked, router]);
-
+  const { user, logout, isLoading, initialAuthChecked } = useUser(); // Use useUser
+  const router = useRouter(); // Keep for now, though middleware handles primary redirection
 
   if (isLoading || !initialAuthChecked) {
     return <div className="flex justify-center items-center h-screen">Loading...</div>;
   }
   
   if (!user) {
+    // Middleware should redirect, but this is a fallback.
+    // UserProvider might also redirect to login if fetchUser fails.
     return <div className="flex justify-center items-center h-screen">Redirecting to login...</div>;
   }
   
@@ -42,7 +22,7 @@ export default function ClientDashboardPage() {
      return <div className="flex justify-center items-center h-screen">Access Denied. You do not have permission to view this page.</div>;
   }
   
-  const clientUser = user as ClientUser;
+  const clientUser = user as ClientUser; // Safe to cast after role check
 
 
   return (
