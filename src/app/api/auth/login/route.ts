@@ -7,7 +7,8 @@ import { users as usersTable, sessions as sessionsTable, administratorAccessible
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
-import type { User as AuthUser, AdministratorUser, PracticeAdminUser, ClientUser } from '@/hooks/useAuth'; // Use the detailed User type from useAuth
+import type { User as AuthUser } from '@/hooks/useAuth'; 
+import { HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from '@/config/authConstants';
 
 const SignInSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
         currentPracticeId = accessiblePracticeIds[0];
       } else if (!currentPracticeId && accessiblePracticeIds.length === 0) {
         console.warn(`[API Login] Administrator ${userRecord.email} has no current or accessible practices configured.`);
-        currentPracticeId = 'practice_NONE'; // Fallback or handle as error
+        currentPracticeId = 'practice_NONE'; 
       }
 
       userData = {
@@ -67,7 +68,6 @@ export async function POST(request: Request) {
       };
     } else if (userRecord.role === 'PRACTICE_ADMINISTRATOR') {
       if (!userRecord.practiceId) {
-        // This should ideally not happen if data integrity is maintained
         return NextResponse.json({ error: 'Practice Administrator is not associated with a practice.' }, { status: 500 });
       }
       userData = {
@@ -79,7 +79,6 @@ export async function POST(request: Request) {
       };
     } else if (userRecord.role === 'CLIENT') {
       if (!userRecord.practiceId) {
-        // This should ideally not happen
         return NextResponse.json({ error: 'Client is not associated with a practice.' }, { status: 500 });
       }
       userData = {
@@ -94,32 +93,32 @@ export async function POST(request: Request) {
     }
 
     // Session management
-    const sessionToken = crypto.randomUUID();
-    const sessionExpiresAtDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days expiry as Date object
+    const sessionTokenValue = crypto.randomUUID(); // This is the session ID for DB
+    const sessionExpiresAtDate = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000); 
     const isSqlite = process.env.DB_TYPE === 'sqlite';
 
     await db.insert(sessionsTable).values({
-      id: sessionToken,
+      id: sessionTokenValue,
       userId: userRecord.id,
-      // Conditionally format expiresAt: number for SQLite (ms), Date object for PG
       expiresAt: isSqlite ? sessionExpiresAtDate.getTime() : sessionExpiresAtDate,
-      // data: text('data'), // 'data' column can be used to store additional session info if needed
-      // Let createdAt be handled by database default
+      // data: null, // 'data' column can be used to store additional session info if needed
+      // createdAt will be handled by DB default
     });
 
-    cookies().set('session_token', sessionToken, { // This is the server-set HttpOnly cookie
+    cookies().set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, sessionTokenValue, { 
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
+      maxAge: SESSION_MAX_AGE_SECONDS, 
       path: '/',
       sameSite: 'lax',
-      expires: sessionExpiresAtDate, // 'expires' attribute for cookie expects a Date object
+      expires: sessionExpiresAtDate, 
     });
 
+    // Return the full user object to the client
     return NextResponse.json({ user: userData, message: 'Signed in successfully!' });
 
   } catch (error) {
-    console.error('API login error:', error); // This log will show the specific error on the server
+    console.error('API login error:', error); 
     return NextResponse.json({ error: 'An unexpected error occurred. Please try again.' }, { status: 500 });
   }
 }
