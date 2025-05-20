@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "98a8c46a-3051-4292-9f05-0848d5012555",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "b9caa4b1-0ffc-40d9-90b2-3dec4627c585",
+  "prevId": "5bd1192d-ffeb-4f22-81d4-cb375c594b27",
   "tables": {
     "practices": {
       "name": "practices",
@@ -128,6 +128,22 @@
           "notNull": true,
           "autoincrement": false,
           "default": "CURRENT_TIMESTAMP"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
         }
       },
       "indexes": {},
@@ -195,8 +211,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "password_hash": {
-          "name": "password_hash",
+        "password": {
+          "name": "password",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -287,7 +303,9 @@
   "_meta": {
     "schemas": {},
     "tables": {},
-    "columns": {}
+    "columns": {
+      "\"users\".\"password_hash\"": "\"users\".\"password\""
+    }
   },
   "internal": {
     "indexes": {}

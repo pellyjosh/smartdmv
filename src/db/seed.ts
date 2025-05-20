@@ -1,5 +1,7 @@
 
 import { config } from 'dotenv';
+import bcrypt from 'bcryptjs';
+
 config(); // Load environment variables from .env file
 
 import { db } from './index';
@@ -16,68 +18,68 @@ import type { User } from '@/hooks/useAuth'; // For role enum consistency
 //   }
 // }
 
-const MOCK_PASSWORD_HASH = 'mock_hashed_password_placeholder'; // In a real app, use bcrypt.hashSync("password", saltRounds)
-
-const practicesData = [
-  { id: 'practice_MAIN_HQ', name: 'Main HQ Vet Clinic' },
-  { id: 'practice_NORTH', name: 'North Paws Clinic' },
-  { id: 'practice_SOUTH', name: 'South Valley Vets' },
-];
-
-// Pre-generate UUIDs for users to ensure consistent linking
-const adminUserId = crypto.randomUUID();
-const practiceAdminUserId = crypto.randomUUID();
-const client1UserId = crypto.randomUUID();
-const client2UserId = crypto.randomUUID();
-
-const usersData = [
-  {
-    id: adminUserId,
-    email: 'admin@vetconnect.pro',
-    name: 'Admin User',
-    passwordHash: MOCK_PASSWORD_HASH,
-    role: 'ADMINISTRATOR' as User['role'],
-    practiceId: null, // Global admin might not be tied to a single practice in this way
-    currentPracticeId: 'practice_MAIN_HQ',
-  },
-  {
-    id: practiceAdminUserId,
-    email: 'vet@vetconnect.pro',
-    name: 'Dr. Vet PracticeAdmin',
-    passwordHash: MOCK_PASSWORD_HASH,
-    role: 'PRACTICE_ADMINISTRATOR' as User['role'],
-    practiceId: 'practice_NORTH', // Manages North Clinic
-    currentPracticeId: 'practice_NORTH',
-  },
-  {
-    id: client1UserId,
-    email: 'client@vetconnect.pro',
-    name: 'Pet Owner Client',
-    passwordHash: MOCK_PASSWORD_HASH,
-    role: 'CLIENT' as User['role'],
-    practiceId: 'practice_NORTH', // Belongs to North Clinic
-    currentPracticeId: null,
-  },
-  {
-    id: client2UserId,
-    email: 'testclient@example.com',
-    name: 'Test Client Example',
-    passwordHash: MOCK_PASSWORD_HASH,
-    role: 'CLIENT' as User['role'],
-    practiceId: 'practice_SOUTH', // Belongs to South Clinic
-    currentPracticeId: null,
-  },
-];
-
-const adminAccessData = [
-  { administratorId: adminUserId, practiceId: 'practice_MAIN_HQ' },
-  { administratorId: adminUserId, practiceId: 'practice_NORTH' },
-  { administratorId: adminUserId, practiceId: 'practice_SOUTH' },
-];
-
 async function seed() {
   console.log('🌱 Starting database seeding...');
   console.log(`Database type from env: ${process.env.DB_TYPE}`); // Log to confirm env var is read
+
+  const password = await bcrypt.hash("password", 10);
+
+  const practicesData = [
+    { id: 'practice_MAIN_HQ', name: 'Main HQ Vet Clinic' },
+    { id: 'practice_NORTH', name: 'North Paws Clinic' },
+    { id: 'practice_SOUTH', name: 'South Valley Vets' },
+  ];
+
+  // Pre-generate UUIDs for users to ensure consistent linking
+  const adminUserId = crypto.randomUUID();
+  const practiceAdminUserId = crypto.randomUUID();
+  const client1UserId = crypto.randomUUID();
+  const client2UserId = crypto.randomUUID();
+
+  const usersData = [
+    {
+      id: adminUserId,
+      email: 'admin@vetconnect.pro',
+      name: 'Admin User',
+      password: password,
+      role: 'ADMINISTRATOR' as User['role'],
+      practiceId: null, // Global admin might not be tied to a single practice in this way
+      currentPracticeId: 'practice_MAIN_HQ',
+    },
+    {
+      id: practiceAdminUserId,
+      email: 'vet@vetconnect.pro',
+      name: 'Dr. Vet PracticeAdmin',
+      password: password,
+      role: 'PRACTICE_ADMINISTRATOR' as User['role'],
+      practiceId: 'practice_NORTH', // Manages North Clinic
+      currentPracticeId: 'practice_NORTH',
+    },
+    {
+      id: client1UserId,
+      email: 'client@vetconnect.pro',
+      name: 'Pet Owner Client',
+      password: password,
+      role: 'CLIENT' as User['role'],
+      practiceId: 'practice_NORTH', // Belongs to North Clinic
+      currentPracticeId: null,
+    },
+    {
+      id: client2UserId,
+      email: 'testclient@example.com',
+      name: 'Test Client Example',
+      password: password,
+      role: 'CLIENT' as User['role'],
+      practiceId: 'practice_SOUTH', // Belongs to South Clinic
+      currentPracticeId: null,
+    },
+  ];
+
+  const adminAccessData = [
+    { administratorId: adminUserId, practiceId: 'practice_MAIN_HQ' },
+    { administratorId: adminUserId, practiceId: 'practice_NORTH' },
+    { administratorId: adminUserId, practiceId: 'practice_SOUTH' },
+  ];
 
   // await enableForeignKeysForSqlite(); // If needed
 
@@ -85,6 +87,7 @@ async function seed() {
   // In a production-like seeder, you might want more sophisticated checks or updates.
   console.log('🗑️ Clearing existing data...');
   try {
+    // Order of deletion matters due to foreign key constraints if they are enforced
     await db.delete(administratorAccessiblePractices);
     await db.delete(users);
     await db.delete(practices);
@@ -111,7 +114,8 @@ async function seed() {
     }));
     await db.insert(users).values(typedUsersData);
     console.log(`✅ Inserted ${usersData.length} users.`);
-  } catch (error) {
+  } catch (error)
+ {
     console.error('❌ Error inserting users:', error);
     throw error;
   }
@@ -137,8 +141,7 @@ seed()
   .finally(async () => {
     // If your db client has a close/end method, you might call it here.
     // For `postgres` (node-postgres), it's `await sql.end()`.
-    // For `better-sqlite3`, it's `db.close()`.
-    // However, the `db` instance from `src/db/index.ts` currently doesn't expose this directly.
-    // For a script, Node.js will typically handle resource cleanup on exit.
+    // For `better-sqlite3`, the `db` object in `src/db/index.ts` is derived from `sqliteClient.close()`.
+    // Node.js will typically handle resource cleanup on script exit if not explicitly closed.
     console.log('🌱 Seeder script finished.');
   });

@@ -12,28 +12,36 @@ export const users = dbTable('users', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   email: text('email').notNull().unique(),
   name: text('name'),
-  passwordHash: text('password_hash').notNull(),
+  password: text('password').notNull(),
   role: text('role', { enum: userRoleEnum }).notNull(),
-  practiceId: text('practice_id').references(() => practices.id, { onDelete: 'set null' }),
-  currentPracticeId: text('current_practice_id').references(() => practices.id, { onDelete: 'set null' }),
+  practiceId: text('practice_id').references(() => practices.id as any, { onDelete: 'set null' }),
+  currentPracticeId: text('current_practice_id').references(() => practices.id as any, { onDelete: 'set null' }),
 
   createdAt: isSqlite
-    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`CURRENT_TIMESTAMP`)
+    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 
   updatedAt: isSqlite
-    ? timestamp('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => new Date())
-    : timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
+    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`)
+    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
 export const administratorAccessiblePractices = dbTable('administrator_accessible_practices', {
-  administratorId: text('administrator_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
+  administratorId: text('administrator_id').notNull().references(() => users.id as any, { onDelete: 'cascade' }),
+  practiceId: text('practice_id').notNull().references(() => practices.id as any, { onDelete: 'cascade' }),
 
   assignedAt: isSqlite
-    ? timestamp('assigned_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('assigned_at', { mode: 'date' }).notNull().defaultNow(),
-}, (table) => ({  // Removed type annotation for 'table'
+    ? timestamp('assignedAt', { mode: 'timestamp_ms' }).notNull().default(sql`CURRENT_TIMESTAMP`)
+    : timestamp('assignedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+
+  createdAt: isSqlite
+    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`CURRENT_TIMESTAMP`)
+    : timestamp('createdAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+
+  updatedAt: isSqlite
+    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`)
+    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table: { administratorId: any; practiceId: any; }) => ({
   pk: primaryKey({ columns: [table.administratorId, table.practiceId] }),
 }));
 

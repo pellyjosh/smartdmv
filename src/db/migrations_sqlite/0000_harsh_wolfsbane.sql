@@ -1,8 +1,8 @@
 CREATE TABLE `practices` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
-	`createdAt` integer DEFAULT (strftime('%s', 'now') * 1000) NOT NULL,
-	`updatedAt` integer DEFAULT (strftime('%s', 'now') * 1000) NOT NULL
+	`createdAt` integer DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`updatedAt` integer DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `sessions` (
@@ -10,14 +10,14 @@ CREATE TABLE `sessions` (
 	`user_id` text NOT NULL,
 	`expiresAt` integer NOT NULL,
 	`data` text,
-	`createdAt` integer NOT NULL,
+	`createdAt` integer DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE TABLE `administrator_accessible_practices` (
 	`administrator_id` text NOT NULL,
 	`practice_id` text NOT NULL,
-	`assignedAt` integer NOT NULL,
+	`assignedAt` integer DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	PRIMARY KEY(`administrator_id`, `practice_id`),
 	FOREIGN KEY (`administrator_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`practice_id`) REFERENCES `practices`(`id`) ON UPDATE no action ON DELETE cascade
@@ -31,8 +31,8 @@ CREATE TABLE `users` (
 	`role` text NOT NULL,
 	`practice_id` text,
 	`current_practice_id` text,
-	`createdAt` integer NOT NULL,
-	`updatedAt` integer NOT NULL,
+	`createdAt` integer DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`updatedAt` integer DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	FOREIGN KEY (`practice_id`) REFERENCES `practices`(`id`) ON UPDATE no action ON DELETE set null,
 	FOREIGN KEY (`current_practice_id`) REFERENCES `practices`(`id`) ON UPDATE no action ON DELETE set null
 );

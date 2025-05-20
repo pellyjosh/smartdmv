@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "98a8c46a-3051-4292-9f05-0848d5012555",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "5bd1192d-ffeb-4f22-81d4-cb375c594b27",
+  "prevId": "98a8c46a-3051-4292-9f05-0848d5012555",
   "tables": {
     "practices": {
       "name": "practices",
@@ -123,6 +123,22 @@
         },
         "assignedAt": {
           "name": "assignedAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

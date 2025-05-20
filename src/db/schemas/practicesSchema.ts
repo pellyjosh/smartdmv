@@ -9,12 +9,12 @@ export const practices = dbTable('practices', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text('name').notNull(),
   createdAt: isSqlite
-    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`CURRENT_TIMESTAMP`)
+    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 
   updatedAt: isSqlite
-    ? timestamp('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => new Date())
-    : timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`)
+    : timestamp('updatedAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
 export const practicesRelations = relations(practices, ({ many }) => ({
