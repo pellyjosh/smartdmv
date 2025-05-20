@@ -12,10 +12,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { HeartPulse, LogIn as LogInIcon, Eye, EyeOff } from "lucide-react"; 
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { useUser } from "@/context/UserContext"; // Import useUser
+import { useUser } from "@/context/UserContext";
 import { Checkbox } from "@/components/ui/checkbox";
 
-// Login form schema
 const loginFormSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
   password: z.string().min(1, { message: "Password is required" }),
@@ -25,11 +24,13 @@ const loginFormSchema = z.object({
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export default function LoginPage() {
-  const { user, login, isLoading: authIsLoading, initialAuthChecked } = useUser(); // Use useUser
+  const userContext = useUser(); // Get the whole context
+  const { user, login, isLoading: authIsLoading, initialAuthChecked } = userContext; // Destructure
+  
   const { toast } = useToast();
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false); // Local loading state for form
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -43,7 +44,8 @@ export default function LoginPage() {
   const onLoginSubmit = async (data: LoginFormValues) => {
     setIsSubmitting(true);
     try {
-      const loggedInUser = await login(data.email, data.password); // login from useUser
+      console.log('[LoginPage] onLoginSubmit called with:', data.email);
+      const loggedInUser = await login(data.email, data.password);
       if (loggedInUser) {
         toast({
           title: "Login Successful",
@@ -51,47 +53,51 @@ export default function LoginPage() {
           variant: "default",
         });
         // Navigation is handled by UserProvider's useEffect
+        console.log('[LoginPage] Login successful for user:', loggedInUser.email);
       } else {
-        // Should not happen if login throws error, but as a fallback
         toast({
             title: "Login Failed",
-            description: "An unexpected issue occurred.",
+            description: "An unexpected issue occurred during login.",
             variant: "destructive",
         });
+        console.warn('[LoginPage] Login call returned no user, but no error thrown.');
       }
     } catch (error: any) {
       toast({
         title: "Login Failed",
-        description: error.message || "Invalid credentials. Please try again.",
+        description: error.message || "Invalid credentials or server error.",
         variant: "destructive",
       });
+      console.error('[LoginPage] Login submission error:', error);
     } finally {
         setIsSubmitting(false);
     }
   };
+  
+  // Diagnostic log
+  console.log('[LoginPage Render] Context State: authIsLoading:', authIsLoading, 'initialAuthChecked:', initialAuthChecked, 'user:', user ? user.email : null);
 
-  // User already logged in, redirection handled by UserProvider's useEffect
   if (user && initialAuthChecked && !authIsLoading) {
-    // Redirect is handled by UserProvider effect, render nothing or a loader
+    console.log('[LoginPage Render] User is authenticated, initial check done, not loading. Rendering redirect message.');
+    // This state should ideally be very short-lived as UserProvider's useEffect should navigate.
     return <div className="min-h-screen flex items-center justify-center bg-slate-100">Redirecting...</div>; 
   }
+
    if (!initialAuthChecked || authIsLoading) {
+    console.log('[LoginPage Render] Initial auth not checked or auth is loading. Rendering loading message.');
     return <div className="min-h-screen flex items-center justify-center bg-slate-100">Loading authentication status...</div>;
   }
 
-
+  console.log('[LoginPage Render] Rendering login form.');
   return (
-    <div className="min-h-screen flex flex-col bg-slate-100"> {/* Overall page container */}
-      {/* Header */}
+    <div className="min-h-screen flex flex-col bg-slate-100">
       <header className="w-full p-4 flex justify-start items-center border-b border-border bg-card shadow-sm">
         <div className="flex items-center">
           <HeartPulse className="h-8 w-8 text-primary mr-2" />
           <span className="font-bold text-xl text-foreground">Smart<span className="text-primary">DVM</span></span>
         </div>
       </header>
-      {/* Main content with two columns */}
       <main className="flex-1 flex flex-col md:flex-row">
-        {/* Left Column: Form */}
         <div className="w-full md:w-2/5 bg-card p-8 md:p-12 lg:p-16 flex flex-col justify-center">
           <div className="max-w-md mx-auto w-full">
             <div className="mb-10 text-left">
@@ -133,7 +139,7 @@ export default function LoginPage() {
                             type={showPassword ? "text" : "password"} 
                             placeholder="Enter your password" 
                             {...field} 
-                            className="text-base md:text-sm pr-10" // Space for the icon
+                            className="text-base md:text-sm pr-10"
                           />
                           <button
                             type="button"
@@ -196,9 +202,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Right Column: Image and Branding */}
         <div className="hidden md:flex md:w-3/5 relative">
-           {/* Placeholder for generated image or static image */}
           <Image
             src="https://placehold.co/800x1200.png" 
             alt="Illustration of a veterinary clinic scene with pets and vets"
@@ -223,3 +227,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

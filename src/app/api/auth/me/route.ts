@@ -3,50 +3,62 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { db } from '@/db';
 import { users as usersTable, sessions as sessionsTable, administratorAccessiblePractices as adminPracticesTable } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, gt } from 'drizzle-orm'; // Import gt for greater than comparison
 import { HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
-import type { User } from '@/context/UserContext'; // Use User types from context
+import type { User } from '@/context/UserContext'; 
 
 export async function GET(request: Request) {
+  console.log('[API ME START] Received request to /api/auth/me');
   const sessionTokenValue = cookies().get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
 
   if (!sessionTokenValue) {
-    // No httpOnly session token, so no user. Return null with 200 OK as it's not an "error" state.
+    console.log('[API ME] No httpOnly session token found. Returning null.');
     return NextResponse.json(null, { status: 200 }); 
   }
+  console.log('[API ME] Found httpOnly session token:', sessionTokenValue ? '******' : 'undefined');
 
   try {
-    const now = process.env.DB_TYPE === 'sqlite' ? Date.now() : new Date();
-
+    const nowForDbQuery = process.env.DB_TYPE === 'sqlite' ? Date.now() : new Date();
+    
     const session = await db.query.sessions.findFirst({
-      where: eq(sessionsTable.id, sessionTokenValue),
+      where: eq(sessionsTable.id, sessionTokenValue)
+      //Removed direct time comparison from here to simplify and ensure it's always checked after fetching.
     });
 
     if (!session) {
-      // Session ID from cookie not found in DB.
-      return NextResponse.json(null, { status: 200 }); 
+      console.log(`[API ME] Session ID from cookie not found in DB: ${sessionTokenValue}`);
+      // Clear the invalid cookie by setting its expiration to the past
+      const response = NextResponse.json(null, { status: 200 });
+      response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
+      return response;
     }
+    console.log('[API ME] Session found in DB for token:', session.id);
 
-    // Check if session expired (for SQLite, expiresAt is number)
+    // Check if session expired (for SQLite, expiresAt is number in ms)
     const sessionExpiresAt = typeof session.expiresAt === 'number' ? session.expiresAt : new Date(session.expiresAt).getTime();
-    const currentTime = typeof now === 'number' ? now : now.getTime();
+    const currentTime = Date.now(); // Always use current time in ms for comparison
 
     if (sessionExpiresAt < currentTime) {
-      await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionTokenValue)); // Clean up expired session
-      // Session expired.
-      return NextResponse.json(null, { status: 200 }); 
+      console.log(`[API ME] Session expired. ExpiresAt: ${sessionExpiresAt}, CurrentTime: ${currentTime}. Deleting session.`);
+      await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionTokenValue));
+      const response = NextResponse.json(null, { status: 200 });
+      response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
+      return response;
     }
+    console.log('[API ME] Session is valid and not expired.');
 
     const userRecord = await db.query.users.findFirst({
       where: eq(usersTable.id, session.userId),
     });
 
     if (!userRecord) {
-      // User associated with session not found. This implies data inconsistency.
-      console.error(`[API ME] User not found for session ID: ${sessionTokenValue}, userId: ${session.userId}`);
-      await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionTokenValue)); // Clean up orphaned session
-      return NextResponse.json(null, { status: 200 }); 
+      console.error(`[API ME] User not found for session ID: ${sessionTokenValue}, userId: ${session.userId}. Deleting orphaned session.`);
+      await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionTokenValue));
+      const response = NextResponse.json(null, { status: 200 });
+      response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
+      return response;
     }
+    console.log('[API ME] User record found for session:', userRecord.email);
 
     let userData: User;
 
@@ -60,9 +72,14 @@ export async function GET(request: Request) {
 
       if (!currentPracticeId && accessiblePracticeIds.length > 0) {
         currentPracticeId = accessiblePracticeIds[0];
-      } else if (!currentPracticeId && accessiblePracticeIds.length === 0) {
-        currentPracticeId = 'practice_NONE'; // Fallback, consider if this is the best default
+      } else if (accessiblePracticeIds.length === 0) { // Check if admin has ANY accessible practices
+         console.warn(`[API ME] Administrator ${userRecord.email} has no accessible practices configured. Setting currentPracticeId to a placeholder.`);
+         currentPracticeId = 'practice_NONE'; // Fallback if no practices are accessible
+      } else if (currentPracticeId && !accessiblePracticeIds.includes(currentPracticeId)) {
+        console.warn(`[API ME] Administrator ${userRecord.email}'s currentPracticeId (${currentPracticeId}) is not in accessible list. Defaulting to first accessible.`);
+        currentPracticeId = accessiblePracticeIds[0]; // Default to first if current is invalid
       }
+
 
       userData = {
         id: userRecord.id,
@@ -74,8 +91,7 @@ export async function GET(request: Request) {
       };
     } else if (userRecord.role === 'PRACTICE_ADMINISTRATOR') {
       if (!userRecord.practiceId) {
-         console.warn(`[API ME] Practice Administrator ${userRecord.email} is not associated with a practice.`);
-         // Depending on strictness, you might return null or an error
+         console.warn(`[API ME] Practice Administrator ${userRecord.email} is not associated with a practice. Returning null.`);
          return NextResponse.json(null, { status: 200 }); 
       }
       userData = {
@@ -87,8 +103,7 @@ export async function GET(request: Request) {
       };
     } else if (userRecord.role === 'CLIENT') {
       if (!userRecord.practiceId) {
-        console.warn(`[API ME] Client ${userRecord.email} is not associated with a practice.`);
-        // Depending on strictness, you might return null or an error
+        console.warn(`[API ME] Client ${userRecord.email} is not associated with a practice. Returning null.`);
         return NextResponse.json(null, { status: 200 });
       }
       userData = {
@@ -99,15 +114,15 @@ export async function GET(request: Request) {
         practiceId: userRecord.practiceId,
       };
     } else {
-      console.error(`[API ME] Unknown user role for ${userRecord.email}: ${userRecord.role}`);
-      return NextResponse.json(null, { status: 200 }); // Unknown role
+      console.error(`[API ME] Unknown user role for ${userRecord.email}: ${userRecord.role}. Returning null.`);
+      return NextResponse.json(null, { status: 200 });
     }
-
+    
+    console.log('[API ME SUCCESS] Successfully fetched user data:', userData.email, userData.role);
     return NextResponse.json(userData);
 
   } catch (error) {
-    console.error('[API ME] Error fetching current user:', error);
-    // For actual errors during processing, return a 500
+    console.error('[API ME CATCH_ERROR] Error fetching current user:', error);
     return NextResponse.json({ error: 'Failed to fetch user session' }, { status: 500 });
   }
 }
