@@ -34,11 +34,9 @@ export const administratorAccessiblePractices = dbTable('administrator_accessibl
   assignedAt: isSqlite
     ? timestamp('assigned_at').notNull().$defaultFn(() => Math.floor(Date.now() / 1000))
     : timestamp('assigned_at', { mode: 'date' }).notNull().defaultNow(),
-}, (table) => ({
+}, (table: { administratorId: any; practiceId: any; }) => ({
   pk: primaryKey({ columns: [table.administratorId, table.practiceId] }),
 }));
-
-
 
 export const usersRelations = relations(users, ({ one, many }) => ({
   assignedPractice: one(practices, {

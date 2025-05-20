@@ -1,4 +1,3 @@
-// db.config.ts snippet
 import * as pgCore from 'drizzle-orm/pg-core';
 import * as sqliteCore from 'drizzle-orm/sqlite-core';
 
@@ -11,8 +10,13 @@ export const dbTable = (name: string, columns: any, config?: any) => {
   return pgCore.pgTable(name, columns, config);
 };
 
-// Export other column builders directly since their signatures align well
-export const text = dbType === 'sqlite' ? sqliteCore.text : pgCore.text;
-export const integer = dbType === 'sqlite' ? sqliteCore.integer : pgCore.integer;
+export const text = (name: string, p0?: { enum: readonly ["CLIENT", "PRACTICE_ADMINISTRATOR", "ADMINISTRATOR"]; }) =>
+  dbType === 'sqlite' ? sqliteCore.text(name) : pgCore.text(name);
+
+export const integer = (name: string) =>
+  dbType === 'sqlite' ? sqliteCore.integer() : pgCore.integer(name);
+
 export const primaryKey = dbType === 'sqlite' ? sqliteCore.primaryKey : pgCore.primaryKey;
-export const timestamp = dbType === 'sqlite' ? sqliteCore.integer : pgCore.timestamp; // SQLite uses integer for timestamps
+
+export const timestamp = (name: string, p0?: { mode: string; }) =>
+  dbType === 'sqlite' ? sqliteCore.integer() : pgCore.timestamp(name);
