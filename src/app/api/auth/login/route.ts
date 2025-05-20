@@ -105,7 +105,7 @@ export async function POST(request: Request) {
       // createdAt will be handled by DB default
     });
 
-    cookies().set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, sessionTokenValue, { 
+    (await cookies()).set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, sessionTokenValue, { 
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: SESSION_MAX_AGE_SECONDS, 

@@ -9,7 +9,7 @@ import type { User } from '@/context/UserContext';
 
 export async function GET(request: Request) {
   console.log('[API ME START] Received request to /api/auth/me');
-  const sessionTokenValue = cookies().get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
+  const sessionTokenValue =  (await cookies()).get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
 
   if (!sessionTokenValue) {
     console.log('[API ME] No httpOnly session token found. Returning null.');

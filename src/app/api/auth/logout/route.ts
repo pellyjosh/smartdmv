@@ -9,7 +9,7 @@ import { HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
 
 export async function POST() {
   try {
-    const sessionTokenValue = cookies().get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
+    const sessionTokenValue = (await cookies()).get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
 
     if (sessionTokenValue) {
       // Delete session from database
@@ -18,7 +18,9 @@ export async function POST() {
     }
 
     // Clear the httpOnly cookie
-    cookies().set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', {
+    (await
+      // Clear the httpOnly cookie
+      cookies()).set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 0, // Expire immediately

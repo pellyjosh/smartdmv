@@ -6,7 +6,8 @@ config(); // Load environment variables from .env file
 
 import { db } from './index';
 import { practices, users, administratorAccessiblePractices, userRoleEnum } from './schema';
-import type { User } from '@/hooks/useAuth'; // For role enum consistency
+import { User } from '@/context/UserContext';
+// import type { User } from '@/hooks/useAuth'; // For role enum consistency
 // import { sql } from 'drizzle-orm'; // Not used directly in this version of seed
 
 // For SQLite, we might want to enable foreign keys explicitly if not done by the driver by default
