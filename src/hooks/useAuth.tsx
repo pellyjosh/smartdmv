@@ -2,13 +2,12 @@
 "use client";
 import { useState, createContext, useContext, ReactNode, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-// Removed: import { loginUserAction, switchPracticeAction } from '@/actions/authActions';
-import { switchPracticeAction } from '@/actions/authActions'; // Keep switchPracticeAction for now
+import { switchPracticeAction } from '@/actions/authActions'; 
 import { SESSION_TOKEN_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from '@/config/authConstants';
 
 // Define base user and role-specific user types
 interface BaseUser {
-  id: string; // Added id here as it's fundamental
+  id: string; 
   email: string;
   name?: string;
 }
@@ -58,6 +57,7 @@ const setCookie = (name: string, value: string | null, days: number = 7) => {
     date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
     expires = "; expires=" + date.toUTCString();
   }
+  // Ensure cookie is set for the root path
   document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax";
 };
 
@@ -70,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   const navigateBasedOnRole = useCallback((role: User['role']) => {
+    console.log(`[Auth Nav] Navigating based on role: ${role}`);
     switch (role) {
       case 'CLIENT':
         router.push('/client');
@@ -85,16 +86,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [router]);
 
+  // Effect to load user from session storage on initial mount
   useEffect(() => {
+    console.log('[Auth Effect] Initializing auth state...');
     setIsLoading(true);
     try {
       const storedUserString = sessionStorage.getItem('smartdvm-user-session');
       if (storedUserString) {
         const storedUser: User = JSON.parse(storedUserString);
         setUser(storedUser);
+        console.log('[Auth Effect] User loaded from session storage:', storedUser);
+      } else {
+        console.log('[Auth Effect] No user found in session storage.');
       }
     } catch (error) {
-      console.error("Failed to parse stored user from session storage", error);
+      console.error("[Auth Effect] Failed to parse stored user from session storage", error);
       sessionStorage.removeItem('smartdvm-user-session');
       setCookie(SESSION_TOKEN_COOKIE_NAME, null, SESSION_MAX_AGE_SECONDS / (24 * 60 * 60) ); 
     }
@@ -103,8 +109,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
 
+  // Effect to redirect from /auth/login if user is already authenticated
   useEffect(() => {
     if (initialAuthChecked && user && pathname === '/auth/login') {
+      console.log('[Auth Effect] User is authenticated and on login page. Redirecting to dashboard.');
       navigateBasedOnRole(user.role);
     }
   }, [user, initialAuthChecked, pathname, navigateBasedOnRole]);
@@ -113,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (emailInput: string, passwordInput: string) => {
     setIsLoading(true);
     try {
+      console.log('[Auth Login] Attempting login for:', emailInput);
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -124,25 +133,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await response.json();
 
       if (!response.ok) {
+        console.error('[Auth Login] API login failed:', data.error || `API Error: ${response.status}`);
         throw new Error(data.error || `API Error: ${response.status}`);
       }
       
-      const userData = data.user as User; // API now returns the full User object
+      const userData = data.user as User; 
       
-      if (!userData || !userData.role) { // Basic validation of the received user object
+      if (!userData || !userData.role) {
+        console.error('[Auth Login] Invalid user data received from server.');
         throw new Error("Invalid user data received from server.");
       }
-
-      setUser(userData);
+      
+      console.log('[Auth Login] Login successful, user data received:', userData);
       const userString = JSON.stringify(userData);
       sessionStorage.setItem('smartdvm-user-session', userString);
-      // This cookie is used by the middleware for client-side session state communication
       setCookie(SESSION_TOKEN_COOKIE_NAME, userString, SESSION_MAX_AGE_SECONDS / (24 * 60 * 60)); 
-      navigateBasedOnRole(userData.role);
+      setUser(userData); // Set user state. This will trigger the useEffect for navigation.
+      console.log('[Auth Login] User state, session storage, and cookie set.');
 
+      // Navigation is now handled by the useEffect watching `user` and `pathname`
     } catch (error) {
-      console.error("Login error:", error);
-      if (error instanceof Error) throw error;
+      console.error("[Auth Login] Login error caught in useAuth:", error);
+      // Ensure the error is re-thrown so the form can catch it
+      if (error instanceof Error) throw error; 
       throw new Error("An unknown login error occurred.");
     } finally {
       setIsLoading(false);
@@ -150,46 +163,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    console.log('[Auth Logout] Logging out user.');
     setIsLoading(true);
     setUser(null);
     sessionStorage.removeItem('smartdvm-user-session');
-    setCookie(SESSION_TOKEN_COOKIE_NAME, null, SESSION_MAX_AGE_SECONDS / (24 * 60 * 60));
-    // TODO: Call an API endpoint to invalidate the server-side session_token if needed
-    router.push('/auth/login'); 
-    setIsLoading(false);
+    setCookie(SESSION_TOKEN_COOKIE_NAME, null, 0); // Set expiry to 0 to delete cookie
+    // API call to invalidate server session_token is handled by /api/auth/logout
+    fetch('/api/auth/logout', { method: 'POST' })
+      .then(() => console.log('[Auth Logout] Server session invalidated.'))
+      .catch(err => console.error('[Auth Logout] Error invalidating server session:', err))
+      .finally(() => {
+        router.push('/auth/login'); 
+        setIsLoading(false);
+        console.log('[Auth Logout] Redirected to login page.');
+      });
   };
 
   const switchPractice = async (newPracticeId: string) => {
     if (user && user.role === 'ADMINISTRATOR') {
-      // Client-side check for accessibility before calling server action
       if (!(user as AdministratorUser).accessiblePracticeIds.includes(newPracticeId)) {
-        console.warn("Admin tried to switch to an inaccessible practice.");
-        // Optionally, show a toast or error message to the user
+        console.warn("[Auth SwitchPractice] Admin tried to switch to an inaccessible practice.");
         return;
       }
       setIsLoading(true);
       try {
-        // switchPracticeAction is still a server action
+        console.log(`[Auth SwitchPractice] Admin ${user.id} switching to practice ${newPracticeId}`);
         const { success, updatedUser: refreshedUser } = await switchPracticeAction(user.id, newPracticeId);
         if (success && refreshedUser) {
           setUser(refreshedUser);
           const userString = JSON.stringify(refreshedUser);
           sessionStorage.setItem('smartdvm-user-session', userString);
           setCookie(SESSION_TOKEN_COOKIE_NAME, userString, SESSION_MAX_AGE_SECONDS / (24 * 60 * 60));
+          console.log('[Auth SwitchPractice] Practice switched successfully, user state updated.');
         } else {
-          console.error("Failed to switch practice via server action or user data not returned.");
-          // Optionally, show a toast or error message
+          console.error("[Auth SwitchPractice] Failed to switch practice via server action or user data not returned.");
         }
       } catch (error) {
-        console.error("Failed to switch practice:", error);
-         // Optionally, show a toast or error message
+        console.error("[Auth SwitchPractice] Error switching practice:", error);
       } finally {
         setIsLoading(false);
       }
     }
   };
 
-  const combinedIsLoading = isLoading || !initialAuthChecked;
+  const combinedIsLoading = isLoading; // initialAuthChecked is mostly for the first load. isLoading covers subsequent loads.
 
   return (
     <AuthContext.Provider value={{ user, login, logout, isLoading: combinedIsLoading, initialAuthChecked, switchPractice }}>
@@ -205,3 +222,6 @@ export function useAuth() {
   }
   return context;
 }
+
+
+    
