@@ -1,14 +1,14 @@
 // index.ts
 import { drizzle as drizzlePostgres } from 'drizzle-orm/node-postgres';
 import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
-import postgres from 'postgres';
+import { Pool } from 'pg'; // Changed from 'postgres'
 import Database from 'better-sqlite3';
 import * as schema from './schema';
 
 // ✅ Extend globalThis for custom caching variables
 declare global {
   // biome-ignore lint/style/noVar: This is needed for global declarations
-  var DrizzlePostgresClient: postgres.Sql | undefined;
+  var DrizzlePostgresClient: Pool | undefined; // Changed type to Pool
   var DrizzleSqliteClient: ReturnType<typeof Database> | undefined;
 }
 
@@ -26,17 +26,17 @@ if (dbType === 'postgres') {
 
   console.log('🔌 Connecting to PostgreSQL database...');
 
-  let sqlClient: postgres.Sql;
+  let poolClient: Pool; // Changed variable name for clarity
   if (process.env.NODE_ENV === 'production') {
-    sqlClient = postgres(process.env.POSTGRES_URL, { prepare: false });
+    poolClient = new Pool({ connectionString: process.env.POSTGRES_URL });
   } else {
     if (!global.DrizzlePostgresClient) {
-      global.DrizzlePostgresClient = postgres(process.env.POSTGRES_URL, { prepare: false });
+      global.DrizzlePostgresClient = new Pool({ connectionString: process.env.POSTGRES_URL });
     }
-    sqlClient = global.DrizzlePostgresClient;
+    poolClient = global.DrizzlePostgresClient;
   }
 
-  dbInstance = drizzlePostgres(sqlClient, {
+  dbInstance = drizzlePostgres(poolClient, { // Pass the Pool instance
     schema,
     logger: process.env.NODE_ENV === 'development',
   });

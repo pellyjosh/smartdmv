@@ -1,7 +1,6 @@
-
 // schema/usersSchema.ts
 import { dbTable, text, timestamp, primaryKey } from '@/db/db.config';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import { practices } from './practicesSchema';
 import { sessions } from './sessionsSchema';
 
@@ -19,11 +18,11 @@ export const users = dbTable('users', {
   currentPracticeId: text('current_practice_id').references(() => practices.id, { onDelete: 'set null' }),
 
   createdAt: isSqlite
-    ? timestamp('created_at').notNull().$defaultFn(() => Math.floor(Date.now() / 1000))
+    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
     : timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
 
   updatedAt: isSqlite
-    ? timestamp('updated_at').notNull().$defaultFn(() => Math.floor(Date.now() / 1000))
+    ? timestamp('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => new Date())
     : timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
 });
 
@@ -32,9 +31,9 @@ export const administratorAccessiblePractices = dbTable('administrator_accessibl
   practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
 
   assignedAt: isSqlite
-    ? timestamp('assigned_at').notNull().$defaultFn(() => Math.floor(Date.now() / 1000))
+    ? timestamp('assigned_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
     : timestamp('assigned_at', { mode: 'date' }).notNull().defaultNow(),
-}, (table: { administratorId: any; practiceId: any; }) => ({
+}, (table) => ({  // Removed type annotation for 'table'
   pk: primaryKey({ columns: [table.administratorId, table.practiceId] }),
 }));
 
