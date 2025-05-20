@@ -95,13 +95,16 @@ export async function POST(request: Request) {
 
     // Session management
     const sessionToken = crypto.randomUUID();
-    const sessionExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days expiry
+    const sessionExpiresAtDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days expiry as Date object
+    const isSqlite = process.env.DB_TYPE === 'sqlite';
 
     await db.insert(sessionsTable).values({
       id: sessionToken,
       userId: userRecord.id,
-      expiresAt: sessionExpiresAt, // Ensure this matches DB schema (Date object or timestamp number)
-      createdAt: new Date(),
+      // Conditionally format expiresAt: number for SQLite (ms), Date object for PG
+      expiresAt: isSqlite ? sessionExpiresAtDate.getTime() : sessionExpiresAtDate,
+      // data: text('data'), // 'data' column can be used to store additional session info if needed
+      // Let createdAt be handled by database default
     });
 
     cookies().set('session_token', sessionToken, { // This is the server-set HttpOnly cookie
@@ -110,13 +113,13 @@ export async function POST(request: Request) {
       maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
       path: '/',
       sameSite: 'lax',
-      expires: sessionExpiresAt,
+      expires: sessionExpiresAtDate, // 'expires' attribute for cookie expects a Date object
     });
 
     return NextResponse.json({ user: userData, message: 'Signed in successfully!' });
 
   } catch (error) {
-    console.error('API login error:', error);
+    console.error('API login error:', error); // This log will show the specific error on the server
     return NextResponse.json({ error: 'An unexpected error occurred. Please try again.' }, { status: 500 });
   }
 }
