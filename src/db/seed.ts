@@ -1,8 +1,11 @@
 
+import { config } from 'dotenv';
+config(); // Load environment variables from .env file
+
 import { db } from './index';
 import { practices, users, administratorAccessiblePractices, userRoleEnum } from './schema';
 import type { User } from '@/hooks/useAuth'; // For role enum consistency
-import { sql } from 'drizzle-orm';
+// import { sql } from 'drizzle-orm'; // Not used directly in this version of seed
 
 // For SQLite, we might want to enable foreign keys explicitly if not done by the driver by default
 // Though for `better-sqlite3` driver, it's usually on.
@@ -74,6 +77,7 @@ const adminAccessData = [
 
 async function seed() {
   console.log('🌱 Starting database seeding...');
+  console.log(`Database type from env: ${process.env.DB_TYPE}`); // Log to confirm env var is read
 
   // await enableForeignKeysForSqlite(); // If needed
 
