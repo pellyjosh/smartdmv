@@ -2,12 +2,13 @@
 "use client";
 import { useState, createContext, useContext, ReactNode, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { loginUserAction, switchPracticeAction } from '@/actions/authActions';
-import { SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
+// Removed: import { loginUserAction, switchPracticeAction } from '@/actions/authActions';
+import { switchPracticeAction } from '@/actions/authActions'; // Keep switchPracticeAction for now
+import { SESSION_TOKEN_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from '@/config/authConstants';
 
 // Define base user and role-specific user types
 interface BaseUser {
-  id: string;
+  id: string; // Added id here as it's fundamental
   email: string;
   name?: string;
 }
@@ -57,7 +58,6 @@ const setCookie = (name: string, value: string | null, days: number = 7) => {
     date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
     expires = "; expires=" + date.toUTCString();
   }
-  // Added SameSite=Lax for better security practice
   document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax";
 };
 
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         router.push('/practice-administrator');
         break;
       default:
-        router.push('/'); // Fallback to home page
+        router.push('/'); 
     }
   }, [router]);
 
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Failed to parse stored user from session storage", error);
       sessionStorage.removeItem('smartdvm-user-session');
-      setCookie(SESSION_TOKEN_COOKIE_NAME, null); // Also clear the cookie if session storage is corrupt
+      setCookie(SESSION_TOKEN_COOKIE_NAME, null, SESSION_MAX_AGE_SECONDS / (24 * 60 * 60) ); 
     }
     setInitialAuthChecked(true);
     setIsLoading(false);
@@ -113,11 +113,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (emailInput: string, passwordInput: string) => {
     setIsLoading(true);
     try {
-      const userData = await loginUserAction(emailInput, passwordInput);
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: emailInput, password: passwordInput }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `API Error: ${response.status}`);
+      }
+      
+      const userData = data.user as User; // API now returns the full User object
+      
+      if (!userData || !userData.role) { // Basic validation of the received user object
+        throw new Error("Invalid user data received from server.");
+      }
+
       setUser(userData);
       const userString = JSON.stringify(userData);
       sessionStorage.setItem('smartdvm-user-session', userString);
-      setCookie(SESSION_TOKEN_COOKIE_NAME, userString); // For middleware
+      // This cookie is used by the middleware for client-side session state communication
+      setCookie(SESSION_TOKEN_COOKIE_NAME, userString, SESSION_MAX_AGE_SECONDS / (24 * 60 * 60)); 
       navigateBasedOnRole(userData.role);
 
     } catch (error) {
@@ -133,32 +153,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setUser(null);
     sessionStorage.removeItem('smartdvm-user-session');
-    setCookie(SESSION_TOKEN_COOKIE_NAME, null);
-    router.push('/auth/login'); // Redirect to login page after logout
+    setCookie(SESSION_TOKEN_COOKIE_NAME, null, SESSION_MAX_AGE_SECONDS / (24 * 60 * 60));
+    // TODO: Call an API endpoint to invalidate the server-side session_token if needed
+    router.push('/auth/login'); 
     setIsLoading(false);
   };
 
   const switchPractice = async (newPracticeId: string) => {
     if (user && user.role === 'ADMINISTRATOR') {
-      if (user.accessiblePracticeIds.includes(newPracticeId)) {
-        setIsLoading(true);
-        try {
-          const { success, updatedUser: refreshedUser } = await switchPracticeAction(user.id, newPracticeId);
-          if (success && refreshedUser) {
-            setUser(refreshedUser);
-            const userString = JSON.stringify(refreshedUser);
-            sessionStorage.setItem('smartdvm-user-session', userString);
-            setCookie(SESSION_TOKEN_COOKIE_NAME, userString);
-          } else {
-            console.error("Failed to switch practice via server action or user data not returned.");
-          }
-        } catch (error) {
-          console.error("Failed to switch practice:", error);
-        } finally {
-          setIsLoading(false);
-        }
-      } else {
+      // Client-side check for accessibility before calling server action
+      if (!(user as AdministratorUser).accessiblePracticeIds.includes(newPracticeId)) {
         console.warn("Admin tried to switch to an inaccessible practice.");
+        // Optionally, show a toast or error message to the user
+        return;
+      }
+      setIsLoading(true);
+      try {
+        // switchPracticeAction is still a server action
+        const { success, updatedUser: refreshedUser } = await switchPracticeAction(user.id, newPracticeId);
+        if (success && refreshedUser) {
+          setUser(refreshedUser);
+          const userString = JSON.stringify(refreshedUser);
+          sessionStorage.setItem('smartdvm-user-session', userString);
+          setCookie(SESSION_TOKEN_COOKIE_NAME, userString, SESSION_MAX_AGE_SECONDS / (24 * 60 * 60));
+        } else {
+          console.error("Failed to switch practice via server action or user data not returned.");
+          // Optionally, show a toast or error message
+        }
+      } catch (error) {
+        console.error("Failed to switch practice:", error);
+         // Optionally, show a toast or error message
+      } finally {
+        setIsLoading(false);
       }
     }
   };
