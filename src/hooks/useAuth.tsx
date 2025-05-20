@@ -2,34 +2,30 @@
 "use client";
 import { useState, createContext, useContext, ReactNode, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-// import bcrypt from 'bcryptjs'; // No longer needed here
-// import { db } from '@/db'; // No longer needed here
-// import { users as usersTable, administratorAccessiblePractices as adminPracticesTable } from '@/db/schema'; // No longer needed here
-// import { eq } from 'drizzle-orm'; // No longer needed here
 import { loginUserAction, switchPracticeAction } from '@/actions/authActions';
+import { SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
 
-
-// Define base user and role-specific user types for multi-location
+// Define base user and role-specific user types
 interface BaseUser {
-  id: string; 
+  id: string;
   email: string;
   name?: string;
 }
 
-interface ClientUser extends BaseUser {
+export interface ClientUser extends BaseUser {
   role: 'CLIENT';
-  practiceId: string; 
+  practiceId: string;
 }
 
-interface PracticeAdminUser extends BaseUser {
+export interface PracticeAdminUser extends BaseUser {
   role: 'PRACTICE_ADMINISTRATOR';
-  practiceId: string; 
+  practiceId: string;
 }
 
-interface AdministratorUser extends BaseUser {
+export interface AdministratorUser extends BaseUser {
   role: 'ADMINISTRATOR';
-  accessiblePracticeIds: string[]; 
-  currentPracticeId: string; 
+  accessiblePracticeIds: string[];
+  currentPracticeId: string;
 }
 
 export type User = ClientUser | PracticeAdminUser | AdministratorUser;
@@ -40,12 +36,10 @@ interface AuthContextType {
   logout: () => void;
   isLoading: boolean;
   initialAuthChecked: boolean;
-  switchPractice?: (practiceId: string) => Promise<void>; 
+  switchPractice?: (practiceId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const MOCK_AUTH_COOKIE_NAME = 'mock-auth-user';
 
 const getCookie = (name: string): string | null => {
   if (typeof document === 'undefined') return null;
@@ -63,7 +57,8 @@ const setCookie = (name: string, value: string | null, days: number = 7) => {
     date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
     expires = "; expires=" + date.toUTCString();
   }
-  document.cookie = name + "=" + (value || "") + expires + "; path=/";
+  // Added SameSite=Lax for better security practice
+  document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax";
 };
 
 
@@ -86,22 +81,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         router.push('/practice-administrator');
         break;
       default:
-        router.push('/');
+        router.push('/'); // Fallback to home page
     }
   }, [router]);
 
   useEffect(() => {
     setIsLoading(true);
     try {
-      const storedUserString = sessionStorage.getItem('vetconnectpro-user');
+      const storedUserString = sessionStorage.getItem('smartdvm-user-session');
       if (storedUserString) {
         const storedUser: User = JSON.parse(storedUserString);
         setUser(storedUser);
       }
     } catch (error) {
-      console.error("Failed to parse stored user", error);
-      sessionStorage.removeItem('vetconnectpro-user');
-      setCookie(MOCK_AUTH_COOKIE_NAME, null);
+      console.error("Failed to parse stored user from session storage", error);
+      sessionStorage.removeItem('smartdvm-user-session');
+      setCookie(SESSION_TOKEN_COOKIE_NAME, null); // Also clear the cookie if session storage is corrupt
     }
     setInitialAuthChecked(true);
     setIsLoading(false);
@@ -121,8 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userData = await loginUserAction(emailInput, passwordInput);
       setUser(userData);
       const userString = JSON.stringify(userData);
-      sessionStorage.setItem('vetconnectpro-user', userString);
-      setCookie(MOCK_AUTH_COOKIE_NAME, userString); // For middleware
+      sessionStorage.setItem('smartdvm-user-session', userString);
+      setCookie(SESSION_TOKEN_COOKIE_NAME, userString); // For middleware
       navigateBasedOnRole(userData.role);
 
     } catch (error) {
@@ -137,9 +132,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setIsLoading(true);
     setUser(null);
-    sessionStorage.removeItem('vetconnectpro-user');
-    setCookie(MOCK_AUTH_COOKIE_NAME, null);
-    router.push('/auth/login');
+    sessionStorage.removeItem('smartdvm-user-session');
+    setCookie(SESSION_TOKEN_COOKIE_NAME, null);
+    router.push('/auth/login'); // Redirect to login page after logout
     setIsLoading(false);
   };
 
@@ -152,21 +147,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (success && refreshedUser) {
             setUser(refreshedUser);
             const userString = JSON.stringify(refreshedUser);
-            sessionStorage.setItem('vetconnectpro-user', userString);
-            setCookie(MOCK_AUTH_COOKIE_NAME, userString); // Update cookie for middleware if needed
+            sessionStorage.setItem('smartdvm-user-session', userString);
+            setCookie(SESSION_TOKEN_COOKIE_NAME, userString);
           } else {
             console.error("Failed to switch practice via server action or user data not returned.");
-            // Optionally: show a toast to the user
           }
         } catch (error) {
           console.error("Failed to switch practice:", error);
-          // Optionally: show a toast to the user
         } finally {
           setIsLoading(false);
         }
       } else {
         console.warn("Admin tried to switch to an inaccessible practice.");
-        // Optionally show error to user
       }
     }
   };
