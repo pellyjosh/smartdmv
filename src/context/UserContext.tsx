@@ -166,15 +166,32 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, [router, pathname]);
 
+  // useEffect(() => {
+  //   console.log('[UserContext Nav Effect Check] user:', user ? user.email : null, 'initialAuthChecked:', initialAuthChecked, 'pathname:', pathname, 'isLoading:', isLoading);
+  //   if (!isLoading && initialAuthChecked) {
+  //     if (user && pathname === AUTH_PAGE) {
+  //       console.log('[UserContext Nav Effect EXECUTE] User authenticated and on login page. Redirecting. Role:', user.role);
+  //       navigateBasedOnRole(user.role);
+  //     } else if (!user && pathname !== AUTH_PAGE && isPathProtected(pathname)) {
+  //       console.log(`[UserContext Nav Effect EXECUTE] User not authenticated but on a protected page (${pathname}). Redirecting to login.`);
+  //       if (pathname !== AUTH_PAGE) { // Avoid redundant push if already somehow on login
+  //           router.push(AUTH_PAGE);
+  //       }
+  //     }
+  //   } else {
+  //       console.log('[UserContext Nav Effect] Conditions for navigation not met (still loading/checking or path is public).');
+  //   }
+  // }, [user, initialAuthChecked, pathname, isLoading, navigateBasedOnRole, router]);
+
   useEffect(() => {
     console.log('[UserContext Nav Effect Check] user:', user ? user.email : null, 'initialAuthChecked:', initialAuthChecked, 'pathname:', pathname, 'isLoading:', isLoading);
     if (!isLoading && initialAuthChecked) {
-      if (user && pathname === AUTH_PAGE) {
+      if (user && pathname === AUTH_PAGE) { // <--- This is the key condition for navigating AWAY from login
         console.log('[UserContext Nav Effect EXECUTE] User authenticated and on login page. Redirecting. Role:', user.role);
         navigateBasedOnRole(user.role);
       } else if (!user && pathname !== AUTH_PAGE && isPathProtected(pathname)) {
         console.log(`[UserContext Nav Effect EXECUTE] User not authenticated but on a protected page (${pathname}). Redirecting to login.`);
-        if (pathname !== AUTH_PAGE) { // Avoid redundant push if already somehow on login
+        if (pathname !== AUTH_PAGE) {
             router.push(AUTH_PAGE);
         }
       }
