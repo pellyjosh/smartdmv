@@ -39,32 +39,42 @@ export async function middleware(request: NextRequest) {
   const isServerAuthenticated = !!httpOnlySessionToken;
   console.log(`[Middleware] Path: ${pathname}, ServerAuth: ${isServerAuthenticated}, ClientCookieValid: ${isClientCookieValid}, UserRole: ${userFromClientCookie?.role}`);
 
-  // 1. Handle redirection from `/auth` to `/auth/login` (e.g. if someone types /auth directly)
-  if (pathname === '/auth') {
-    console.log('[Middleware] Path is /auth, redirecting to /auth/login');
+  // 1. Handle /auth or /auth/ redirect to /auth/login
+  if (pathname === '/auth' || pathname === '/auth/') {
+    console.log('[Middleware] Path is /auth or /auth/, redirecting to /auth/login');
     return NextResponse.redirect(new URL(AUTH_PAGE, request.url));
   }
-
+  
   // 2. Handle the login page itself
   if (pathname === AUTH_PAGE) {
     if (isServerAuthenticated && isClientCookieValid && userFromClientCookie) {
       // User is authenticated and on the login page.
-      // Let UserContext handle redirecting them to their dashboard (which might be the root path '/')
-      console.log(`[Middleware] Authenticated user (${userFromClientCookie.email}) on auth page. Allowing request for client-side redirect.`);
+      // UserContext will handle redirecting them to their dashboard.
+      console.log(`[Middleware] Authenticated user (${userFromClientCookie.email}) on auth page. Allowing request for client-side redirect from UserContext.`);
     }
-    // Allow access to login page for unauthenticated users or for the above case
     return NextResponse.next();
   }
 
-  // 3. Handle the root path ('/')
+  // 3. Handle root path ('/')
   if (pathname === '/') {
     if (!isServerAuthenticated) {
-      // Unauthenticated user accessing root: redirect to login page
       console.log(`[Middleware] Unauthenticated user on root path. Redirecting to login.`);
       return NextResponse.redirect(new URL(AUTH_PAGE, request.url));
     }
-    // Authenticated user accessing root: allow src/app/(main)/page.tsx to render role-specific content
-    console.log(`[Middleware] Authenticated user on root path /. Allowing request to proceed.`);
+    // If authenticated and on root path, redirect to their role-specific dashboard
+    if (isClientCookieValid && userFromClientCookie) {
+        const userRole = userFromClientCookie.role;
+        console.log(`[Middleware] Authenticated user (${userFromClientCookie.email} - ${userRole}) on root path. Redirecting to their dashboard.`);
+        if (userRole === 'ADMINISTRATOR') return NextResponse.redirect(new URL(ADMINISTRATOR_DASHBOARD, request.url));
+        if (userRole === 'PRACTICE_ADMINISTRATOR') return NextResponse.redirect(new URL(PRACTICE_ADMIN_DASHBOARD, request.url));
+        if (userRole === 'CLIENT') return NextResponse.redirect(new URL(CLIENT_DASHBOARD, request.url));
+        // Fallback for unknown role
+        console.warn(`[Middleware] Unknown role ${userRole} for authenticated user on root path. Redirecting to login.`);
+        return NextResponse.redirect(new URL(AUTH_PAGE, request.url));
+    }
+    // If server authenticated but client cookie not yet valid (e.g., race condition), allow UserContext to resolve on the client side.
+    // src/app/(main)/page.tsx should handle its own loading/redirect logic if user context isn't ready.
+    console.log(`[Middleware] Server-authenticated user on root path, client cookie pending. Allowing request for UserContext to resolve on client for /.`);
     return NextResponse.next();
   }
 
@@ -116,12 +126,14 @@ export async function middleware(request: NextRequest) {
   }
 
   // For any other paths not explicitly handled, allow them
+  // This is important for public pages that are not the root or auth pages.
   console.log(`[Middleware] Path ${pathname} not explicitly handled by auth checks. Allowing request.`);
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
+    // Match all routes except for API routes, static files, image optimization files, and specific public files.
     '/((?!api|_next/static|_next/image|favicon.ico|manifest.json|robots.txt|assets|images|.*\\.(?:png|jpg|jpeg|gif|svg)$).*)',
   ],
 };
