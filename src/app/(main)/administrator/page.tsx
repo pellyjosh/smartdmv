@@ -2,14 +2,14 @@
 "use client";
 import { useUser, type AdministratorUser } from "@/context/UserContext";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/navigation"; // Import useRouter
 import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from 'lucide-react';
 
 export default function AdministratorDashboardPage() {
   const { user, logout, isLoading, initialAuthChecked, switchPractice } = useUser();
-  const router = useRouter();
+  const router = useRouter(); // Initialize useRouter
   const [currentPracticeSelection, setCurrentPracticeSelection] = useState<string | undefined>(undefined);
 
   useEffect(() => {
@@ -31,6 +31,7 @@ export default function AdministratorDashboardPage() {
   }
 
   if (!user) {
+    // User is not authenticated, UserContext or middleware should handle redirect to login
     return (
       <div className="flex flex-col justify-center items-center h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -40,7 +41,14 @@ export default function AdministratorDashboardPage() {
   }
 
   if (user.role !== 'ADMINISTRATOR') {
-     return <div className="flex justify-center items-center h-screen">Access Denied. You do not have permission to view this page.</div>;
+     // Role mismatch, redirect to access-denied page
+     router.push('/access-denied');
+     return ( // Return a loader while redirecting
+      <div className="flex flex-col justify-center items-center h-screen">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Redirecting...</p>
+      </div>
+    );
   }
 
   const adminUser = user as AdministratorUser;
@@ -77,7 +85,7 @@ export default function AdministratorDashboardPage() {
                         )) :
                         <SelectItem value="none" disabled>No practices accessible</SelectItem>
                     }
-                    {adminUser.accessiblePracticeIds.length === 0 && adminUser.currentPracticeId === "practice_NONE" && (
+                    {(!adminUser.accessiblePracticeIds || adminUser.accessiblePracticeIds.length === 0) && adminUser.currentPracticeId === "practice_NONE" && (
                          <SelectItem value="practice_NONE" disabled>No practices configured</SelectItem>
                     )}
                   </SelectContent>

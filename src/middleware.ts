@@ -13,7 +13,7 @@ const ADMINISTRATOR_DASHBOARD = '/administrator';
 const PRACTICE_ADMIN_DASHBOARD = '/practice-administrator';
 
 // Other protected routes (relevant for access control, not initial login redirect)
-const OTHER_CLIENT_PROTECTED_ROUTES = ['/favorites', '/symptom-checker']; // Add other general app routes that require login
+const OTHER_CLIENT_PROTECTED_ROUTES = ['/favorites', '/symptom-checker']; 
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -61,19 +61,22 @@ export async function middleware(request: NextRequest) {
 
   // 4. Handle root path ('/')
   if (pathname === '/') {
-    if (!isServerAuthenticated) {
+    if (!isServerAuthenticated) { // Unauthenticated users go to login
       console.log(`[Middleware] Unauthenticated user on root path. Redirecting to login.`);
       return NextResponse.redirect(new URL(AUTH_PAGE, request.url));
     }
+    // Authenticated users get redirected to their specific dashboards from root
     if (isClientCookieValid && userFromClientCookie) {
         const userRole = userFromClientCookie.role;
         console.log(`[Middleware] Authenticated user (${userFromClientCookie.email} - ${userRole}) on root path. Redirecting to their dashboard.`);
         if (userRole === 'ADMINISTRATOR') return NextResponse.redirect(new URL(ADMINISTRATOR_DASHBOARD, request.url));
         if (userRole === 'PRACTICE_ADMINISTRATOR') return NextResponse.redirect(new URL(PRACTICE_ADMIN_DASHBOARD, request.url));
         if (userRole === 'CLIENT') return NextResponse.redirect(new URL(CLIENT_DASHBOARD, request.url));
+        // Fallback for unknown role, though UserContext should prevent this state if API is consistent
         console.warn(`[Middleware] Unknown role ${userRole} for authenticated user on root path. Redirecting to login.`);
         return NextResponse.redirect(new URL(AUTH_PAGE, request.url));
     }
+    // If server authenticated but client cookie is pending/invalid, let UserContext handle it on client for /
     console.log(`[Middleware] Server-authenticated user on root path, client cookie pending. Allowing request for UserContext to resolve on client for /.`);
     return NextResponse.next();
   }
@@ -93,11 +96,15 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
+    // Server session token exists, now check client cookie for role-based authorization
     if (!isClientCookieValid || !userFromClientCookie) {
-      console.warn(`[Middleware] Server session token exists, but client cookie missing/invalid for protected page (${pathname}). Allowing request to proceed for UserContext to validate via /api/auth/me.`);
-      // If UserContext cannot resolve, it will redirect to login from the client-side.
-      // This helps prevent redirect loops if the client cookie is just slow to set.
-      return NextResponse.next();
+      // If server token exists but client cookie is missing/invalid,
+      // it's safer to deny access or redirect to login rather than letting potentially
+      // unauthorized access through to a page that UserContext might not protect quickly enough.
+      console.warn(`[Middleware] Server session token exists, but client cookie missing/invalid for protected page (${pathname}). Redirecting to login.`);
+      const loginUrl = new URL(AUTH_PAGE, request.url);
+      loginUrl.searchParams.set('callbackUrl', pathname + request.nextUrl.search);
+      return NextResponse.redirect(loginUrl);
     }
 
     // Role-based access control for protected paths
@@ -123,12 +130,14 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // If path is not explicitly protected and not login/denied, allow it.
   console.log(`[Middleware] Path ${pathname} not explicitly handled by auth checks. Allowing request.`);
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
+    // Apply middleware to all paths except API routes, static files, images, etc.
     '/((?!api|_next/static|_next/image|favicon.ico|manifest.json|robots.txt|assets|images|.*\\.(?:png|jpg|jpeg|gif|svg)$).*)',
   ],
 };

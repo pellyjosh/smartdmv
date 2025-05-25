@@ -2,12 +2,12 @@
 "use client";
 import { useUser, type ClientUser } from "@/context/UserContext";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/navigation"; // Import useRouter
 import { Loader2 } from 'lucide-react';
 
 export default function ClientDashboardPage() {
   const { user, logout, isLoading, initialAuthChecked } = useUser();
-  const router = useRouter();
+  const router = useRouter(); // Initialize useRouter
 
   if (isLoading || !initialAuthChecked) {
     return (
@@ -19,6 +19,7 @@ export default function ClientDashboardPage() {
   }
 
   if (!user) {
+    // User is not authenticated, UserContext or middleware should handle redirect to login
     return (
       <div className="flex flex-col justify-center items-center h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -28,11 +29,17 @@ export default function ClientDashboardPage() {
   }
 
   if (user.role !== 'CLIENT') {
-     return <div className="flex justify-center items-center h-screen">Access Denied. You do not have permission to view this page.</div>;
+     // Role mismatch, redirect to access-denied page
+     router.push('/access-denied');
+     return ( // Return a loader while redirecting
+      <div className="flex flex-col justify-center items-center h-screen">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Redirecting...</p>
+      </div>
+    );
   }
 
   const clientUser = user as ClientUser;
-
 
   return (
     <div className="container mx-auto py-8">
