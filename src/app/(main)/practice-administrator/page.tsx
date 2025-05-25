@@ -1,26 +1,37 @@
 
 "use client";
-import { useUser, type PracticeAdminUser } from "@/context/UserContext"; // Use UserContext
+import { useUser, type PracticeAdminUser } from "@/context/UserContext";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation"; // Keep for now
+import { useRouter } from "next/navigation";
+import { Loader2 } from 'lucide-react';
 
 export default function PracticeAdministratorDashboardPage() {
-  const { user, logout, isLoading, initialAuthChecked } = useUser(); // Use useUser
-  const router = useRouter(); // Keep for now
+  const { user, logout, isLoading, initialAuthChecked } = useUser();
+  const router = useRouter();
 
   if (isLoading || !initialAuthChecked) {
-    return <div className="flex justify-center items-center h-screen">Loading...</div>;
+    return (
+      <div className="flex flex-col justify-center items-center h-screen">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Loading, please wait...</p>
+      </div>
+    );
   }
-  
+
   if (!user) {
-    return <div className="flex justify-center items-center h-screen">Redirecting to login...</div>;
+    return (
+      <div className="flex flex-col justify-center items-center h-screen">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Redirecting to login...</p>
+      </div>
+    );
   }
-  
+
   if (user.role !== 'PRACTICE_ADMINISTRATOR') {
      return <div className="flex justify-center items-center h-screen">Access Denied. You do not have permission to view this page.</div>;
   }
-  
-  const practiceAdminUser = user as PracticeAdminUser; // Safe to cast
+
+  const practiceAdminUser = user as PracticeAdminUser;
 
   return (
     <div className="container mx-auto py-8">

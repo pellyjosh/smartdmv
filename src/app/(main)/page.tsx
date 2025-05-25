@@ -4,15 +4,15 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useUser, type ClientUser, type AdministratorUser, type PracticeAdminUser } from '@/context/UserContext';
-import { Loader2 } from 'lucide-react';
+import { Loader2, PawPrint } from 'lucide-react'; // Keep PawPrint if used, Loader2 for loading
 
 const PublicHomePageContent = () => (
   <div className="text-center">
     <h1 className="text-4xl font-bold tracking-tight text-primary sm:text-6xl">
-      Welcome to SmartDVM
+      Welcome to <span className="text-foreground">Smart</span><span className="text-primary">DVM</span>
     </h1>
     <p className="mt-6 text-lg leading-8 text-foreground">
-      Your trusted partner in pet health management. This is the public landing page.
+      Your trusted partner in pet health management. Please log in to access your dashboard.
     </p>
     <div className="mt-10 flex items-center justify-center gap-x-6">
       <Button asChild>
@@ -51,7 +51,7 @@ const AdministratorHomePageContent = ({ user }: { user: AdministratorUser }) => 
     </p>
     <p className="text-muted-foreground">
       You are currently viewing practice: <span className="font-semibold">
-        {user.currentPracticeId ? user.currentPracticeId.replace('practice_', '') : 'N/A'}
+        {(user.currentPracticeId && user.currentPracticeId !== "practice_NONE") ? user.currentPracticeId.replace('practice_', '') : 'N/A'}
       </span>.
     </p>
     <div className="mt-10 flex items-center justify-center gap-x-6">
@@ -86,9 +86,9 @@ export default function HomePage() {
 
   if (isLoading || !initialAuthChecked) {
     return (
-      <div className="container mx-auto py-8 flex justify-center items-center min-h-[300px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2 text-muted-foreground">Loading home page...</p>
+      <div className="flex flex-col justify-center items-center h-screen">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Loading, please wait...</p>
       </div>
     );
   }
@@ -105,6 +105,7 @@ export default function HomePage() {
         <PracticeAdminHomePageContent user={user as PracticeAdminUser} />
       ) : (
         // Fallback for unknown roles or if role is somehow not set
+        // This should ideally not be reached if auth is working correctly
         <PublicHomePageContent />
       )}
     </div>
