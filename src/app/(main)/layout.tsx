@@ -1,4 +1,4 @@
-import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+
 import { AppSidebar } from '@/components/layout/AppSidebar';
 
 export default function MainApplicationLayout({
@@ -7,13 +7,14 @@ export default function MainApplicationLayout({
   children: React.ReactNode;
 }) {
   return (
-    <SidebarProvider defaultOpen={true}>
+    <div className="flex min-h-screen">
       <AppSidebar />
-      <SidebarInset>
-        <main className="min-h-screen">
+      <main className="flex-1 md:ml-64 pt-16 md:pt-0"> {/* Add padding-top for mobile header */}
+        {/* Add a container for consistent padding, or apply directly */}
+        <div className="p-4 sm:p-6 md:p-8">
           {children}
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+        </div>
+      </main>
+    </div>
   );
 }
