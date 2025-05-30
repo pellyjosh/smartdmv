@@ -1,7 +1,9 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
 import { AppSidebar } from '@/components/layout/AppSidebar';
+import { AppHeader } from '@/components/layout/AppHeader'; // Import the new AppHeader
 import { Loader2 } from 'lucide-react';
 
 export default function MainApplicationLayout({
@@ -21,9 +23,6 @@ export default function MainApplicationLayout({
   };
 
   if (!isMounted) {
-    // You can return a more sophisticated loader here if needed,
-    // but ClientOnlyWrapper in RootLayout might already handle this.
-    // Returning null defers rendering to client-side only.
     return (
       <div className="flex flex-col justify-center items-center h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -32,21 +31,26 @@ export default function MainApplicationLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-background"> {/* Added bg-background here for consistency */}
+    <div className="flex min-h-screen bg-background">
       <AppSidebar 
         isCollapsed={isSidebarCollapsed} 
         onToggleCollapse={toggleSidebarCollapse} 
       />
-      <main 
-        className={`flex-1 pt-16 md:pt-0 transition-all duration-300 ease-in-out ${
+      <div 
+        className={`flex flex-col flex-1 transition-all duration-300 ease-in-out ${
           isSidebarCollapsed ? 'md:ml-20' : 'md:ml-64'
         }`}
       >
-        {/* Add a container for consistent padding, or apply directly */}
-        <div className="p-4 sm:p-6 md:p-8">
-          {children}
-        </div>
-      </main>
+        <AppHeader /> {/* Add the AppHeader here */}
+        <main 
+          className="flex-1 overflow-y-auto" // Added overflow-y-auto for scrollable main content
+        >
+          {/* Add a container for consistent padding */}
+          <div className="p-4 sm:p-6 md:p-8">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
