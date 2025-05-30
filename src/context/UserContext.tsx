@@ -32,7 +32,7 @@ export interface AdministratorUser extends BaseUser {
 
 export type User = ClientUser | PracticeAdminUser | AdministratorUser;
 
-const AUTH_PAGE = '/auth/login'; // Define for use within UserContext for navigation checks
+const AUTH_PAGE = '/auth/login';
 
 // Helper function to define protected paths
 const PROTECTED_PATHS = [
@@ -69,10 +69,7 @@ const setClientCookie = (name: string, value: string | null, days: number = 7) =
     date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
     expires = "; expires=" + date.toUTCString();
   } else {
-    // To delete a cookie, set its expiry to the past or Max-Age to 0
-    const date = new Date();
-    date.setTime(date.getTime() - (24 * 60 * 60 * 1000)); // One day in the past
-    expires = "; expires=" + date.toUTCString() + "; Max-Age=0";
+    expires = "; Max-Age=0"; // Preferred way to delete a cookie
   }
   document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax";
   console.log(`[UserContext setClientCookie] Cookie ${name} ${value ? 'set' : 'deleted'}.`);
@@ -81,18 +78,17 @@ const setClientCookie = (name: string, value: string | null, days: number = 7) =
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // True by default until first fetchUser completes
   const [initialAuthChecked, setInitialAuthChecked] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
   const fetchUser = useCallback(async () => {
-    console.log('[UserContext fetchUser START] Attempting to fetch current user from /api/auth/me');
+    console.log('[UserContext fetchUser START] Attempting to fetch current user from /api/auth/me. Current path:', pathname);
     setIsLoading(true);
     try {
-      console.log('[UserContext fetchUser] Calling fetch("/api/auth/me")...');
       const response = await fetch('/api/auth/me');
-      console.log('[UserContext fetchUser] fetch("/api/auth/me") response status:', response.status);
+      console.log('[UserContext fetchUser] /api/auth/me response status:', response.status);
 
       if (response.ok) {
         const userData: User | null = await response.json();
@@ -100,7 +96,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setUser(userData);
           sessionStorage.setItem(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(userData));
           setClientCookie(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(userData));
-          console.log('[UserContext fetchUser SUCCESS] User fetched and set:', userData.email, userData.role, 'Current Practice ID:', (userData as AdministratorUser).currentPracticeId);
+          console.log('[UserContext fetchUser SUCCESS] User fetched and set:', userData.email, userData.role);
         } else {
           setUser(null);
           sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
@@ -111,7 +107,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setUser(null);
         sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
         setClientCookie(SESSION_TOKEN_COOKIE_NAME, null);
-        console.warn(`[UserContext fetchUser API_FAIL] /api/auth/me call failed, status: ${response.status}`);
+        console.warn(`[UserContext fetchUser API_FAIL] /api/auth/me call failed, status: ${response.status}. Setting user to null.`);
       }
     } catch (error) {
       console.error('[UserContext fetchUser CATCH_ERROR] Error fetching current user:', error);
@@ -121,18 +117,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
       setInitialAuthChecked(true);
-      console.log('[UserContext fetchUser FINALLY] fetchUser finished. isLoading:', false, 'initialAuthChecked:', true, 'User set to:', user ? user.email : null);
+      console.log('[UserContext fetchUser FINALLY] fetchUser finished. isLoading:', false, 'initialAuthChecked:', true, 'User set to:', user ? user.email : 'null');
     }
-  }, [pathname]); // Added pathname to dependencies if fetchUser behavior needs to be path-sensitive, though for /api/auth/me it's usually not. Can be removed if not needed.
+  }, [pathname]); // pathname dependency ensures fetchUser can react to path changes if needed.
 
   useEffect(() => {
-    console.log('[UserContext Mount/Effect] Initializing user state. Current path:', pathname);
+    console.log('[UserContext Mount/Effect] Initializing user state. Calling fetchUser.');
     fetchUser();
-  }, [fetchUser, pathname]); // Added pathname here in case fetchUser logic should re-evaluate on path change
+  }, [fetchUser]);
 
   const navigateBasedOnRole = useCallback((role: User['role']) => {
     console.log(`[UserContext Nav] Navigating based on role: ${role}. Current pathname: ${pathname}`);
-    let targetPath = '/';
+    let targetPath = '/'; // Default to root, which itself might redirect
     switch (role) {
       case 'CLIENT':
         targetPath = '/client';
@@ -144,9 +140,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         targetPath = '/practice-administrator';
         break;
       default:
-        console.warn(`[UserContext Nav] Unknown role for navigation: ${role}`);
+        console.warn(`[UserContext Nav] Unknown role for navigation: ${role}. Redirecting to login.`);
         targetPath = AUTH_PAGE;
     }
+    
     if (pathname !== targetPath) {
         console.log(`[UserContext Nav] Redirecting to: ${targetPath}`);
         router.push(targetPath);
@@ -156,12 +153,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [router, pathname]);
 
   useEffect(() => {
-    console.log('[UserContext Nav Effect Check] User:', user ? user.email : 'null', 'Role:', user ? user.role : 'null', 'InitialAuthChecked:', initialAuthChecked, 'Pathname:', pathname, 'IsLoading:', isLoading);
+    console.log('[UserContext Nav Effect Check] user:', user ? user.email : null, 'initialAuthChecked:', initialAuthChecked, 'pathname:', pathname, 'isLoading:', isLoading);
     if (!isLoading && initialAuthChecked) {
       if (user && pathname === AUTH_PAGE) {
         console.log('[UserContext Nav Effect EXECUTE] User authenticated and on login page. Redirecting. Role:', user.role);
         navigateBasedOnRole(user.role);
       } else if (!user && pathname !== AUTH_PAGE && isPathProtected(pathname)) {
+        // This check ensures we only redirect if it's a protected path and not already login
         console.log(`[UserContext Nav Effect EXECUTE] User not authenticated but on a protected page (${pathname}). Redirecting to login.`);
         router.push(AUTH_PAGE);
       }
@@ -210,14 +208,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
       throw error; 
     } finally {
       setIsLoading(false);
-      setInitialAuthChecked(true);
+      setInitialAuthChecked(true); 
       console.log('[UserContext login FINALLY] isLoading: false, initialAuthChecked: true');
     }
   };
 
   const logout = async () => {
     console.log('[UserContext logout] Attempting logout.');
-    setIsLoading(true); // Indicate loading during logout
+    setIsLoading(true);
     try {
       const apiResponse = await fetch('/api/auth/logout', { method: 'POST' });
       if(apiResponse.ok) {
@@ -230,12 +228,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null);
       sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
-      setClientCookie(SESSION_TOKEN_COOKIE_NAME, null); // Ensure client cookie is cleared
+      setClientCookie(SESSION_TOKEN_COOKIE_NAME, null); 
       setIsLoading(false);
-      setInitialAuthChecked(true); // Auth state is now resolved (as no user)
+      setInitialAuthChecked(true); 
       console.log('[UserContext logout FINALLY] Client state cleared. isLoading: false, initialAuthChecked: true. Redirecting to login.');
       if (pathname !== AUTH_PAGE) {
-        router.push(AUTH_PAGE); // Force redirect to login page
+        router.push(AUTH_PAGE);
       }
     }
   };
@@ -247,10 +245,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
       try {
         const { success, updatedUser } = await switchPracticeAction(user.id, newPracticeId);
         if (success && updatedUser) {
+          console.log('[UserContext switchPractice] switchPracticeAction successful. Updated user from action:', JSON.stringify(updatedUser));
           setUser(updatedUser); 
           sessionStorage.setItem(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(updatedUser));
           setClientCookie(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(updatedUser));
-          console.log('[UserContext switchPractice SUCCESS] Practice switched. New currentPracticeId:', updatedUser.currentPracticeId);
+          console.log('[UserContext switchPractice SUCCESS] Practice switched. New currentPracticeId in context:', updatedUser.currentPracticeId);
         } else {
           console.error("[UserContext switchPractice FAIL] Failed to switch practice via server action. Refetching user.");
            await fetchUser(); 
@@ -267,6 +266,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // If initial auth check is not complete, render nothing to prevent hydration issues further down.
+  if (!initialAuthChecked) {
+    console.log('[UserProvider Render] Initial auth not checked. Returning null.');
+    return null; 
+  }
 
   return (
     <UserContext.Provider value={{ user, isLoading, initialAuthChecked, login, logout, switchPractice, fetchUser }}>

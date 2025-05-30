@@ -1,21 +1,13 @@
 
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { GeistSans } from 'geist/font/sans';
+import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { UserProvider } from '@/context/UserContext'; // Import UserProvider
+import { UserProvider } from '@/context/UserContext';
 import { ThemeProvider } from '@/context/ThemeContext'; 
 import { ThemeSwitcherWidget } from '@/components/ThemeSwitcherWidget'; 
-
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
+import ClientOnlyWrapper from '@/components/utils/ClientOnlyWrapper'; // Import the wrapper
 
 export const metadata: Metadata = {
   title: 'SmartDVM',
@@ -28,12 +20,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <UserProvider> {/* Use UserProvider */}
+    <html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
+      <body className="antialiased">
+        <UserProvider>
           <ThemeProvider>
-            {/* Sidebar components are removed from here */}
-            {children} {/* Children will now be rendered directly by RootLayout or by a nested layout */}
+            <ClientOnlyWrapper> {/* Wrap children with ClientOnlyWrapper */}
+              {children}
+            </ClientOnlyWrapper>
             <Toaster />
             <ThemeSwitcherWidget /> 
           </ThemeProvider>
