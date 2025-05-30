@@ -15,31 +15,30 @@ export async function GET(request: Request) {
     console.log('[API ME] No httpOnly session token found. Returning null.');
     return NextResponse.json(null, { status: 200 }); 
   }
-  console.log('[API ME] Found httpOnly session token:', sessionTokenValue ? '******' : 'undefined');
+  console.log('[API ME] Found httpOnly session token (value logged as ****** for security)');
 
   try {
-    const nowForDbQuery = process.env.DB_TYPE === 'sqlite' ? Date.now() : new Date();
-    
+    // For SQLite, expiresAt is a number (milliseconds), for PG it's a Date object.
+    // The DB query doesn't need the current time for the initial fetch.
     const session = await db.query.sessions.findFirst({
       where: eq(sessionsTable.id, sessionTokenValue)
-      //Removed direct time comparison from here to simplify and ensure it's always checked after fetching.
     });
 
     if (!session) {
-      console.log(`[API ME] Session ID from cookie not found in DB: ${sessionTokenValue}`);
-      // Clear the invalid cookie by setting its expiration to the past
+      console.log(`[API ME] Session ID from cookie not found in DB: ${sessionTokenValue}. Clearing cookie.`);
       const response = NextResponse.json(null, { status: 200 });
       response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
       return response;
     }
     console.log('[API ME] Session found in DB for token:', session.id);
 
-    // Check if session expired (for SQLite, expiresAt is number in ms)
-    const sessionExpiresAt = typeof session.expiresAt === 'number' ? session.expiresAt : new Date(session.expiresAt).getTime();
-    const currentTime = Date.now(); // Always use current time in ms for comparison
+    const sessionExpiresAt = typeof session.expiresAt === 'number' 
+                             ? session.expiresAt // SQLite stores as number (milliseconds)
+                             : new Date(session.expiresAt).getTime(); // PG stores as Date, convert to ms
+    const currentTime = Date.now();
 
     if (sessionExpiresAt < currentTime) {
-      console.log(`[API ME] Session expired. ExpiresAt: ${sessionExpiresAt}, CurrentTime: ${currentTime}. Deleting session.`);
+      console.log(`[API ME] Session expired. ExpiresAt_ms: ${sessionExpiresAt}, CurrentTime_ms: ${currentTime}. Deleting session and clearing cookie.`);
       await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionTokenValue));
       const response = NextResponse.json(null, { status: 200 });
       response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
@@ -52,7 +51,7 @@ export async function GET(request: Request) {
     });
 
     if (!userRecord) {
-      console.error(`[API ME] User not found for session ID: ${sessionTokenValue}, userId: ${session.userId}. Deleting orphaned session.`);
+      console.error(`[API ME] User not found for session ID: ${sessionTokenValue}, userId: ${session.userId}. Deleting orphaned session and clearing cookie.`);
       await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionTokenValue));
       const response = NextResponse.json(null, { status: 200 });
       response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
@@ -70,16 +69,14 @@ export async function GET(request: Request) {
       const accessiblePracticeIds = adminPractices.map(p => p.practiceId);
       let currentPracticeId = userRecord.currentPracticeId;
 
-      if (!currentPracticeId && accessiblePracticeIds.length > 0) {
+      if (accessiblePracticeIds.length === 0) {
+         console.warn(`[API ME] Administrator ${userRecord.email} has no accessible practices. Setting currentPracticeId to 'practice_NONE'.`);
+         currentPracticeId = 'practice_NONE'; 
+      } else if (!currentPracticeId || !accessiblePracticeIds.includes(currentPracticeId)) {
+        // If currentPracticeId is null/undefined OR not in the accessible list, default to the first accessible one.
+        console.warn(`[API ME] Administrator ${userRecord.email}'s currentPracticeId (${currentPracticeId}) is invalid or not set. Defaulting to first accessible: ${accessiblePracticeIds[0]}.`);
         currentPracticeId = accessiblePracticeIds[0];
-      } else if (accessiblePracticeIds.length === 0) { // Check if admin has ANY accessible practices
-         console.warn(`[API ME] Administrator ${userRecord.email} has no accessible practices configured. Setting currentPracticeId to a placeholder.`);
-         currentPracticeId = 'practice_NONE'; // Fallback if no practices are accessible
-      } else if (currentPracticeId && !accessiblePracticeIds.includes(currentPracticeId)) {
-        console.warn(`[API ME] Administrator ${userRecord.email}'s currentPracticeId (${currentPracticeId}) is not in accessible list. Defaulting to first accessible.`);
-        currentPracticeId = accessiblePracticeIds[0]; // Default to first if current is invalid
       }
-
 
       userData = {
         id: userRecord.id,
@@ -87,12 +84,15 @@ export async function GET(request: Request) {
         name: userRecord.name || undefined,
         role: 'ADMINISTRATOR',
         accessiblePracticeIds,
-        currentPracticeId: currentPracticeId!,
+        currentPracticeId: currentPracticeId!, // Should be guaranteed to be set now
       };
     } else if (userRecord.role === 'PRACTICE_ADMINISTRATOR') {
       if (!userRecord.practiceId) {
          console.warn(`[API ME] Practice Administrator ${userRecord.email} is not associated with a practice. Returning null.`);
-         return NextResponse.json(null, { status: 200 }); 
+         // Potentially clear cookie if this is an invalid state
+         const response = NextResponse.json(null, { status: 200 });
+         response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
+         return response;
       }
       userData = {
         id: userRecord.id,
@@ -104,7 +104,10 @@ export async function GET(request: Request) {
     } else if (userRecord.role === 'CLIENT') {
       if (!userRecord.practiceId) {
         console.warn(`[API ME] Client ${userRecord.email} is not associated with a practice. Returning null.`);
-        return NextResponse.json(null, { status: 200 });
+        // Potentially clear cookie
+        const response = NextResponse.json(null, { status: 200 });
+        response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
+        return response;
       }
       userData = {
         id: userRecord.id,
@@ -114,15 +117,20 @@ export async function GET(request: Request) {
         practiceId: userRecord.practiceId,
       };
     } else {
-      console.error(`[API ME] Unknown user role for ${userRecord.email}: ${userRecord.role}. Returning null.`);
-      return NextResponse.json(null, { status: 200 });
+      console.error(`[API ME] Unknown user role for ${userRecord.email}: ${userRecord.role}. Clearing cookie and returning null.`);
+      const response = NextResponse.json(null, { status: 200 });
+      response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
+      return response;
     }
     
-    console.log('[API ME SUCCESS] Successfully fetched user data:', userData.email, userData.role);
+    console.log('[API ME SUCCESS] Successfully fetched user data:', userData.email, userData.role, 'Current Practice ID (if admin):', (userData as AdministratorUser).currentPracticeId);
     return NextResponse.json(userData);
 
   } catch (error) {
     console.error('[API ME CATCH_ERROR] Error fetching current user:', error);
-    return NextResponse.json({ error: 'Failed to fetch user session' }, { status: 500 });
+    // In case of an unexpected error, it's safer to clear the cookie and return null
+    const response = NextResponse.json({ error: 'Failed to fetch user session' }, { status: 500 });
+    response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
+    return response;
   }
 }

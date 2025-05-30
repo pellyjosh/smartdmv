@@ -5,7 +5,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { switchPracticeAction } from '@/actions/authActions';
-import { SESSION_TOKEN_COOKIE_NAME, HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from '@/config/authConstants';
+import { SESSION_TOKEN_COOKIE_NAME, HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
 
 // Define User types
 export interface BaseUser {
@@ -34,7 +34,7 @@ export type User = ClientUser | PracticeAdminUser | AdministratorUser;
 
 const AUTH_PAGE = '/auth/login'; // Define for use within UserContext for navigation checks
 
-// Helper function to define protected paths (can be expanded)
+// Helper function to define protected paths
 const PROTECTED_PATHS = [
   '/client',
   '/administrator',
@@ -61,7 +61,7 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-const setClientCookie = (name: string, value: string | null, days: number = SESSION_MAX_AGE_SECONDS / (24 * 60 * 60)) => {
+const setClientCookie = (name: string, value: string | null, days: number = 7) => {
   if (typeof document === 'undefined') return;
   let expires = "";
   if (value) {
@@ -69,16 +69,19 @@ const setClientCookie = (name: string, value: string | null, days: number = SESS
     date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
     expires = "; expires=" + date.toUTCString();
   } else {
-    expires = "; Max-Age=0"; // More reliable for deletion
+    // To delete a cookie, set its expiry to the past or Max-Age to 0
+    const date = new Date();
+    date.setTime(date.getTime() - (24 * 60 * 60 * 1000)); // One day in the past
+    expires = "; expires=" + date.toUTCString() + "; Max-Age=0";
   }
   document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax";
-  console.log(`[UserContext setClientCookie] Cookie ${name} set/deleted. Value:`, value ? '******' : null);
+  console.log(`[UserContext setClientCookie] Cookie ${name} ${value ? 'set' : 'deleted'}.`);
 };
 
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Start true, as we'll fetch user
+  const [isLoading, setIsLoading] = useState(true);
   const [initialAuthChecked, setInitialAuthChecked] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
@@ -86,7 +89,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const fetchUser = useCallback(async () => {
     console.log('[UserContext fetchUser START] Attempting to fetch current user from /api/auth/me');
     setIsLoading(true);
-    // setInitialAuthChecked(false); // Keep initialAuthChecked false until fetch completes.
     try {
       console.log('[UserContext fetchUser] Calling fetch("/api/auth/me")...');
       const response = await fetch('/api/auth/me');
@@ -98,7 +100,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setUser(userData);
           sessionStorage.setItem(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(userData));
           setClientCookie(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(userData));
-          console.log('[UserContext fetchUser SUCCESS] User fetched and set:', userData.email, userData.role);
+          console.log('[UserContext fetchUser SUCCESS] User fetched and set:', userData.email, userData.role, 'Current Practice ID:', (userData as AdministratorUser).currentPracticeId);
         } else {
           setUser(null);
           sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
@@ -119,32 +121,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
       setInitialAuthChecked(true);
-      console.log('[UserContext fetchUser FINALLY] fetchUser finished. isLoading:', false, 'initialAuthChecked:', true);
+      console.log('[UserContext fetchUser FINALLY] fetchUser finished. isLoading:', false, 'initialAuthChecked:', true, 'User set to:', user ? user.email : null);
     }
-  }, []); // Empty dependency array is correct for a function called on mount or imperatively.
+  }, [pathname]); // Added pathname to dependencies if fetchUser behavior needs to be path-sensitive, though for /api/auth/me it's usually not. Can be removed if not needed.
 
   useEffect(() => {
-    console.log('[UserContext Mount/Effect] Initializing user state.');
-    // Attempt to load from sessionStorage for faster perceived load, but prioritize server validation
-    const storedUserString = sessionStorage.getItem(SESSION_TOKEN_COOKIE_NAME);
-    if (storedUserString) {
-        try {
-            const storedUser = JSON.parse(storedUserString) as User;
-            if(storedUser && storedUser.id) {
-                console.log('[UserContext Mount/Effect] Found user in sessionStorage (temporary):', storedUser.email);
-                // setUser(storedUser); // Avoid setting user from sessionStorage directly to prevent flicker if /api/auth/me says otherwise
-            }
-        } catch (e) {
-            console.error('[UserContext Mount/Effect] Error parsing sessionStorage user:', e);
-            sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
-        }
-    }
-    fetchUser(); // Always fetch from server to validate session
-  }, [fetchUser]);
+    console.log('[UserContext Mount/Effect] Initializing user state. Current path:', pathname);
+    fetchUser();
+  }, [fetchUser, pathname]); // Added pathname here in case fetchUser logic should re-evaluate on path change
 
   const navigateBasedOnRole = useCallback((role: User['role']) => {
-    console.log(`[UserContext Nav] Navigating based on role: ${role}`);
-    let targetPath = '/'; // Default
+    console.log(`[UserContext Nav] Navigating based on role: ${role}. Current pathname: ${pathname}`);
+    let targetPath = '/';
     switch (role) {
       case 'CLIENT':
         targetPath = '/client';
@@ -157,53 +145,34 @@ export function UserProvider({ children }: { children: ReactNode }) {
         break;
       default:
         console.warn(`[UserContext Nav] Unknown role for navigation: ${role}`);
-        targetPath = '/'; // Or AUTH_PAGE if preferred fallback for unknown roles
+        targetPath = AUTH_PAGE;
     }
     if (pathname !== targetPath) {
+        console.log(`[UserContext Nav] Redirecting to: ${targetPath}`);
         router.push(targetPath);
     } else {
         console.log(`[UserContext Nav] Already on target path: ${targetPath}`);
     }
   }, [router, pathname]);
 
-  // useEffect(() => {
-  //   console.log('[UserContext Nav Effect Check] user:', user ? user.email : null, 'initialAuthChecked:', initialAuthChecked, 'pathname:', pathname, 'isLoading:', isLoading);
-  //   if (!isLoading && initialAuthChecked) {
-  //     if (user && pathname === AUTH_PAGE) {
-  //       console.log('[UserContext Nav Effect EXECUTE] User authenticated and on login page. Redirecting. Role:', user.role);
-  //       navigateBasedOnRole(user.role);
-  //     } else if (!user && pathname !== AUTH_PAGE && isPathProtected(pathname)) {
-  //       console.log(`[UserContext Nav Effect EXECUTE] User not authenticated but on a protected page (${pathname}). Redirecting to login.`);
-  //       if (pathname !== AUTH_PAGE) { // Avoid redundant push if already somehow on login
-  //           router.push(AUTH_PAGE);
-  //       }
-  //     }
-  //   } else {
-  //       console.log('[UserContext Nav Effect] Conditions for navigation not met (still loading/checking or path is public).');
-  //   }
-  // }, [user, initialAuthChecked, pathname, isLoading, navigateBasedOnRole, router]);
-
   useEffect(() => {
-    console.log('[UserContext Nav Effect Check] user:', user ? user.email : null, 'initialAuthChecked:', initialAuthChecked, 'pathname:', pathname, 'isLoading:', isLoading);
+    console.log('[UserContext Nav Effect Check] User:', user ? user.email : 'null', 'Role:', user ? user.role : 'null', 'InitialAuthChecked:', initialAuthChecked, 'Pathname:', pathname, 'IsLoading:', isLoading);
     if (!isLoading && initialAuthChecked) {
-      if (user && pathname === AUTH_PAGE) { // <--- This is the key condition for navigating AWAY from login
+      if (user && pathname === AUTH_PAGE) {
         console.log('[UserContext Nav Effect EXECUTE] User authenticated and on login page. Redirecting. Role:', user.role);
         navigateBasedOnRole(user.role);
       } else if (!user && pathname !== AUTH_PAGE && isPathProtected(pathname)) {
         console.log(`[UserContext Nav Effect EXECUTE] User not authenticated but on a protected page (${pathname}). Redirecting to login.`);
-        if (pathname !== AUTH_PAGE) {
-            router.push(AUTH_PAGE);
-        }
+        router.push(AUTH_PAGE);
       }
     } else {
-        console.log('[UserContext Nav Effect] Conditions for navigation not met (still loading/checking or path is public).');
+        console.log('[UserContext Nav Effect] Conditions for navigation not met (still loading/checking or path is public/login with no user).');
     }
   }, [user, initialAuthChecked, pathname, isLoading, navigateBasedOnRole, router]);
 
   const login = async (emailInput: string, passwordInput: string): Promise<User | null> => {
     console.log('[UserContext login] Attempting login for:', emailInput);
     setIsLoading(true);
-    // setInitialAuthChecked(false); // Don't reset initialAuthChecked during login, fetchUser will handle it.
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
@@ -214,23 +183,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       if (!response.ok) {
         console.error('[UserContext login] API login failed:', data.error || response.statusText);
-        setUser(null); // Clear user on failed login
+        setUser(null);
         sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
         setClientCookie(SESSION_TOKEN_COOKIE_NAME, null);
         throw new Error(data.error || `API Error: ${response.status}`);
       }
       
-      const loggedInUser = data.user as User;
-      if (loggedInUser && loggedInUser.id) {
-        setUser(loggedInUser); // Set user state from API response
-        sessionStorage.setItem(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(loggedInUser));
-        setClientCookie(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(loggedInUser));
-        console.log('[UserContext login SUCCESS] Login successful, user set in context:', loggedInUser.email, loggedInUser.role);
-        // The useEffect watching `user` state will handle navigation
-        return loggedInUser;
+      const userData = data.user as User;
+      if (userData && userData.id) {
+        setUser(userData);
+        sessionStorage.setItem(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(userData));
+        setClientCookie(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(userData));
+        console.log('[UserContext login SUCCESS] Login successful, user set in context:', userData.email, userData.role);
+        return userData;
       }
       console.warn('[UserContext login] API returned ok, but no valid user data.');
-      setUser(null); // Ensure user is null if API response is not as expected
+      setUser(null);
       sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
       setClientCookie(SESSION_TOKEN_COOKIE_NAME, null);
       return null;
@@ -242,8 +210,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       throw error; 
     } finally {
       setIsLoading(false);
-      // Crucially, ensure initialAuthChecked is true after a login attempt,
-      // so that the navigation useEffect can correctly evaluate its conditions.
       setInitialAuthChecked(true);
       console.log('[UserContext login FINALLY] isLoading: false, initialAuthChecked: true');
     }
@@ -251,21 +217,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     console.log('[UserContext logout] Attempting logout.');
-    setIsLoading(true);
+    setIsLoading(true); // Indicate loading during logout
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      console.log('[UserContext logout] API logout call successful.');
+      const apiResponse = await fetch('/api/auth/logout', { method: 'POST' });
+      if(apiResponse.ok) {
+        console.log('[UserContext logout] API logout call successful.');
+      } else {
+        console.error('[UserContext logout] API logout call failed:', apiResponse.status, await apiResponse.text());
+      }
     } catch (err) {
       console.error('[UserContext logout CATCH_ERROR] Error calling API to invalidate server session:', err);
     } finally {
       setUser(null);
       sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
-      setClientCookie(SESSION_TOKEN_COOKIE_NAME, null);
+      setClientCookie(SESSION_TOKEN_COOKIE_NAME, null); // Ensure client cookie is cleared
       setIsLoading(false);
-      setInitialAuthChecked(true); 
+      setInitialAuthChecked(true); // Auth state is now resolved (as no user)
       console.log('[UserContext logout FINALLY] Client state cleared. isLoading: false, initialAuthChecked: true. Redirecting to login.');
       if (pathname !== AUTH_PAGE) {
-        router.push(AUTH_PAGE);
+        router.push(AUTH_PAGE); // Force redirect to login page
       }
     }
   };
@@ -277,17 +247,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
       try {
         const { success, updatedUser } = await switchPracticeAction(user.id, newPracticeId);
         if (success && updatedUser) {
-          setUser(updatedUser); // Update context with new user details (including new currentPracticeId)
+          setUser(updatedUser); 
           sessionStorage.setItem(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(updatedUser));
           setClientCookie(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(updatedUser));
           console.log('[UserContext switchPractice SUCCESS] Practice switched. New currentPracticeId:', updatedUser.currentPracticeId);
         } else {
           console.error("[UserContext switchPractice FAIL] Failed to switch practice via server action. Refetching user.");
-           await fetchUser(); // Fallback to refetch to ensure context consistency
+           await fetchUser(); 
         }
       } catch (error) {
         console.error("[UserContext switchPractice CATCH_ERROR] Error switching practice:", error);
-        await fetchUser(); // Fallback
+        await fetchUser(); 
       } finally {
         setIsLoading(false);
         console.log('[UserContext switchPractice FINALLY] isLoading set to false.');
@@ -312,4 +282,3 @@ export function useUser() {
   }
   return context;
 }
-
