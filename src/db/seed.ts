@@ -1,6 +1,7 @@
 
 import { config } from 'dotenv';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 config(); // Load environment variables from .env file
 
