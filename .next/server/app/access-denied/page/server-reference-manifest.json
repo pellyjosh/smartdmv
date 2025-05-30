@@ -1,0 +1,27 @@
+{
+  "node": {
+    "603dcf86c247ba3b1ad3b634f9051d9928b90df1ec": {
+      "workers": {
+        "app/access-denied/page": {
+          "moduleId": "[project]/.next-internal/server/app/access-denied/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/actions/authActions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/access-denied/page": "action-browser"
+      }
+    },
+    "60b39a56c016027888fed902fc31686ec165948b14": {
+      "workers": {
+        "app/access-denied/page": {
+          "moduleId": "[project]/.next-internal/server/app/access-denied/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/actions/authActions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/access-denied/page": "action-browser"
+      }
+    }
+  },
+  "edge": {}
+}

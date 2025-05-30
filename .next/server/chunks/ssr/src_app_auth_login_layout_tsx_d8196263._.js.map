@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 7, "column": 0}, "map": {"version":3,"sources":["file:///home/user/studio/src/app/auth/login/layout.tsx"],"sourcesContent":["import type { Metadata } from 'next';\n\nexport const metadata: Metadata = {\n  title: 'Login - SmartDVM',\n  description: 'Login to SmartDVM.',\n};\n\nexport default function AuthLayout({\n  children,\n}: {\n  children: React.ReactNode;\n}) {\n  return (\n    // AuthProvider is in the root layout, so it covers this.\n    // This layout ensures the login page doesn't have the main app sidebar.\n    <div className=\"min-h-screen bg-background text-foreground\">\n      {children}\n    </div>\n  );\n}\n"],"names":[],"mappings":";;;;;;AAEO,MAAM,WAAqB;IAChC,OAAO;IACP,aAAa;AACf;AAEe,SAAS,WAAW,EACjC,QAAQ,EAGT;IACC,OACE,yDAAyD;IACzD,wEAAwE;kBACxE,8OAAC;QAAI,WAAU;kBACZ;;;;;;AAGP","debugId":null}}]
+}
