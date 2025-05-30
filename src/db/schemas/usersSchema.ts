@@ -1,3 +1,4 @@
+
 // schema/usersSchema.ts
 import { dbTable, text, timestamp, primaryKey } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
@@ -18,12 +19,12 @@ export const users = dbTable('users', {
   currentPracticeId: text('current_practice_id').references(() => practices.id as any, { onDelete: 'set null' }),
 
   createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`CURRENT_TIMESTAMP`)
+    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
     : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 
   updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
+    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
 });
 
 export const administratorAccessiblePractices = dbTable('administrator_accessible_practices', {
@@ -31,16 +32,16 @@ export const administratorAccessiblePractices = dbTable('administrator_accessibl
   practiceId: text('practice_id').notNull().references(() => practices.id as any, { onDelete: 'cascade' }),
 
   assignedAt: isSqlite
-    ? timestamp('assignedAt', { mode: 'timestamp_ms' }).notNull().default(sql`CURRENT_TIMESTAMP`)
+    ? timestamp('assignedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
     : timestamp('assignedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
 
   createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`CURRENT_TIMESTAMP`)
+    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
     : timestamp('createdAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
 
   updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
+    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
 }, (table: { administratorId: any; practiceId: any; }) => ({
   pk: primaryKey({ columns: [table.administratorId, table.practiceId] }),
 }));
