@@ -2,24 +2,30 @@
 "use client";
 import { useUser, type AdministratorUser } from "@/context/UserContext";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation"; // Import useRouter
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from 'lucide-react';
 
 export default function AdministratorDashboardPage() {
   const { user, logout, isLoading, initialAuthChecked, switchPractice } = useUser();
-  const router = useRouter(); // Initialize useRouter
+  const router = useRouter();
   const [currentPracticeSelection, setCurrentPracticeSelection] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (user && user.role === 'ADMINISTRATOR') {
       const adminUser = user as AdministratorUser;
+      // Only update local state if it's different from context, to avoid potential loops
+      // and ensure it correctly reflects the context's currentPracticeId.
       if (adminUser.currentPracticeId && adminUser.currentPracticeId !== currentPracticeSelection) {
         setCurrentPracticeSelection(adminUser.currentPracticeId);
+      } else if (!adminUser.currentPracticeId && currentPracticeSelection !== undefined) {
+        // Handle case where context might clear currentPracticeId (e.g. if it became invalid)
+        setCurrentPracticeSelection(undefined);
       }
     }
-  }, [user, currentPracticeSelection]);
+  // Only re-run if `user` changes (which includes its currentPracticeId)
+  }, [user]); 
 
   if (isLoading || !initialAuthChecked) {
     return (
@@ -31,7 +37,6 @@ export default function AdministratorDashboardPage() {
   }
 
   if (!user) {
-    // User is not authenticated, UserContext or middleware should handle redirect to login
     return (
       <div className="flex flex-col justify-center items-center h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -41,12 +46,11 @@ export default function AdministratorDashboardPage() {
   }
 
   if (user.role !== 'ADMINISTRATOR') {
-     // Role mismatch, redirect to access-denied page
      router.push('/access-denied');
-     return ( // Return a loader while redirecting
+     return (
       <div className="flex flex-col justify-center items-center h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-lg text-muted-foreground">Redirecting...</p>
+        <p className="text-lg text-muted-foreground">Access Denied. Redirecting...</p>
       </div>
     );
   }
@@ -56,7 +60,7 @@ export default function AdministratorDashboardPage() {
   const handlePracticeChange = async (newPracticeId: string) => {
     if (switchPractice && adminUser) {
       await switchPractice(newPracticeId);
-      // currentPracticeSelection will update via useEffect when `user` (and thus adminUser.currentPracticeId) changes
+      // currentPracticeSelection will update via the useEffect hook when `user` (and thus adminUser.currentPracticeId) changes
     }
   };
 
@@ -69,6 +73,7 @@ export default function AdministratorDashboardPage() {
               <div className="mt-2">
                 <span className="text-sm text-muted-foreground mr-2">Viewing Practice:</span>
                 <Select
+                    // Use currentPracticeSelection if set, otherwise default to context, or empty string for uncontrolled state
                     value={currentPracticeSelection || adminUser.currentPracticeId || ''}
                     onValueChange={handlePracticeChange}
                     disabled={isLoading}

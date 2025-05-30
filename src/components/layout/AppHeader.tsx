@@ -43,15 +43,22 @@ export function AppHeader({}: AppHeaderProps) {
 
   const handlePracticeChange = async (newPracticeId: string) => {
     if (switchPractice && adminUser) {
+      console.log('[AppHeader] Attempting to switch practice to:', newPracticeId);
       await switchPractice(newPracticeId);
     }
   };
 
-  const currentPracticeName = 
-    adminUser?.currentPracticeId?.replace('practice_', '') || 
+  const currentPracticeName =
+    adminUser?.currentPracticeId?.replace('practice_', '') ||
     (user?.role === 'PRACTICE_ADMINISTRATOR' && user.practiceId?.replace('practice_', '')) ||
     (user?.role === 'CLIENT' && user.practiceId?.replace('practice_', '')) ||
     'N/A';
+
+  // Log currentPracticeId for debugging
+  if (adminUser) {
+    console.log('[AppHeader] Rendering. Current Practice ID from context:', adminUser.currentPracticeId);
+  }
+
 
   return (
     <header className="bg-card border-b border-border sticky top-0 z-30 h-16">
@@ -68,6 +75,7 @@ export function AppHeader({}: AppHeaderProps) {
             {isMultiLocationEnabled && adminUser && (
               <div className="ml-4 hidden sm:block">
                  <Select
+                    key={`desktop-practice-select-${adminUser.currentPracticeId}`} // Key to force re-render
                     value={adminUser.currentPracticeId}
                     onValueChange={handlePracticeChange}
                     disabled={isLoading}
@@ -88,7 +96,6 @@ export function AppHeader({}: AppHeaderProps) {
           </div>
 
           <div className="flex items-center gap-x-3">
-            {/* Placeholder for other icons like Bell or MessageSquare if needed */}
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -116,11 +123,12 @@ export function AppHeader({}: AppHeaderProps) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  
+
                   {isMultiLocationEnabled && adminUser && (
                     <div className="sm:hidden px-2 py-1.5">
                       <p className="text-xs font-medium text-muted-foreground mb-1.5">Switch Practice</p>
                        <Select
+                          key={`mobile-practice-select-${adminUser.currentPracticeId}`} // Key to force re-render
                           value={adminUser.currentPracticeId}
                           onValueChange={handlePracticeChange}
                           disabled={isLoading}
@@ -139,7 +147,7 @@ export function AppHeader({}: AppHeaderProps) {
                       <DropdownMenuSeparator className="mt-2" />
                     </div>
                   )}
-                  
+
                   <DropdownMenuItem asChild>
                     <Link href="/profile" className="flex w-full cursor-pointer items-center text-sm">
                       <UserIcon className="mr-2 h-4 w-4" />
@@ -152,7 +160,7 @@ export function AppHeader({}: AppHeaderProps) {
                        Settings
                     </Link>
                   </DropdownMenuItem>
-                  
+
                   {user.role === 'ADMINISTRATOR' && (
                     <DropdownMenuItem asChild>
                       <Link href="/administrator" className="flex w-full cursor-pointer items-center text-sm">
@@ -169,13 +177,13 @@ export function AppHeader({}: AppHeaderProps) {
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  
+
                   <DropdownMenuSeparator />
-                  
-                  <DropdownMenuItem 
-                    onClick={handleLogout} 
+
+                  <DropdownMenuItem
+                    onClick={handleLogout}
                     className={cn(
-                        "text-sm cursor-pointer focus:bg-destructive/10 focus:text-destructive", 
+                        "text-sm cursor-pointer focus:bg-destructive/10 focus:text-destructive",
                         "text-destructive hover:!text-destructive" // ensure destructive color on hover too
                      )}
                   >
