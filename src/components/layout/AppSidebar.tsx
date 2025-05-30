@@ -3,6 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import * as React from 'react'; // Changed import
 import {
   HeartPulse,
   LayoutDashboard,
@@ -24,8 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useUser } from "@/context/UserContext";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useUser, type User as AppUserType } from "@/context/UserContext"; // Renamed User to AppUserType
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -35,13 +35,13 @@ type AppUserRole = 'ADMINISTRATOR' | 'PRACTICE_ADMINISTRATOR' | 'CLIENT';
 
 interface NavItem {
   title: string;
-  href?: string; // Optional if it's a parent for a submenu
+  href?: string;
   icon: React.ElementType;
   keywords?: string[];
-  active?: boolean; // Will be determined dynamically
+  active?: boolean;
   roles: AppUserRole[];
   submenu?: SubmenuItem[];
-  onClick?: () => void; // For items that toggle submenus
+  onClick?: () => void;
 }
 
 interface SubmenuItem {
@@ -49,7 +49,7 @@ interface SubmenuItem {
   href: string;
   icon?: React.ElementType;
   keywords?: string[];
-  active?: boolean; // Will be determined dynamically
+  active?: boolean;
   roles?: AppUserRole[];
 }
 
@@ -61,11 +61,11 @@ interface AppSidebarProps {
 export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
   const pathname = usePathname();
   const { user, logout, isLoading: userIsLoading, initialAuthChecked } = useUser();
-  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
-  const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
-  const [searchTerm, setSearchTerm] = useState("");
+  const [mobileSheetOpen, setMobileSheetOpen] = React.useState(false);
+  const [expandedMenus, setExpandedMenus] = React.useState<Record<string, boolean>>({});
+  const [searchTerm, setSearchTerm] = React.useState("");
 
-  const baseNavItems: NavItem[] = useMemo(() => [
+  const baseNavItems: NavItem[] = React.useMemo(() => [
     {
       title: "Dashboard",
       href: user?.role === 'CLIENT' ? "/client" : user?.role === 'ADMINISTRATOR' ? "/administrator" : user?.role === 'PRACTICE_ADMINISTRATOR' ? "/practice-administrator" : "/auth/login",
@@ -75,30 +75,30 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
     },
     {
       title: "Services",
-      href: "/", // Assuming root page lists services
+      href: "/",
       icon: Stethoscope,
-      keywords: ["offerings", "treatments", "procedures"],
-      roles: ['ADMINISTRATOR', 'PRACTICE_ADMINISTRATOR', 'CLIENT'] // All roles can view services
+      keywords: ["offerings", "treatments", "procedures", "vet"],
+      roles: ['ADMINISTRATOR', 'PRACTICE_ADMINISTRATOR', 'CLIENT']
     },
     {
       title: "Favorites",
       href: "/favorites",
       icon: Heart,
-      keywords: ["saved", "bookmarked", "liked"],
+      keywords: ["saved", "bookmarked", "liked", "pets"],
       roles: ['CLIENT']
     },
     {
       title: "Symptom Checker",
       href: "/symptom-checker",
       icon: Sparkles,
-      keywords: ["ai", "diagnosis", "assessment", "pet health"],
+      keywords: ["ai", "diagnosis", "assessment", "pet health", "check"],
       roles: ['CLIENT']
     },
     {
       title: "User Management",
       icon: Users,
-      href: "/user-management", // Example top-level link
-      keywords: ["users", "permissions", "accounts", "staff", "clients"],
+      href: "/user-management",
+      keywords: ["users", "permissions", "accounts", "staff", "clients", "admin"],
       roles: ['ADMINISTRATOR'],
       submenu: [
         { title: "View Users", href: "/user-management/view", keywords: ["list", "all users"], roles: ['ADMINISTRATOR'] },
@@ -106,25 +106,25 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
       ]
     },
     {
-      title: "Patient Records", // Example from new sidebar structure
-      icon: Briefcase, // Using Briefcase as a stand-in for medical records icon
-      keywords: ["patients", "medical history", "charts"],
+      title: "Patient Records",
+      icon: Briefcase,
+      keywords: ["patients", "medical history", "charts", "records"],
       roles: ['ADMINISTRATOR', 'PRACTICE_ADMINISTRATOR'],
       submenu: [
-        { title: "Search Patients", href: "/patients/search", keywords: ["find patient"] },
-        { title: "New Patient", href: "/patients/new", keywords: ["add patient"] },
+        { title: "Search Patients", href: "/patients/search", keywords: ["find patient", "lookup"] },
+        { title: "New Patient", href: "/patients/new", keywords: ["add patient", "register patient"] },
       ],
     },
     {
       title: "Settings",
       href: "/settings",
       icon: Settings,
-      keywords: ["options", "configuration", "preferences", "profile"],
+      keywords: ["options", "configuration", "preferences", "profile", "account"],
       roles: ['ADMINISTRATOR', 'PRACTICE_ADMINISTRATOR', 'CLIENT'],
     },
   ], [user]);
 
-  const filteredNavItems = useMemo(() => {
+  const filteredNavItems = React.useMemo(() => {
     if (!user?.role && !userIsLoading && initialAuthChecked) {
       return [
         {
@@ -156,35 +156,33 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
       if (searchTerm && item.submenu) {
         const filteredSubmenu = item.submenu.filter(sub => 
             sub.title.toLowerCase().includes(lowerSearchTerm) ||
-            sub.keywords?.some(sk => sk.toLowerCase().includes(lowerSearchTerm))
+            (sub.keywords && sub.keywords.some(sk => sk.toLowerCase().includes(lowerSearchTerm)))
         );
-        // If submenu items match, keep the parent. If only parent matches, show all its subitems.
-        // If parent doesn't match but some subitems do, show only matching subitems.
         if (filteredSubmenu.length > 0) {
             return {...item, submenu: filteredSubmenu};
-        } else if (item.title.toLowerCase().includes(lowerSearchTerm) || item.keywords?.some(k => k.toLowerCase().includes(lowerSearchTerm))) {
-            return item; // Parent matches, show all its subitems
+        } else if (item.title.toLowerCase().includes(lowerSearchTerm) || (item.keywords && item.keywords.some(k => k.toLowerCase().includes(lowerSearchTerm)))) {
+            return item; 
         }
-        return null; // Parent doesn't match and no subitem matches
+        return null; 
       }
       return item;
     }).filter(item => item !== null) as NavItem[];
   }, [user, userIsLoading, initialAuthChecked, baseNavItems, searchTerm]);
 
 
-  useEffect(() => {
+  React.useEffect(() => {
     const newExpandedState: Record<string, boolean> = {};
     filteredNavItems.forEach(item => {
       if (item.submenu && item.submenu.length > 0) {
         const isParentActive = item.href && pathname.startsWith(item.href);
         const isSubmenuActive = item.submenu.some(subItem => subItem.href && pathname.startsWith(subItem.href));
-        if (isParentActive || isSubmenuActive) {
+        if (isParentActive || isSubmenuActive || searchTerm) { // Keep expanded if searching and parent is visible
           newExpandedState[item.title] = true;
         }
       }
     });
     setExpandedMenus(newExpandedState);
-  }, [pathname, filteredNavItems]);
+  }, [pathname, filteredNavItems, searchTerm]);
 
 
   const toggleMenu = (title: string) => {
@@ -197,14 +195,14 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
   const getInitials = (emailOrName: string | undefined) => {
     if (!emailOrName) return 'U';
     const parts = emailOrName.split(' ');
-    if (parts.length > 1) {
+    if (parts.length > 1 && parts[0] && parts[parts.length - 1]) {
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     }
     return emailOrName.substring(0, 2).toUpperCase();
   };
 
-  const renderNavItems = (items: NavItem[]) => {
-    return items.map((item) => {
+  const renderNavItems = React.useCallback(({ currentViewCollapsed }: { currentViewCollapsed: boolean }) => {
+    return filteredNavItems.map((item) => {
       const subItemsToShow = item.submenu?.filter(subItem => 
         !subItem.roles || (user?.role && subItem.roles.includes(user.role as AppUserRole))
       ) || [];
@@ -215,10 +213,10 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
 
       const linkContent = (
         <>
-          <item.icon className={cn("h-5 w-5", isCollapsed ? "mx-auto" : "mr-3")} />
-          {!isCollapsed && <span className="truncate flex-1">{item.title}</span>}
-          {!isCollapsed && subItemsToShow.length > 0 && (
-            isMenuExpanded ? <ChevronUp className="h-4 w-4 ml-auto opacity-70" /> : <ChevronDown className="h-4 w-4 ml-auto opacity-70" />
+          <item.icon className={cn("h-5 w-5", currentViewCollapsed ? "mx-auto" : "mr-3 shrink-0")} />
+          {!currentViewCollapsed && <span className="truncate flex-1">{item.title}</span>}
+          {!currentViewCollapsed && subItemsToShow.length > 0 && (
+            isMenuExpanded ? <ChevronUp className="h-4 w-4 ml-auto opacity-70 shrink-0" /> : <ChevronDown className="h-4 w-4 ml-auto opacity-70 shrink-0" />
           )}
         </>
       );
@@ -231,7 +229,7 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
             "flex items-center w-full text-sm font-medium rounded-md px-3 py-2.5 transition-colors duration-150",
             "group",
             isActive ? "bg-primary/10 text-primary" : "text-foreground/70 hover:bg-accent hover:text-accent-foreground",
-            isCollapsed && "justify-center py-3"
+            currentViewCollapsed && "justify-center py-3"
           )}
         >
           {linkContent}
@@ -243,10 +241,8 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
             if (subItemsToShow.length > 0) {
               toggleMenu(item.title);
             } else if (item.href) {
-              // This case should ideally be handled by Link, but as a fallback
-              // or if item.onClick is defined for navigation
-              // router.push(item.href); // Would need useRouter from 'next/navigation'
-              setMobileSheetOpen(false); 
+              setMobileSheetOpen(false);
+              // router.push(item.href); // No direct router push here, Link handles it
             } else if (item.onClick) {
                 item.onClick();
             }
@@ -255,8 +251,9 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
             "flex items-center w-full text-sm font-medium rounded-md px-3 py-2.5 transition-colors duration-150",
             "group justify-start text-left",
             (isActive || (isMenuExpanded && isSubmenuPotentiallyActive)) ? "bg-primary/10 text-primary" : "text-foreground/70 hover:bg-accent hover:text-accent-foreground",
-            isCollapsed && "justify-center py-3"
+            currentViewCollapsed && "justify-center py-3"
           )}
+          aria-expanded={subItemsToShow.length > 0 ? isMenuExpanded : undefined}
         >
           {linkContent}
         </Button>
@@ -264,7 +261,7 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
 
       return (
         <div key={item.title} className="w-full">
-          {isCollapsed ? (
+          {currentViewCollapsed ? (
             <TooltipProvider delayDuration={0}>
               <Tooltip>
                 <TooltipTrigger asChild>{buttonOrLink}</TooltipTrigger>
@@ -277,16 +274,10 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
             buttonOrLink
           )}
           
-          {!isCollapsed && subItemsToShow.length > 0 && isMenuExpanded && (
-            <div className="mt-1 space-y-1 pl-8 pr-2 py-1 border-l border-border/50 ml-[1.125rem] mr-1"> {/* Adjusted pl and ml for better alignment */}
+          {!currentViewCollapsed && subItemsToShow.length > 0 && isMenuExpanded && (
+            <div className="mt-1 space-y-1 pl-8 pr-2 py-1 border-l border-border/50 ml-[1.125rem] mr-1">
               {subItemsToShow.map((subItem) => {
                 const isSubItemActive = subItem.href && pathname.startsWith(subItem.href);
-                const subLinkContent = (
-                  <>
-                    {subItem.icon && <subItem.icon className="mr-2 h-4 w-4" />}
-                    <span className="truncate">{subItem.title}</span>
-                  </>
-                );
                 return (
                     <Link
                       key={subItem.href}
@@ -298,7 +289,8 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
                         isSubItemActive ? "text-primary" : "text-foreground/60 hover:text-primary hover:bg-primary/5"
                       )}
                     >
-                     {subLinkContent}
+                     {subItem.icon && <subItem.icon className="mr-2 h-4 w-4 shrink-0" />}
+                     <span className="truncate">{subItem.title}</span>
                     </Link>
                 );
               })}
@@ -307,14 +299,15 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
         </div>
       );
     });
-  };
-  
-  const sidebarContent = (
-    <div className={cn("flex flex-col h-full bg-card border-r border-border", isCollapsed ? "items-center" : "")}>
-      <div className={cn("flex h-16 items-center border-b border-border shrink-0", isCollapsed ? "justify-center px-2" : "px-4")}>
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredNavItems, pathname, expandedMenus, user, toggleMenu]); // Added toggleMenu to deps
+
+  const renderSidebarContent = ({ effectiveIsCollapsed }: { effectiveIsCollapsed: boolean }) => (
+    <div className={cn("flex flex-col h-full bg-card border-r border-border", effectiveIsCollapsed ? "items-center" : "")}>
+      <div className={cn("flex h-16 items-center border-b border-border shrink-0", effectiveIsCollapsed ? "justify-center px-2" : "px-4")}>
         <Link href="/" className="flex items-center gap-2 font-semibold" onClick={() => setMobileSheetOpen(false)}>
-          <HeartPulse className="h-7 w-7 text-primary" />
-          {!isCollapsed && (
+          <HeartPulse className="h-7 w-7 text-primary shrink-0" />
+          {!effectiveIsCollapsed && (
             <h1 className="text-xl">
                <span className="text-foreground">Smart</span><span className="text-primary">DVM</span>
             </h1>
@@ -322,7 +315,7 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
         </Link>
       </div>
 
-      {!isCollapsed && (
+      {!effectiveIsCollapsed && (
         <div className="p-3 border-b border-border">
           <div className="relative">
             <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -336,7 +329,7 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
           </div>
         </div>
       )}
-      {isCollapsed && (
+      {effectiveIsCollapsed && (
          <TooltipProvider delayDuration={0}>
             <Tooltip>
                 <TooltipTrigger asChild>
@@ -352,18 +345,18 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
       )}
 
       <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 space-y-1 px-2">
-        {renderNavItems(filteredNavItems)}
+        {renderNavItems({ currentViewCollapsed: effectiveIsCollapsed })}
       </nav>
 
       {user && initialAuthChecked && (
-        <div className={cn("border-t border-border p-3 shrink-0", isCollapsed && "py-3")}>
-          <div className={cn("flex items-center gap-3", isCollapsed ? "justify-center flex-col" : "")}>
-            <Avatar className="h-9 w-9">
+        <div className={cn("border-t border-border p-3 shrink-0", effectiveIsCollapsed && "py-3")}>
+          <div className={cn("flex items-center gap-3", effectiveIsCollapsed ? "justify-center flex-col" : "")}>
+            <Avatar className="h-9 w-9 shrink-0">
               <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                 {getInitials(user.name || user.email)}
               </AvatarFallback>
             </Avatar>
-            {!isCollapsed && (
+            {!effectiveIsCollapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">{user.name || user.email}</p>
                 <p className="text-xs text-muted-foreground truncate">{user.role}</p>
@@ -372,30 +365,30 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
              <TooltipProvider delayDuration={0}>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className={cn("text-muted-foreground hover:text-destructive", isCollapsed ? "h-9 w-9" : "h-8 w-8")} onClick={logout}>
+                        <Button variant="ghost" size="icon" className={cn("text-muted-foreground hover:text-destructive shrink-0", effectiveIsCollapsed ? "h-9 w-9" : "h-8 w-8")} onClick={logout}>
                             <LogOut className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
-                    {!isCollapsed && <span className="sr-only">Logout</span>}
-                    {isCollapsed && <TooltipContent side="right" className="ml-2"><p>Logout</p></TooltipContent>}
+                    {!effectiveIsCollapsed && <span className="sr-only">Logout</span>}
+                    {effectiveIsCollapsed && <TooltipContent side="right" className="ml-2"><p>Logout</p></TooltipContent>}
                 </Tooltip>
             </TooltipProvider>
           </div>
         </div>
       )}
       {(userIsLoading && !initialAuthChecked) && (
-         <div className="border-t p-4 text-center text-sm text-muted-foreground">Loading user...</div>
+         <div className={cn("border-t p-4 text-center text-sm text-muted-foreground", effectiveIsCollapsed && "py-3")}>Loading user...</div>
       )}
-       <div className={cn("border-t border-border p-2 shrink-0", isCollapsed ? "py-2" : "")}>
+       <div className={cn("border-t border-border p-2 shrink-0", effectiveIsCollapsed ? "py-2" : "")}>
         <TooltipProvider delayDuration={0}>
             <Tooltip>
                 <TooltipTrigger asChild>
                     <Button variant="ghost" className="w-full justify-center text-muted-foreground hover:text-primary" onClick={onToggleCollapse}>
-                        {isCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+                        {effectiveIsCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
                     </Button>
                 </TooltipTrigger>
-                {!isCollapsed && <span className="sr-only">{isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}</span>}
-                 {isCollapsed && <TooltipContent side="right" className="ml-2"><p>{isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}</p></TooltipContent>}
+                {!effectiveIsCollapsed && <span className="sr-only">{effectiveIsCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}</span>}
+                 {effectiveIsCollapsed && <TooltipContent side="right" className="ml-2"><p>{effectiveIsCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}</p></TooltipContent>}
             </Tooltip>
         </TooltipProvider>
       </div>
@@ -404,13 +397,9 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
 
   return (
     <>
-      {/* Desktop Sidebar (conditionally rendered based on screen size by className) */}
       <div className={cn("hidden md:block", isCollapsed ? "w-20" : "w-64", "fixed left-0 top-0 h-full z-30 transition-all duration-300 ease-in-out")}>
-        {sidebarContent}
+        {renderSidebarContent({ effectiveIsCollapsed: isCollapsed })}
       </div>
-
-      {/* Mobile Sidebar Trigger (Hamburger Menu) */}
-      {/* Position fixed to top-left, ensure it's on top of other content with z-index */}
       <div className="md:hidden fixed top-3 left-3 z-40"> 
          <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
           <SheetTrigger asChild>
@@ -420,13 +409,10 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="w-[300px] sm:w-[340px] p-0 flex flex-col bg-card border-r border-border">
-            {/* Render the same sidebar content, but it won't be collapsible inside the sheet */}
-            {/* Pass a "isMobile" prop or similar if sidebarContent needs to behave differently */}
-            {React.cloneElement(sidebarContent, { isCollapsed: false })} 
+            {renderSidebarContent({ effectiveIsCollapsed: false })} 
           </SheetContent>
         </Sheet>
       </div>
     </>
   );
 }
-
