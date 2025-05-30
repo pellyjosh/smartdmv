@@ -346,9 +346,8 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
       )}>
         {!effectiveIsCollapsed && (
           <Link href="/" className="flex items-center gap-2 font-semibold mr-2" onClick={() => setMobileSheetOpen(false)}>
-            <HeartPulse className="h-7 w-7 text-primary shrink-0" />
             <h1 className="text-xl">
-               <span className="text-foreground">Smart</span><span className="text-primary">DVM</span>
+               <span className="text-foreground">SmartDVM</span>
             </h1>
           </Link>
         )}
