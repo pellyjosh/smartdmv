@@ -1,16 +1,6 @@
 {
-  "/api/auth/me/route": "app/api/auth/me/route.js",
-  "/api/auth/login/route": "app/api/auth/login/route.js",
-  "/api/auth/logout/route": "app/api/auth/logout/route.js",
-  "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/_not-found/page": "app/_not-found/page.js",
-  "/favorites/page": "app/favorites/page.js",
-  "/services/[id]/page": "app/services/[id]/page.js",
-  "/symptom-checker/page": "app/symptom-checker/page.js",
-  "/access-denied/page": "app/access-denied/page.js",
-  "/(main)/client/page": "app/(main)/client/page.js",
   "/(main)/administrator/page": "app/(main)/administrator/page.js",
-  "/(main)/page": "app/(main)/page.js",
-  "/(main)/practice-administrator/page": "app/(main)/practice-administrator/page.js",
+  "/api/auth/login/route": "app/api/auth/login/route.js",
+  "/api/auth/me/route": "app/api/auth/me/route.js",
   "/auth/login/page": "app/auth/login/page.js"
 }
