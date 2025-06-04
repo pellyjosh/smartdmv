@@ -27,9 +27,9 @@ body {
     --muted: 210 20% 85%; /* Muted Gray */
     --muted-foreground: 222 47% 45%; /* Lighter Dark Blue/Gray */
 
-    /* Accent color (Warm Orange) - can remain static or be configurable later */
-    --accent: 35 100% 64.7%; /* Warm Orange #FFB74D */
-    --accent-foreground: 24 9.8% 10%; /* Dark color for text on orange */
+    /* Accent color (Light Ash Gray) */
+    --accent: 210 20% 92%; /* Very Light Ash Gray */
+    --accent-foreground: 222 47% 11.2%; /* Dark text for light ash */
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
@@ -45,7 +45,7 @@ body {
     --sidebar-foreground: 222 47% 11.2%; /* Main foreground */
     --sidebar-primary: 200 100% 47.6%; /* Matches default primary */
     --sidebar-primary-foreground: 0 0% 100%; /* Main primary foreground */
-    --sidebar-accent: 210 20% 88%; /* Accent for sidebar items (hover) */
+    --sidebar-accent: 210 20% 88%; /* Accent for sidebar items (hover) - Can also be updated to new ash if needed */
     --sidebar-accent-foreground: 222 47% 11.2%; /* Main foreground */
     --sidebar-border: 215 28% 80%; /* Sidebar border */
     --sidebar-ring: 200 100% 47.6%; /* Matches default primary for focus rings */
@@ -81,9 +81,9 @@ body {
     --muted: 222 30% 25%; /* Dark muted */
     --muted-foreground: 210 20% 60%;
 
-    /* Accent color for dark mode - can remain static or be configurable later */
-    --accent: 35 100% 73%; /* Brighter Warm Orange */
-    --accent-foreground: 35 100% 15%; /* Dark text for brighter orange */
+    /* Accent color (Dark Ash Gray) */
+    --accent: 222 30% 22%; /* Dark Ash Gray */
+    --accent-foreground: 210 20% 96.1%; /* Light text for dark ash */
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
@@ -98,7 +98,7 @@ body {
     --sidebar-foreground: 210 20% 96.1%;
     --sidebar-primary: 200 100% 55%; /* Matches primary for dark mode */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 30% 22%;
+    --sidebar-accent: 222 30% 22%; /* Matches new dark accent */
     --sidebar-accent-foreground: 210 20% 96.1%;
     --sidebar-border: 220 25% 25%;
     --sidebar-ring: 200 100% 55%; /* Matches ring for dark mode */

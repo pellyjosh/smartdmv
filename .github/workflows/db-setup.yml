@@ -1,0 +1,39 @@
+name: Setup DB and Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  db-setup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup environment
+        run: |
+          echo "DB_TYPE=sqlite" >> .env
+          echo "SQLITE_DB_PATH=./src/db/smartdvm.db" >> .env
+        # If you're using PostgreSQL in production, adjust accordingly:
+        # echo "DB_TYPE=postgres" >> .env
+        # echo "POSTGRES_URL=${{ secrets.POSTGRES_URL }}" >> .env
+
+      - name: Run DB Generate
+        run: npm run db:generate
+
+      - name: Run DB Migrate
+        run: npm run db:migrate
+
+      - name: Run DB Seed
+        run: npm run db:seed

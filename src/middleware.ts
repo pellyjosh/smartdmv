@@ -1,9 +1,11 @@
+
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { SESSION_TOKEN_COOKIE_NAME, HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
 import type { User } from '@/context/UserContext'; // Use User types from UserContext
 
 const AUTH_PAGE = '/auth/login';
+const ACCESS_DENIED_PAGE = '/access-denied';
 
 // Define dashboard paths
 const CLIENT_DASHBOARD = '/client';
@@ -15,15 +17,12 @@ const OTHER_CLIENT_PROTECTED_ROUTES = ['/favorites', '/symptom-checker'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  // Checks for the httpOnly server-side session token
   const httpOnlySessionToken = request.cookies.get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
-  // Checks for the client-side cookie containing user details (including role)
   const clientUserSessionCookie = request.cookies.get(SESSION_TOKEN_COOKIE_NAME)?.value;
 
   let userFromClientCookie: User | null = null;
   let isClientCookieValid = false;
 
-  // Attempts to parse the client cookie to get user details and role
   if (clientUserSessionCookie) {
     try {
       const parsedUser = JSON.parse(clientUserSessionCookie) as User;
@@ -38,67 +37,60 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Determines if the user is authenticated based on the server token
   const isServerAuthenticated = !!httpOnlySessionToken;
+  console.log(`[Middleware] Path: ${pathname}, ServerAuth: ${isServerAuthenticated}, ClientCookieValid: ${isClientCookieValid}, UserRole: ${userFromClientCookie?.role}`);
 
-  // --- Redirect /auth to /auth/login ---
-  if (pathname === '/auth') {
-    console.log('[Middleware] Path is /auth, redirecting to /auth/login');
+  // 1. Handle /auth or /auth/ redirect to /auth/login
+  if (pathname === '/auth' || pathname === '/auth/') {
+    console.log('[Middleware] Path is /auth or /auth/, redirecting to /auth/login');
     return NextResponse.redirect(new URL(AUTH_PAGE, request.url));
   }
 
-  // --- Logic for handling the base URL ("/") ---
-  if (pathname === '/') {
-    // If authenticated (both server token and valid client cookie with role)
-    if (isServerAuthenticated && isClientCookieValid && userFromClientCookie) {
-      let redirectTo = '/'; // Default, though should be overridden by role
-      if (userFromClientCookie.role === 'ADMINISTRATOR') redirectTo = ADMINISTRATOR_DASHBOARD;
-      else if (userFromClientCookie.role === 'PRACTICE_ADMINISTRATOR') redirectTo = PRACTICE_ADMIN_DASHBOARD;
-      else if (userFromClientCookie.role === 'CLIENT') redirectTo = CLIENT_DASHBOARD;
-
-      console.log(`[Middleware] Authenticated user (${userFromClientCookie.email} - ${userFromClientCookie.role}) at base URL, redirecting to ${redirectTo}`);
-      return NextResponse.redirect(new URL(redirectTo, request.url));
-    } else {
-      // If not authenticated or client cookie is invalid/missing, redirect to login
-      console.log('[Middleware] Unauthenticated user at base URL, redirecting to login.');
-      const loginUrl = new URL(AUTH_PAGE, request.url);
-      // Optionally, you could add a callbackUrl here if desired, e.g., loginUrl.searchParams.set('callbackUrl', '/');
-      return NextResponse.redirect(loginUrl);
-    }
-  }
-  // --- End of base URL logic ---
-
-  // --- Logic for routing authenticated users FROM the login page ---
+  // 2. Handle the login page itself
   if (pathname === AUTH_PAGE) {
-    // If the user is authenticated (both server token and valid client cookie)
     if (isServerAuthenticated && isClientCookieValid && userFromClientCookie) {
-      let redirectTo = '/'; // Default redirect path
-
-      // Determine the redirect path based on the user's role
-      if (userFromClientCookie.role === 'ADMINISTRATOR') redirectTo = ADMINISTRATOR_DASHBOARD;
-      else if (userFromClientCookie.role === 'PRACTICE_ADMINISTRATOR') redirectTo = PRACTICE_ADMIN_DASHBOARD;
-      else if (userFromClientCookie.role === 'CLIENT') redirectTo = CLIENT_DASHBOARD;
-
-      console.log(`[Middleware] Authenticated user (${userFromClientCookie.email} - ${userFromClientCookie.role}) on auth page, redirecting to ${redirectTo}`);
-      // Perform the redirect
-      return NextResponse.redirect(new URL(redirectTo, request.url));
+      console.log(`[Middleware] Authenticated user (${userFromClientCookie.email}) on auth page. Allowing request for client-side redirect from UserContext.`);
+      // UserContext will handle redirecting away from login if authenticated
     }
-    // If not authenticated, allow access to the login page
     return NextResponse.next();
   }
-  // --- End of login page routing logic ---
 
+  // 3. Handle the access denied page itself
+  if (pathname === ACCESS_DENIED_PAGE) {
+    return NextResponse.next();
+  }
 
-  // --- Logic for protecting other routes and role-based access control ---
-  // (This ensures users are on the correct dashboard/area for their role)
-  const isClientDashboard = pathname === CLIENT_DASHBOARD;
-  const isAdminDashboard = pathname === ADMINISTRATOR_DASHBOARD;
-  const isPracticeAdminDashboard = pathname === PRACTICE_ADMIN_DASHBOARD;
+  // 4. Handle root path ('/')
+  if (pathname === '/') {
+    if (!isServerAuthenticated) { // Unauthenticated users go to login
+      console.log(`[Middleware] Unauthenticated user on root path. Redirecting to login.`);
+      return NextResponse.redirect(new URL(AUTH_PAGE, request.url));
+    }
+    // Authenticated users get redirected to their specific dashboards from root
+    if (isClientCookieValid && userFromClientCookie) {
+        const userRole = userFromClientCookie.role;
+        console.log(`[Middleware] Authenticated user (${userFromClientCookie.email} - ${userRole}) on root path. Redirecting to their dashboard.`);
+        if (userRole === 'ADMINISTRATOR') return NextResponse.redirect(new URL(ADMINISTRATOR_DASHBOARD, request.url));
+        if (userRole === 'PRACTICE_ADMINISTRATOR') return NextResponse.redirect(new URL(PRACTICE_ADMIN_DASHBOARD, request.url));
+        if (userRole === 'CLIENT') return NextResponse.redirect(new URL(CLIENT_DASHBOARD, request.url));
+        // Fallback for unknown role
+        console.warn(`[Middleware] Unknown role ${userRole} for authenticated user on root path. Redirecting to ${ACCESS_DENIED_PAGE}.`);
+        return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));
+    }
+    // If server authenticated but client cookie is pending/invalid, let UserContext handle it on client for /
+    // This allows UserContext to fetch user details via /api/auth/me
+    console.log(`[Middleware] Server-authenticated user on root path, client cookie pending. Allowing request for UserContext to resolve.`);
+    return NextResponse.next();
+  }
+
+  // 5. Handle other explicitly protected paths
+  const isClientDashboard = pathname.startsWith(CLIENT_DASHBOARD);
+  const isAdminDashboard = pathname.startsWith(ADMINISTRATOR_DASHBOARD);
+  const isPracticeAdminDashboard = pathname.startsWith(PRACTICE_ADMIN_DASHBOARD);
   const isOtherClientRoute = OTHER_CLIENT_PROTECTED_ROUTES.some(route => pathname.startsWith(route));
-  const isProtectedPath = isClientDashboard || isAdminDashboard || isPracticeAdminDashboard || isOtherClientRoute;
+  const isExplicitlyProtectedPath = isClientDashboard || isAdminDashboard || isPracticeAdminDashboard || isOtherClientRoute;
 
-  if (isProtectedPath) {
-    // If the path is protected but no server session token exists, redirect to login
+  if (isExplicitlyProtectedPath) {
     if (!isServerAuthenticated) {
       const loginUrl = new URL(AUTH_PAGE, request.url);
       loginUrl.searchParams.set('callbackUrl', pathname + request.nextUrl.search);
@@ -106,54 +98,47 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // If server session exists but client cookie is missing/invalid, redirect to login
-    // (This handles cases where the client-side user state is out of sync)
+    // Server session token exists. Now check if we have client cookie for role-based authorization.
     if (!isClientCookieValid || !userFromClientCookie) {
-      console.warn(`[Middleware] Server session token exists, but client cookie missing/invalid for protected page (${pathname}). Attempting to allow UserProvider to load or redirecting to login.`);
-       const loginUrl = new URL(AUTH_PAGE, request.url);
-       loginUrl.searchParams.set('callbackUrl', pathname + request.nextUrl.search);
-       return NextResponse.redirect(loginUrl);
+      // Server session token exists, but client cookie (with role) is missing/invalid.
+      // Allow the request to proceed. UserContext on the page will call /api/auth/me.
+      // If /api/auth/me fails, UserContext will redirect to login.
+      // If /api/auth/me succeeds, UserContext populates, and client-side role checks occur.
+      console.warn(`[Middleware] Server session token exists, but client cookie missing/invalid for protected page (${pathname}). Allowing request to proceed for UserContext to handle.`);
+      return NextResponse.next();
     }
 
-    // If authenticated and client cookie is valid, check role-based access
+    // Both server session token and client user details are available. Perform role-based access control.
     const userRole = userFromClientCookie.role;
     if (userRole === 'CLIENT') {
-      // If a client tries to access admin or practice admin dashboards, redirect them to the client dashboard
       if (isAdminDashboard || isPracticeAdminDashboard) {
-        console.log(`[Middleware] Client (${userFromClientCookie.email}) attempting restricted dashboard (${pathname}). Redirecting to client dashboard.`);
-        return NextResponse.redirect(new URL(CLIENT_DASHBOARD, request.url));
+        console.log(`[Middleware] Client (${userFromClientCookie.email}) attempting restricted dashboard (${pathname}). Redirecting to ${ACCESS_DENIED_PAGE}.`);
+        return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));
       }
     } else if (userRole === 'ADMINISTRATOR') {
-       // If an admin tries to access client or practice admin areas, redirect them to the admin dashboard
       if (isClientDashboard || isPracticeAdminDashboard || isOtherClientRoute) {
-        console.log(`[Middleware] Administrator (${userFromClientCookie.email}) attempting restricted page (${pathname}). Redirecting to admin dashboard.`);
-        return NextResponse.redirect(new URL(ADMINISTRATOR_DASHBOARD, request.url));
+        console.log(`[Middleware] Administrator (${userFromClientCookie.email}) attempting restricted page (${pathname}). Redirecting to ${ACCESS_DENIED_PAGE}.`);
+        return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));
       }
     } else if (userRole === 'PRACTICE_ADMINISTRATOR') {
-       // If a practice admin tries to access client or admin areas, redirect them to the practice admin dashboard
       if (isClientDashboard || isAdminDashboard || isOtherClientRoute) {
-        console.log(`[Middleware] Practice Admin (${userFromClientCookie.email}) attempting restricted page (${pathname}). Redirecting to practice admin dashboard.`);
-        return NextResponse.redirect(new URL(PRACTICE_ADMIN_DASHBOARD, request.url));
+        console.log(`[Middleware] Practice Admin (${userFromClientCookie.email}) attempting restricted page (${pathname}). Redirecting to ${ACCESS_DENIED_PAGE}.`);
+        return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));
       }
     } else {
-        // Handle unknown roles by redirecting to login
-        console.warn(`[Middleware] Unknown role in client cookie: ${userRole}. Redirecting to login.`);
-        const loginUrl = new URL(AUTH_PAGE, request.url);
-        loginUrl.searchParams.set('callbackUrl', pathname + request.nextUrl.search);
-        return NextResponse.redirect(loginUrl);
+        console.warn(`[Middleware] Unknown role in client cookie: ${userRole} for protected path ${pathname}. Redirecting to ${ACCESS_DENIED_PAGE}.`);
+        return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));
     }
   }
-  // --- End of protected route logic ---
 
-
-  // Allow the request to proceed if none of the above conditions triggered a redirect
+  // If path is not explicitly protected and not login/denied, allow it.
+  console.log(`[Middleware] Path ${pathname} not explicitly handled by auth checks. Allowing request.`);
   return NextResponse.next();
 }
 
-// Configures which paths the middleware should run on
 export const config = {
   matcher: [
-    // This regex matches all paths except static files, API routes, etc.
+    // Apply middleware to all paths except API routes, static files, images, etc.
     '/((?!api|_next/static|_next/image|favicon.ico|manifest.json|robots.txt|assets|images|.*\\.(?:png|jpg|jpeg|gif|svg)$).*)',
   ],
 };

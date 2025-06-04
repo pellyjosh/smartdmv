@@ -1,19 +1,20 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import Image from "next/image";
+import NextImage from "next/image"; // Renamed to avoid conflict with local Image variable
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { HeartPulse, LogIn as LogInIcon, Eye, EyeOff } from "lucide-react"; 
+import { HeartPulse, PawPrint, LogIn as LogInIcon, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/UserContext";
 import { Checkbox } from "@/components/ui/checkbox";
+import { generateLoginImage } from '@/ai/flows/generate-login-image-flow';
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -24,13 +25,39 @@ const loginFormSchema = z.object({
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export default function LoginPage() {
-  const userContext = useUser(); // Get the whole context
-  const { user, login, isLoading: authIsLoading, initialAuthChecked } = userContext; // Destructure
-  
+  const userContext = useUser();
+  const { user, login, isLoading: authIsLoading, initialAuthChecked } = userContext;
+
   const { toast } = useToast();
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginImage, setLoginImage] = useState<string>("https://placehold.co/800x1200.png");
+  const [imageLoading, setImageLoading] = useState(true);
+  const [imageError, setImageError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchImage = async () => {
+      setImageLoading(true);
+      setImageError(null);
+      try {
+        const result = await generateLoginImage({ topic: "veterinary clinic environment" });
+        if (result.imageDataUri) {
+          setLoginImage(result.imageDataUri);
+        } else {
+          throw new Error("No image data URI returned");
+        }
+      } catch (err) {
+        console.error("Failed to generate login image:", err);
+        setImageError("Could not load background image.");
+        // Fallback to placeholder is already the default state of loginImage
+      } finally {
+        setImageLoading(false);
+      }
+    };
+    // fetchImage(); // Uncomment to enable AI image generation
+    setImageLoading(false); // Keeping placeholder for now to avoid API calls during testing
+  }, []);
 
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -40,24 +67,24 @@ export default function LoginPage() {
       rememberMe: false,
     },
   });
-  
+
   const onLoginSubmit = async (data: LoginFormValues) => {
     setIsSubmitting(true);
     try {
       console.log('[LoginPage] onLoginSubmit called with:', data.email);
-      const loggedInUser = await login(data.email, data.password);
+      const loggedInUser = await login(data.email, data.password); // login from UserContext
       if (loggedInUser) {
         toast({
           title: "Login Successful",
           description: "Redirecting to your dashboard...",
           variant: "default",
         });
-        // Navigation is handled by UserProvider's useEffect
         console.log('[LoginPage] Login successful for user:', loggedInUser.email);
+        // Navigation is handled by UserProvider's useEffect based on user state change
       } else {
-        toast({
+         toast({
             title: "Login Failed",
-            description: "An unexpected issue occurred during login.",
+            description: "Login attempt returned no user, but no specific error was thrown.",
             variant: "destructive",
         });
         console.warn('[LoginPage] Login call returned no user, but no error thrown.');
@@ -73,19 +100,27 @@ export default function LoginPage() {
         setIsSubmitting(false);
     }
   };
-  
-  // Diagnostic log
+
   console.log('[LoginPage Render] Context State: authIsLoading:', authIsLoading, 'initialAuthChecked:', initialAuthChecked, 'user:', user ? user.email : null);
+
+  if (!initialAuthChecked || (authIsLoading && !user) ) { // Show loading if still checking or if loading and no user yet
+    console.log('[LoginPage Render] Initial auth not checked or auth is loading. Rendering loading message.');
+    return (
+      <div className="flex flex-col justify-center items-center h-screen bg-slate-100">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Loading authentication status...</p>
+      </div>
+    );
+  }
 
   if (user && initialAuthChecked && !authIsLoading) {
     console.log('[LoginPage Render] User is authenticated, initial check done, not loading. Rendering redirect message.');
-    // This state should ideally be very short-lived as UserProvider's useEffect should navigate.
-    return <div className="min-h-screen flex items-center justify-center bg-slate-100">Redirecting...</div>; 
-  }
-
-   if (!initialAuthChecked || authIsLoading) {
-    console.log('[LoginPage Render] Initial auth not checked or auth is loading. Rendering loading message.');
-    return <div className="min-h-screen flex items-center justify-center bg-slate-100">Loading authentication status...</div>;
+    return (
+      <div className="flex flex-col justify-center items-center h-screen bg-slate-100">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Redirecting...</p>
+      </div>
+    );
   }
 
   console.log('[LoginPage Render] Rendering login form.');
@@ -106,7 +141,7 @@ export default function LoginPage() {
                 Sign in to access your veterinary practice
               </p>
             </div>
-            
+
             <Form {...loginForm}>
               <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-6">
                 <FormField
@@ -116,9 +151,9 @@ export default function LoginPage() {
                     <FormItem>
                       <FormLabel className="text-sm font-medium text-foreground">Email</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Enter your email" 
-                          {...field} 
+                        <Input
+                          placeholder="Enter your email"
+                          {...field}
                           className="text-base md:text-sm"
                         />
                       </FormControl>
@@ -126,7 +161,7 @@ export default function LoginPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={loginForm.control}
                   name="password"
@@ -135,10 +170,10 @@ export default function LoginPage() {
                        <FormLabel className="text-sm font-medium text-foreground">Password</FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <Input 
-                            type={showPassword ? "text" : "password"} 
-                            placeholder="Enter your password" 
-                            {...field} 
+                          <Input
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Enter your password"
+                            {...field}
                             className="text-base md:text-sm pr-10"
                           />
                           <button
@@ -155,7 +190,7 @@ export default function LoginPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <div className="flex items-center justify-between">
                   <FormField
                     control={loginForm.control}
@@ -163,8 +198,8 @@ export default function LoginPage() {
                     render={({ field }) => (
                       <FormItem className="flex flex-row items-center space-x-2 space-y-0">
                         <FormControl>
-                          <Checkbox 
-                            checked={field.value} 
+                          <Checkbox
+                            checked={field.value}
                             onCheckedChange={field.onChange}
                             className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                           />
@@ -175,8 +210,8 @@ export default function LoginPage() {
                       </FormItem>
                     )}
                   />
-                  <Button 
-                    variant="link" 
+                  <Button
+                    variant="link"
                     className="p-0 h-auto text-sm font-normal text-primary hover:underline"
                     type="button"
                     onClick={() => toast({ title: "Forgot Password", description: "Password recovery is not yet implemented."})}
@@ -184,9 +219,9 @@ export default function LoginPage() {
                     Forgot password?
                   </Button>
                 </div>
-                
-                <Button 
-                  type="submit" 
+
+                <Button
+                  type="submit"
                   className="w-full py-3 bg-primary text-primary-foreground hover:bg-primary/90"
                   disabled={isSubmitting || authIsLoading}
                 >
@@ -203,22 +238,34 @@ export default function LoginPage() {
         </div>
 
         <div className="hidden md:flex md:w-3/5 relative">
-          <Image
-            src="https://placehold.co/800x1200.png" 
+          {imageLoading && (
+            <div className="absolute inset-0 flex justify-center items-center bg-slate-200">
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            </div>
+          )}
+          {!imageLoading && imageError && (
+            <div className="absolute inset-0 flex flex-col justify-center items-center bg-slate-200 p-4 text-center">
+              <p className="text-destructive mb-2">{imageError}</p>
+              <p className="text-sm text-muted-foreground">Displaying default image.</p>
+            </div>
+          )}
+          <NextImage
+            src={loginImage}
             alt="Illustration of a veterinary clinic scene with pets and vets"
             layout="fill"
             objectFit="cover"
-            className="opacity-90" 
+            className="opacity-90"
             data-ai-hint="veterinary clinic illustration"
             priority
+            unoptimized={loginImage.startsWith('data:image')}
           />
-          <div className="absolute inset-x-0 bottom-0 p-8 lg:p-12"> 
+          <div className="absolute inset-x-0 bottom-0 p-8 lg:p-12">
             <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm p-6 rounded-lg shadow-md text-gray-800 dark:text-gray-200">
               <h2 className="text-xl lg:text-2xl font-semibold mb-3 text-primary">
                 Complete Veterinary Management
               </h2>
               <p className="text-xs lg:text-sm leading-relaxed">
-                SmartDVM provides a comprehensive solution for modern veterinary practices with appointment scheduling, medical records, lab integration, and AI-powered diagnostic assistance.
+                VetConnectPro provides a comprehensive solution for modern veterinary practices with appointment scheduling, medical records, lab integration, and AI-powered diagnostic assistance.
               </p>
             </div>
           </div>
@@ -227,4 +274,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

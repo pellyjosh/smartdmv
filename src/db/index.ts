@@ -3,23 +3,24 @@ import { config } from 'dotenv';
 config(); // Load environment variables at the very top
 
 // index.ts
-import { drizzle as drizzlePostgres } from 'drizzle-orm/node-postgres';
+import { neon, NeonQueryFunction } from '@neondatabase/serverless';
+import { drizzle as drizzleNeonHttp, NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
-import { Pool } from 'pg';
+import { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import Database from 'better-sqlite3';
 import * as schema from './schema';
 
 // ✅ Extend globalThis for custom caching variables
 declare global {
   // biome-ignore lint/style/noVar: This is needed for global declarations
-  var DrizzlePostgresClient: Pool | undefined;
+  var DrizzleNeonClient: NeonQueryFunction<false, false> | undefined; // For Neon SQL instance
   var DrizzleSqliteClient: ReturnType<typeof Database> | undefined;
 }
 
 // ✅ Ensure this file is treated as a module
 export {};
 
-let dbInstance: ReturnType<typeof drizzlePostgres> | ReturnType<typeof drizzleSqlite>;
+let dbInstance: NeonHttpDatabase<typeof schema> | BetterSQLite3Database<typeof schema>;
 
 const dbType = process.env.DB_TYPE || 'postgres'; // Default to PostgreSQL
 console.log(`[DB_INIT] DB_TYPE set to: ${dbType}`);
@@ -30,26 +31,26 @@ if (dbType === 'postgres') {
     throw new Error('POSTGRES_URL environment variable is not set for DB_TYPE="postgres".');
   }
 
-  console.log('🔌 Connecting to PostgreSQL database...');
+  console.log('🔌 Connecting to Neon PostgreSQL database...');
 
-  let poolClient: Pool;
+  let neonSql: NeonQueryFunction<false, false>;
   if (process.env.NODE_ENV === 'production') {
-    poolClient = new Pool({ connectionString: process.env.POSTGRES_URL });
+    neonSql = neon(process.env.POSTGRES_URL);
   } else {
-    if (!global.DrizzlePostgresClient) {
-      global.DrizzlePostgresClient = new Pool({ connectionString: process.env.POSTGRES_URL });
-      console.log('[DB_INIT] New PostgreSQL global client created for development.');
+    if (!global.DrizzleNeonClient) {
+      global.DrizzleNeonClient = neon(process.env.POSTGRES_URL);
+      console.log('[DB_INIT] New Neon global client (sql instance) created for development.');
     } else {
-      console.log('[DB_INIT] Reusing existing PostgreSQL global client for development.');
+      console.log('[DB_INIT] Reusing existing Neon global client (sql instance) for development.');
     }
-    poolClient = global.DrizzlePostgresClient;
+    neonSql = global.DrizzleNeonClient;
   }
 
-  dbInstance = drizzlePostgres(poolClient, {
+  dbInstance = drizzleNeonHttp(neonSql, {
     schema,
     logger: process.env.NODE_ENV === 'development',
   });
-  console.log('✅ PostgreSQL Drizzle instance created.');
+  console.log('✅ Neon PostgreSQL Drizzle instance created.');
 
 } else if (dbType === 'sqlite') {
   if (!process.env.SQLITE_DB_PATH) {
