@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { WidgetConfig } from "@/hooks/use-dashboard-config";
-import { Pet } from "@shared/schema";
+import { Pet } from "@/schemas/pet";
 import { Loader2 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from "recharts";
 

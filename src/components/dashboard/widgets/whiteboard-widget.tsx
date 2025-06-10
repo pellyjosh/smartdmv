@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { WidgetConfig } from "@/hooks/use-dashboard-config";
-import { WhiteboardItem, Pet } from "@shared/schema";
+import { WhiteboardItem } from "@/schemas/whiteboard-item";
 import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -11,10 +11,6 @@ interface WhiteboardWidgetProps {
 export function WhiteboardWidget({ widget }: WhiteboardWidgetProps) {
   const { data: whiteboardItems, isLoading: loadingItems } = useQuery<WhiteboardItem[]>({
     queryKey: ['/api/whiteboard'],
-  });
-
-  const { data: pets, isLoading: loadingPets } = useQuery<Pet[]>({
-    queryKey: ['/api/pets'],
   });
 
   const isLoading = loadingItems || loadingPets;
@@ -53,11 +49,6 @@ export function WhiteboardWidget({ widget }: WhiteboardWidgetProps) {
     );
   }
 
-  const getPetName = (petId: number) => {
-    const pet = pets?.find(p => p.id === petId);
-    return pet ? pet.name : "Unknown Pet";
-  };
-
   const getUrgencyColor = (urgency: string | null) => {
     switch (urgency) {
       case "high": return "bg-red-100 text-red-800";
@@ -75,7 +66,7 @@ export function WhiteboardWidget({ widget }: WhiteboardWidgetProps) {
           className="p-2 border rounded-md"
         >
           <div className="flex justify-between items-start">
-            <div className="font-medium">{getPetName(item.petId)}</div>
+            <div className="font-medium">{item.petId}</div>
             {item.urgency && (
               <Badge className={getUrgencyColor(item.urgency)}>
                 {item.urgency}

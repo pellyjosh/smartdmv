@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { WidgetConfig } from "@/hooks/use-dashboard-config"; // Assuming this path is correct
-import type { HealthPlan, Pet } from "@shared/schema"; // Assuming this path is correct
+import type { HealthPlan } from "@/schemas/health-plan";
 import { Loader2, ClipboardCheck } from "lucide-react";
 import { Progress } from "@/components/ui/progress"; // Assuming shadcn/ui progress
 
@@ -15,12 +15,6 @@ export function HealthPlansWidget({ widget }: HealthPlansWidgetProps) {
   const { data: healthPlans, isLoading: loadingPlans } = useQuery<HealthPlan[]>({
     queryKey: ['/api/health-plans'], // TODO: Replace with actual API call
     // queryFn: async () => { /* Fetch health plans */ }
-  });
-
-  // Fetch pets (needed to display pet names)
-  const { data: pets, isLoading: loadingPets } = useQuery<Pet[]>({
-    queryKey: ['/api/pets'], // TODO: Replace with actual API call
-    // queryFn: async () => { /* Fetch pets */ }
   });
 
   const isLoading = loadingPlans || loadingPets;
@@ -54,12 +48,7 @@ export function HealthPlansWidget({ widget }: HealthPlansWidgetProps) {
     );
   }
 
-  // Helper to get pet name by ID
-  const getPetName = (petId: number) => {
-    const pet = pets?.find(p => p.id === petId);
-    return pet ? pet.name : "Unknown Pet";
-  };
-
+ 
   // TODO: Implement actual progress calculation based on plan milestones
   const calculateProgress = (plan: HealthPlan) => {
     // In a real implementation, this would be calculated based on completed milestones
@@ -75,7 +64,7 @@ export function HealthPlansWidget({ widget }: HealthPlansWidgetProps) {
           className="p-2 border rounded-md bg-card text-card-foreground shadow-sm" // Added card styling
         >
           <div className="flex justify-between items-center mb-1">
-            <div className="font-medium">{getPetName(plan.petId)}</div>
+            <div className="font-medium">{plan.petId}</div>
             <div className="text-xs text-muted-foreground">{plan.planType}</div>
           </div>
           <div className="text-sm mb-2">{plan.name}</div>

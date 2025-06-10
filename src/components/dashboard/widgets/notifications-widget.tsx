@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { WidgetConfig } from "@/hooks/use-dashboard-config";
-import { Notification } from "@shared/schema";
+import { Notification } from "@/schemas/notification";
 import { Loader2, Bell } from "lucide-react";
 import { format, formatDistanceToNow } from "@/lib/date-utils";
 import { Badge } from "@/components/ui/badge";

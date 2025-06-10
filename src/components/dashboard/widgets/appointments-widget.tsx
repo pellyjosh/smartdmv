@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { WidgetConfig } from "@/hooks/use-dashboard-config"; // Assuming this path is correct
-import type { Appointment } from "@shared/schema"; // Assuming this path is correct
+import type { Appointment } from "@/schemas/appointment";
 import { Loader2 } from "lucide-react";
 import { format } from "@/lib/date-utils"; // Assuming you have this utility
 

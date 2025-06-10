@@ -73,8 +73,8 @@ export function Dashboard({
         return <WhiteboardWidget widget={widget} />;
       case "notifications":
         return <NotificationsWidget widget={widget} />;
-      case "healthPlans":
-        return <HealthPlansWidget widget={widget} />;
+    //   case "healthPlans":
+    //     return <HealthPlansWidget widget={widget} />;
       case "petStats":
         return <PetStatsWidget widget={widget} />;
       case "practiceStats":

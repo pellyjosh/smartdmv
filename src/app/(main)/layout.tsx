@@ -37,9 +37,7 @@ export default function MainApplicationLayout({
         onToggleCollapse={toggleSidebarCollapse} 
       />
       <div 
-        className={`flex flex-col flex-1 transition-all duration-300 ease-in-out ${
-          isSidebarCollapsed ? 'md:ml-20' : 'md:ml-64'
-        }`}
+        className='flex flex-col flex-1 transition-all duration-300 ease-in-out'
       >
         <AppHeader /> {/* Add the AppHeader here */}
         <main 

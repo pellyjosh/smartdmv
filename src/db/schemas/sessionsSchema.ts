@@ -28,3 +28,11 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
       references: [users.id],
     }),
   }));
+
+export interface Session {
+  id: string;
+  userId: string;
+  expiresAt: Date;
+  data: string | null;
+  createdAt: Date;
+}

@@ -5,6 +5,7 @@ import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { UserProvider } from '@/context/UserContext';
+import ReactQueryProvider  from '@/components/providers/ReactQueryProvider';
 import { ThemeProvider } from '@/context/ThemeContext'; 
 import { ThemeSwitcherWidget } from '@/components/ThemeSwitcherWidget'; 
 import ClientOnlyWrapper from '@/components/utils/ClientOnlyWrapper'; // Import the wrapper
@@ -22,6 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className="antialiased">
+      <ReactQueryProvider>
         <UserProvider>
           <ThemeProvider>
             <ClientOnlyWrapper> {/* Wrap children with ClientOnlyWrapper */}
@@ -31,6 +33,7 @@ export default function RootLayout({
             <ThemeSwitcherWidget /> 
           </ThemeProvider>
         </UserProvider>
+      </ ReactQueryProvider>
       </body>
     </html>
   );

@@ -22,3 +22,10 @@ export const practicesRelations = relations(practices, ({ many }) => ({
   usersCurrentPractice: many(users, { relationName: 'usersCurrentPracticeRelation' }),
   accessibleToAdmins: many(administratorAccessiblePractices),
 }));
+
+export interface Practice {
+  id: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}

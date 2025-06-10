@@ -15,7 +15,8 @@ import { HealthPlansWidget } from "./widgets/health-plans-widget";
 import { PetStatsWidget } from "./widgets/pet-stats-widget";
 import { PracticeStatsWidget } from "./widgets/practice-stats-widget";
 import { ChartWidget } from "./widgets/chart-widget";
-import { useAuth } from "@/hooks/use-auth";
+// import { useAuth } from "@/hooks/use-auth";
+import { useUser } from '../../context/UserContext'; 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   AlertDialog, 
@@ -30,7 +31,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { UserRole } from "@shared/schema";
+// import { UserRole } from "@shared/schema";
 
 // Widget definition interface
 interface WidgetDefinition {
@@ -76,7 +77,7 @@ const WIDGET_CATALOG: Record<string, WidgetDefinition> = {
     </div>,
     defaultSize: { w: 4, h: 3 },
     component: NotificationsWidget,
-    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN", "RECEPTIONIST"]
+    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN", "RECEPTIONIST", "ADMINISTRATOR"]
   },
   healthPlans: {
     type: "healthPlans",
@@ -109,7 +110,7 @@ const WIDGET_CATALOG: Record<string, WidgetDefinition> = {
     </div>,
     defaultSize: { w: 6, h: 4 },
     component: PracticeStatsWidget,
-    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "ACCOUNTANT"]
+    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "ACCOUNTANT", "ADMINISTRATOR"]
   },
   chart: {
     type: "chart",
@@ -120,7 +121,7 @@ const WIDGET_CATALOG: Record<string, WidgetDefinition> = {
     </div>,
     defaultSize: { w: 6, h: 4 },
     component: ChartWidget,
-    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "ACCOUNTANT"]
+    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "ACCOUNTANT", "ADMINISTRATOR"]
   }
 };
 
@@ -482,7 +483,7 @@ const CreateDashboardDialog: React.FC<CreateDashboardDialogProps> = ({
 
 // Main Dashboard component
 export function CustomizableDashboard() {
-  const { user } = useAuth();
+  const { user } = useUser();
   const { toast } = useToast();
   const [editMode, setEditMode] = useState(false);
   const [addWidgetOpen, setAddWidgetOpen] = useState(false);
@@ -706,17 +707,9 @@ export function CustomizableDashboard() {
     return <WidgetComponent widget={widget} />;
   };
   
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-200px)]">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
-    );
-  }
-  
   if (!currentConfig || !currentConfig.widgets || currentConfig.widgets.length === 0) {
     return (
-      <div className="p-6">
+      <div>
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-semibold">Dashboard</h1>
           <div className="flex space-x-2">

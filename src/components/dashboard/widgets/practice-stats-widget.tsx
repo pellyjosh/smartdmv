@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { WidgetConfig } from "@/hooks/use-dashboard-config";
-import { Appointment } from "@shared/schema";
+import { Appointment } from "@/schemas/appointment";
 import { Loader2 } from "lucide-react";
 import {
   BarChart,

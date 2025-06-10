@@ -7,14 +7,16 @@ import { sessions } from './sessionsSchema';
 
 const isSqlite = process.env.DB_TYPE === 'sqlite';
 
-export const userRoleEnum = ['CLIENT', 'PRACTICE_ADMINISTRATOR', 'ADMINISTRATOR'] as const;
+export const UserRoleEnum = ['CLIENT', 'PRACTICE_ADMINISTRATOR', 'ADMINISTRATOR', 'VETERINARIAN', 'TECHNICIAN', 'RECEPTIONIST', 'PRACTICE_MANAGER', 'PRACTICE_ADMIN', 'SUPER_ADMIN', 'ACCOUNTANT'] as const;
+
+export type UserRole = typeof UserRoleEnum[number];
 
 export const users = dbTable('users', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   email: text('email').notNull().unique(),
   name: text('name'),
   password: text('password').notNull(),
-  role: text('role', { enum: userRoleEnum }).notNull(),
+  role: text('role', { enum: UserRoleEnum }).notNull(),
   practiceId: text('practice_id').references(() => practices.id as any, { onDelete: 'set null' }),
   currentPracticeId: text('current_practice_id').references(() => practices.id as any, { onDelete: 'set null' }),
 
@@ -71,3 +73,20 @@ export const administratorAccessiblePracticesRelations = relations(administrator
     references: [practices.id],
   }),
 }));
+
+export interface User {
+  id: string;
+  email: string;
+  name: string | null;
+  password: string;
+  role: UserRole;
+  practiceId: string | null;
+  currentPracticeId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AdministratorAccessiblePractice {
+  administratorId: string;
+  practiceId: string;
+}
