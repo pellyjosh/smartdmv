@@ -80,10 +80,10 @@ export default function AdministratorDashboardPage() {
       {!isSetupCompleted && (
         <Alert
         variant="default"
-        className="bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300"
+        className="border-blue-200 text-black dark:!text-white dark:border-blue-700 dark:text-blue-300"
       >
         <XCircle className="h-5 w-5 !text-blue-500" />
-        <AlertTitle className="font-semibold !text-blue-800 dark:!text-blue-200">
+        <AlertTitle className="font-semibold !text-black dark:!text-white">
           Setup Not Started
         </AlertTitle>
         <AlertDescription>
