@@ -24,13 +24,24 @@ export interface PracticeAdminUser extends BaseUser {
   practiceId: string;
 }
 
+export interface VeterinarianUser extends BaseUser {
+  role: 'VETERINARIAN';
+  practiceId: string;
+}
+
 export interface AdministratorUser extends BaseUser {
   role: 'ADMINISTRATOR';
   accessiblePracticeIds: string[];
   currentPracticeId: string;
 }
 
-export type User = ClientUser | PracticeAdminUser | AdministratorUser;
+export interface SuperAdminUser extends BaseUser {
+  role: 'SUPER_ADMIN';
+  accessiblePracticeIds: string[];
+  currentPracticeId: string;
+}
+
+export type User = ClientUser | PracticeAdminUser | AdministratorUser | SuperAdminUser | VeterinarianUser;
 
 const AUTH_PAGE = '/auth/login';
 
@@ -249,7 +260,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setUser(updatedUser); 
           sessionStorage.setItem(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(updatedUser));
           setClientCookie(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(updatedUser));
-          console.log('[UserContext switchPractice SUCCESS] Practice switched. New currentPracticeId in context:', updatedUser.currentPracticeId);
+          // console.log('[UserContext switchPractice SUCCESS] Practice switched. New currentPracticeId in context:', updatedUser.currentPracticeId);
         } else {
           console.error("[UserContext switchPractice FAIL] Failed to switch practice via server action. Refetching user.");
            await fetchUser(); 
@@ -284,5 +295,35 @@ export function useUser() {
   if (context === undefined) {
     throw new Error('useUser must be used within a UserProvider');
   }
-  return context;
+  // console.log('[useUser] Context:', context.user);
+
+  // Example of how to access practiceId safely:
+  const userPracticeId = context.user ?
+    (context.user.role === 'CLIENT' || context.user.role === 'PRACTICE_ADMINISTRATOR' ?
+      context.user.practiceId :
+      (context.user.role === 'ADMINISTRATOR' ? context.user.currentPracticeId : undefined)
+    ) : undefined;
+
+  console.log('[useUser] Derived userPracticeId:', userPracticeId);
+
+  // You can also return a more specific user object if needed
+  // This approach is useful if different parts of your app need different user properties
+  const getUserPracticeId = useCallback(() => {
+    if (!context.user) return undefined;
+    if (context.user.role === 'CLIENT' || context.user.role === 'PRACTICE_ADMINISTRATOR') {
+      return context.user.practiceId;
+    }
+    if (context.user.role === 'ADMINISTRATOR') {
+      return context.user.currentPracticeId;
+    }
+    return undefined;
+  }, [context.user]);
+
+  // If you need the practiceId often, you can return it directly from the hook
+  // or add a helper function to the context value.
+  return {
+    ...context,
+    userPracticeId: getUserPracticeId(),
+    getPracticeId: getUserPracticeId,
+  };
 }

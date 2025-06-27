@@ -66,7 +66,7 @@ export async function GET(request: Request) {
         .from(adminPracticesTable)
         .where(eq(adminPracticesTable.administratorId, userRecord.id));
       
-      const accessiblePracticeIds = adminPractices.map(p => p.practiceId);
+      const accessiblePracticeIds = adminPractices.map((p: { practiceId: any; }) => p.practiceId);
       let currentPracticeId = userRecord.currentPracticeId;
 
       if (accessiblePracticeIds.length === 0) {

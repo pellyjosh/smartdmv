@@ -73,8 +73,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Badge } from '@/components/ui/badge';
 import { useRouter } from 'next/navigation';
 
-// --- Type Definitions (Unchanged) ---
-
+// --- Type Definitions ---
 type AppUserRole =
   'ADMINISTRATOR' | 'PRACTICE_ADMINISTRATOR' | 'CLIENT' |
   'PRACTICE_ADMIN' | 'PRACTICE_MANAGER' |
@@ -90,14 +89,13 @@ interface MenuItem {
   marketplaceAddOn?: boolean;
 }
 
-// Adjusted MenuGroup to correctly distinguish between a direct link and a group with items
 interface MenuGroup {
   id: string;
   title: string;
   icon: React.ElementType;
   roles: AppUserRole[];
-  href?: string; // Optional: exists if it's a direct link (like a dashboard), not if it's a parent of submenu items
-  items?: MenuItem[]; // Optional: exists if it's a parent of submenu items
+  href?: string;
+  items?: MenuItem[];
   keywords?: string[];
 }
 
@@ -128,9 +126,8 @@ interface AppSidebarProps {
   onToggleCollapse: () => void;
 }
 
-// --- Modified Menu Data ---
+// --- Menu data ---
 const menuGroups: MenuGroup[] = [
-  // Dashboard for Administrator (direct link)
   {
     id: "admin-dashboard",
     title: "Admin Dashboard",
@@ -139,7 +136,6 @@ const menuGroups: MenuGroup[] = [
     keywords: ["home", "main", "overview", "admin panel"],
     roles: ['ADMINISTRATOR']
   },
-  // Dashboard for Practice Administrator (direct link)
   {
     id: "practice-admin-dashboard",
     title: "Practice Admin Dashboard",
@@ -148,38 +144,12 @@ const menuGroups: MenuGroup[] = [
     keywords: ["home", "main", "overview", "practice admin panel"],
     roles: ['PRACTICE_ADMINISTRATOR', 'PRACTICE_ADMIN']
   },
-  // Dashboard for Client (direct link)
   {
     id: "client-dashboard",
     title: "Client Dashboard",
     href: "/client",
     icon: LayoutDashboard,
     keywords: ["home", "main", "overview", "my pets"],
-    roles: ['CLIENT']
-  },
-  // Client-specific menu items (now direct links)
-  {
-    id: "client-favorites",
-    title: "Favorites",
-    href: "/favorites",
-    icon: Heart,
-    keywords: ["saved", "bookmarked", "liked", "pets"],
-    roles: ['CLIENT']
-  },
-  {
-    id: "client-symptom-checker",
-    title: "Symptom Checker",
-    href: "/symptom-checker",
-    icon: Sparkles,
-    keywords: ["ai", "diagnosis", "assessment", "pet health", "check"],
-    roles: ['CLIENT']
-  },
-  {
-    id: "client-vet-services",
-    title: "Vet Services",
-    href: "/vet-services",
-    icon: ClipboardList,
-    keywords: ["offerings", "treatments", "procedures", "vet", "clinics", "hospitals"],
     roles: ['CLIENT']
   },
   {
@@ -190,7 +160,6 @@ const menuGroups: MenuGroup[] = [
     keywords: ["options", "configuration", "preferences", "profile", "account"],
     roles: ['CLIENT'],
   },
-  // Existing Menu Groups (with submenus)
   {
     id: "appointments",
     title: "Appointments",
@@ -652,6 +621,47 @@ const menuGroups: MenuGroup[] = [
   }
 ];
 
+// --- Role-based Path Configuration ---
+const SHARED_PATHS_NEEDING_PREFIX: string[] = [
+  // Add all base hrefs from menuGroups that are generic but have role-prefixed actual pages
+  "/appointments", "/appointment-requests", "/telemedicine",
+  "/clients", "/pet-admissions", "/health-plans", "/vaccinations",
+  "/soap-notes", "/patient-timeline", "/whiteboard", "/checklists",
+  "/lab-integration", "/medical-imaging", "/disease-reporting", "/ai-diagnostic-assistant",
+  "/inventory", "/boarding", "/pos", "/referrals",
+  "/billing", "/accounts-receivable", "/expenses", "/refunds", "/payroll",
+  "/marketplace", "/integration-settings", "/settings", "/users-and-permissions",
+  "/custom-fields", "/trash", "/communications-unified",
+  // "/practice-admin", // This might be a specific dashboard link, review if it's shared or direct
+  "/practice-billing", "/subscriptions", "/payment-gateway", "/notifications",
+  "/audit-logs", "/audit-reports",
+  "/analytics-reporting", "/advanced-reporting", "/predictive-analytics",
+  "/theme-customization", "/dashboard-config", "/custom-field-demo", "/offline-demo"
+  // Note: Ensure "/settings" is handled correctly for CLIENT vs other roles.
+];
+
+const PRACTICE_ROLES: AppUserRole[] = [
+  'PRACTICE_ADMINISTRATOR', 'PRACTICE_ADMIN', 'PRACTICE_MANAGER',
+  'VETERINARIAN', 'TECHNICIAN', 'RECEPTIONIST',
+  'ACCOUNTANT', 'CASHIER', 'OFFICE_MANAGER'
+];
+
+// Helper function to get the role-specific navigation path
+const getActualHref = (baseHref: string | undefined, userRole: AppUserRole | undefined): string | undefined => {
+  if (!baseHref || baseHref === '#') return baseHref;
+
+  if (baseHref.startsWith("/administrator") || baseHref.startsWith("/practice-administrator") || baseHref.startsWith("/client")) {
+    return baseHref; // Already role-specific or client-specific direct link
+  }
+
+  if (SHARED_PATHS_NEEDING_PREFIX.includes(baseHref)) {
+    if (userRole === 'CLIENT') return baseHref; // Clients use base path for shared items like /settings
+    if (userRole === 'ADMINISTRATOR') return `/administrator${baseHref}`;
+    if (userRole && PRACTICE_ROLES.includes(userRole)) return `/practice-administrator${baseHref}`;
+  }
+  return baseHref; // Default to baseHref if no specific rule applies
+};
+
 export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -660,40 +670,94 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
   const [expandedMenus, setExpandedMenus] = React.useState<Record<string, boolean>>({});
   const [searchTerm, setSearchTerm] = React.useState("");
 
-  // --- Crucial Change: Transformed Nav Items Logic ---
-  const transformedNavItems: NavItem[] = React.useMemo(() => {
-    return menuGroups.map(group => {
-      // If the group has 'items', it's a menu with a submenu
-      if (group.items && group.items.length > 0) {
-        return {
-          title: group.title,
-          icon: group.icon,
-          keywords: group.keywords || [],
-          roles: group.roles,
-          submenu: group.items.map(item => ({
-            title: item.title,
-            href: item.href,
-            icon: item.icon,
-            keywords: item.keywords,
-            roles: item.roles,
-            isAddon: item.marketplaceAddOn,
-            requiresWebsiteIntegration: item.title === "Website Requests" || item.title === "Website Integration"
-          })),
-        };
-      } else {
-        // If the group has no 'items' but has a 'href', it's a direct navigation link (like a dashboard)
-        return {
-          title: group.title,
-          href: group.href,
-          icon: group.icon,
-          keywords: group.keywords || [],
-          roles: group.roles,
-        };
+  // Helper function to check active state
+  const isNavItemActive = React.useCallback((
+    baseHref: string | undefined,
+    currentPathname: string,
+    userRole: AppUserRole | undefined
+  ): boolean => {
+    if (!baseHref || baseHref === '#') return false;
+    if (baseHref === '/' && currentPathname === '/') return true;
+    if (baseHref === '/') return false;
+
+    const actualNavHref = getActualHref(baseHref, userRole);
+    return actualNavHref ? currentPathname.startsWith(actualNavHref) : false;
+  }, []);
+
+
+  // Transform the menuGroups into the NavItem structure
+  const allNavItems: NavItem[] = React.useMemo(() => {
+    const clientSpecificItems: NavItem[] = [
+      {
+        title: "Dashboard",
+        href: "/client",
+        icon: LayoutDashboard,
+        keywords: ["home", "main", "overview"],
+        roles: ['CLIENT']
+      },
+      {
+        title: "Favorites",
+        href: "/favorites",
+        icon: Heart,
+        keywords: ["saved", "bookmarked", "liked", "pets"],
+        roles: ['CLIENT']
+      },
+      {
+        title: "Symptom Checker",
+        href: "/symptom-checker",
+        icon: Sparkles,
+        keywords: ["ai", "diagnosis", "assessment", "pet health", "check"],
+        roles: ['CLIENT']
+      },
+      {
+        title: "Vet Services",
+        href: "/vet-services",
+        icon: ClipboardList,
+        keywords: ["offerings", "treatments", "procedures", "vet", "clinics", "hospitals"],
+        roles: ['CLIENT']
+      },
+      {
+        title: "Settings",
+        href: "/settings",
+        icon: Settings,
+        keywords: ["options", "configuration", "preferences", "profile", "account"],
+        roles: ['CLIENT'],
+      },
+    ];
+
+    const processedGroups: NavItem[] = menuGroups.map(group => ({
+      title: group.title,
+      icon: group.icon,
+      // A group title itself doesn't have a direct href unless explicitly defined (like dashboards)
+      // If href is not defined, it implies it's a parent of submenus
+      href: group.href,
+      keywords: group.keywords, // Use group's own keywords first
+      roles: group.roles, // Use group's roles first
+      submenu: group.items?.map(item => ({
+        title: item.title,
+        href: item.href,
+        icon: item.icon,
+        keywords: item.keywords,
+        roles: item.roles,
+        isAddon: item.marketplaceAddOn,
+        requiresWebsiteIntegration: item.title === "Website Requests" || item.title === "Website Integration"
+      })),
+    }));
+
+    // Combine client-specific items with the transformed menu groups.
+    // Ensure that items appear only once if there are overlaps.
+    const combinedItems: NavItem[] = [...clientSpecificItems];
+
+    processedGroups.forEach(group => {
+      // Avoid adding duplicate top-level items if a client-specific item already covers it
+      if (!combinedItems.some(item => item.title === group.title && item.href === group.href)) {
+        combinedItems.push(group);
       }
     });
-  }, []); // Depend on menuGroups if it changes, but here it's static
 
-  // Rest of the component remains unchanged
+    return combinedItems;
+  }, []);
+
   const filteredNavItems: NavItem[] = React.useMemo(() => {
     if (!user?.role && !userIsLoading && initialAuthChecked) {
       return [
@@ -708,55 +772,74 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
     }
     if (!user?.role) return [];
 
-    const lowerSearchTerm = searchTerm.toLowerCase();
+    const lowerSearchTerm = searchTerm.toLowerCase().trim();
 
-    return transformedNavItems.filter(item => {
-      const hasRole = item.roles.includes(user.role as AppUserRole);
-      if (!hasRole) return false;
+    if (!lowerSearchTerm) {
+      // If no search term, return all role-appropriate items with their full submenus
+      return allNavItems.filter(item => item.roles.includes(user.role as AppUserRole));
+    }
 
-      if (!searchTerm) return true;
+    const results: NavItem[] = [];
 
-      const matchesTitle = item.title.toLowerCase().includes(lowerSearchTerm);
-      const matchesKeywords = item.keywords?.some(k => k.toLowerCase().includes(lowerSearchTerm));
+    allNavItems.forEach(item => {
+      // Check if user has role for this top-level item
+      const hasRoleForParent = item.roles.includes(user.role as AppUserRole);
+      if (!hasRoleForParent) return;
 
-      const matchesSubmenu = item.submenu?.some(sub =>
-        (sub.roles ? sub.roles.includes(user.role as AppUserRole) : true) &&
-        (sub.title.toLowerCase().includes(lowerSearchTerm) ||
-          (sub.keywords && sub.keywords.some(sk => sk.toLowerCase().includes(lowerSearchTerm))))
-      );
+      // Check if the top-level item itself matches the search term
+      const parentMatches =
+        item.title.toLowerCase().includes(lowerSearchTerm) ||
+        (item.keywords && item.keywords.some(k => k.toLowerCase().includes(lowerSearchTerm)));
 
-      return matchesTitle || matchesKeywords || matchesSubmenu;
-    }).map(item => {
-      if (searchTerm && item.submenu) {
-        const filteredSubmenu = item.submenu.filter(sub =>
-          (sub.roles ? sub.roles.includes(user.role as AppUserRole) : true) &&
-          (sub.title.toLowerCase().includes(lowerSearchTerm) ||
-            (sub.keywords && sub.keywords.some(sk => sk.toLowerCase().includes(lowerSearchTerm))))
-        );
+      if (item.submenu) {
+        // Filter submenus for matches
+        const matchingSubmenuItems = item.submenu.filter(sub => {
+          const hasRoleForSub = sub.roles ? sub.roles.includes(user.role as AppUserRole) : true;
+          return hasRoleForSub &&
+                 (sub.title.toLowerCase().includes(lowerSearchTerm) ||
+                  (sub.keywords && sub.keywords.some(sk => sk.toLowerCase().includes(lowerSearchTerm))));
+        });
 
-        if (filteredSubmenu.length > 0 || item.title.toLowerCase().includes(lowerSearchTerm) || (item.keywords && item.keywords.some(k => k.toLowerCase().includes(lowerSearchTerm)))) {
-          return { ...item, submenu: filteredSubmenu.length > 0 ? filteredSubmenu : [] };
+        if (parentMatches && matchingSubmenuItems.length === 0) {
+          // If parent matches but no submenu items match, show parent without submenu
+          // This handles cases where only the group title/keywords are searched.
+          results.push({ ...item, submenu: [] });
+        } else if (matchingSubmenuItems.length > 0) {
+          // If any submenu item matches, show the parent with only matching submenu items
+          // This ensures the group is shown only when a specific item within it matches.
+          results.push({ ...item, submenu: matchingSubmenuItems });
         }
-        return null;
+      } else if (parentMatches) {
+        // If it's a direct link (no submenu) and it matches, add it
+        results.push(item);
       }
-      return item;
-    }).filter(item => item !== null) as NavItem[];
-  }, [user, userIsLoading, initialAuthChecked, transformedNavItems, searchTerm]);
+    });
+
+    return results;
+  }, [user, userIsLoading, initialAuthChecked, allNavItems, searchTerm]);
 
   React.useEffect(() => {
     const newExpandedState: Record<string, boolean> = {};
     filteredNavItems.forEach(item => {
       if (item.submenu && item.submenu.length > 0) {
-        const isParentActive = item.href && pathname.startsWith(item.href) && item.href !== '/';
-        const isSubmenuActive = item.submenu.some(subItem => subItem.href && pathname.startsWith(subItem.href));
+        const isParentActive = isNavItemActive(item.href, pathname, user?.role as AppUserRole);
+        const isSubmenuActive = item.submenu.some(subItem => isNavItemActive(subItem.href, pathname, user?.role as AppUserRole));
 
-        if (isParentActive || isSubmenuActive || (searchTerm && item.submenu.length > 0 && (item.submenu.some(sub => sub.title.toLowerCase().includes(searchTerm.toLowerCase()))))) {
+        // Expand if active based on pathname, or if it was previously expanded by user
+        if (isParentActive || isSubmenuActive || expandedMenus[item.title]) {
           newExpandedState[item.title] = true;
         }
       }
     });
-    setExpandedMenus(prev => ({ ...prev, ...newExpandedState }));
-  }, [pathname, filteredNavItems, searchTerm]);
+    // Merge the new state with any existing manual expansions that weren't overridden by active path
+    setExpandedMenus(prev => {
+      const newState = { ...prev };
+      Object.keys(newExpandedState).forEach(key => {
+        newState[key] = newExpandedState[key];
+      });
+      return newState;
+    });
+  }, [pathname, filteredNavItems, user?.role, isNavItemActive, expandedMenus]);
 
   const toggleMenu = React.useCallback((title: string) => {
     setExpandedMenus(prev => ({
@@ -810,19 +893,22 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
     );
   };
 
-
   const renderNavItems = React.useCallback(({ currentViewCollapsed }: { currentViewCollapsed: boolean }) => {
     return filteredNavItems.map((item) => {
-      const subItemsToShow = item.submenu?.filter(subItem =>
-        !subItem.roles || (user?.role && subItem.roles.includes(user.role as AppUserRole))
-      ) || [];
+      // filteredNavItems already handles role-based filtering and search logic.
+      // So, subItemsToShow is simply what's in item.submenu after filtering.
+      const subItemsToShow = item.submenu || [];
 
-      let isActive = item.href ? (item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)) : false;
+      let isActive = isNavItemActive(item.href, pathname, user?.role as AppUserRole);
       if (!isActive && subItemsToShow.length > 0) {
-        isActive = subItemsToShow.some(subItem => subItem.href && pathname.startsWith(subItem.href));
+        isActive = subItemsToShow.some(subItem => isNavItemActive(subItem.href, pathname, user?.role as AppUserRole));
       }
 
-      const isMenuExpanded = expandedMenus[item.title] || false;
+      // If there's a search term and this item has filtered submenus,
+      // or if the item itself is a direct match and has no submenu,
+      // ensure it's displayed.
+      const isMenuExpanded = (searchTerm && subItemsToShow.length > 0) || expandedMenus[item.title] || false;
+
 
       const commonButtonClasses = cn(
         "flex items-center w-full text-sm font-medium rounded-md transition-colors duration-150",
@@ -831,10 +917,11 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
         currentViewCollapsed ? "justify-center py-3 px-0" : "px-3 py-2.5"
       );
 
-      // This logic correctly distinguishes between a direct link and a toggleable menu item
-      const buttonOrLink = item.href && (subItemsToShow.length === 0 || item.href === pathname) ? ( // If it's a direct link OR if it's a parent that is directly active
+      const navHrefToUse = getActualHref(item.href, user?.role as AppUserRole);
+
+      const buttonOrLink = navHrefToUse && navHrefToUse !== '#' && subItemsToShow.length === 0 ? (
         <Link
-          href={item.href}
+          href={navHrefToUse}
           onClick={() => {
             if (item.onClick) item.onClick();
             setMobileSheetOpen(false);
@@ -843,14 +930,14 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
         >
           {renderNavItemContent(item, false, currentViewCollapsed)}
         </Link>
-      ) : ( // Otherwise, it's a button to toggle a submenu (or a parent without a direct active link)
+      ) : (
         <Button
           variant="ghost"
           onClick={() => {
             if (subItemsToShow.length > 0) {
               toggleMenu(item.title);
-            } else if (item.href) {
-              router.push(item.href);
+            } else if (navHrefToUse && navHrefToUse !== '#') {
+              router.push(navHrefToUse);
               setMobileSheetOpen(false);
             } else if (item.onClick) {
               item.onClick();
@@ -863,7 +950,6 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
           {renderNavItemContent(item, false, currentViewCollapsed)}
         </Button>
       );
-
 
       return (
         <div key={item.title} className="w-full">
@@ -882,19 +968,22 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
             buttonOrLink
           )}
 
+          {/* Only render submenu if not collapsed, has sub-items, AND is expanded (either manually or by search) */}
           {!currentViewCollapsed && subItemsToShow.length > 0 && isMenuExpanded && (
             <div className="mt-1 space-y-1 pl-8 pr-2 py-1 border-l border-border/50 ml-[1.125rem] mr-1">
               {subItemsToShow.map((subItem) => {
-                const isSubItemActive = subItem.href && pathname.startsWith(subItem.href);
+                const actualSubNavHref = getActualHref(subItem.href, user?.role as AppUserRole);
+                const isSubItemActive = isNavItemActive(subItem.href, pathname, user?.role as AppUserRole);
                 return (
                   <Link
-                    key={subItem.title + subItem.href}
-                    href={subItem.href}
+                    key={subItem.title}
+                    href={actualSubNavHref || '#'}
                     onClick={() => setMobileSheetOpen(false)}
                     className={cn(
-                      "flex items-center w-full text-xs font-medium rounded-md px-3 py-2 transition-colors duration-150",
+                      "flex items-center w-full text-sm rounded-md transition-colors duration-150",
                       "group",
-                      isSubItemActive ? "text-primary" : "text-foreground/60 hover:text-primary hover:bg-primary/5"
+                      isSubItemActive ? "bg-primary/10 text-primary" : "text-foreground/70 hover:bg-accent hover:text-accent-foreground",
+                      "px-3 py-2"
                     )}
                   >
                     {renderNavItemContent(subItem, true, currentViewCollapsed)}
@@ -906,84 +995,56 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
         </div>
       );
     });
-  }, [filteredNavItems, pathname, expandedMenus, user, toggleMenu, router]);
+  }, [filteredNavItems, pathname, toggleMenu, expandedMenus, user?.role, router, searchTerm, isNavItemActive]);
 
-  const CollapseToggleButton = ({ forHeader = false }: { forHeader?: boolean }) => (
-    <TooltipProvider delayDuration={0}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "text-muted-foreground hover:text-primary shrink-0",
-              forHeader ? (isCollapsed ? "h-9 w-9" : "h-8 w-8 ml-auto") : (isCollapsed ? "h-9 w-9 mx-auto" : "h-8 w-8 ml-auto")
-            )}
-            onClick={onToggleCollapse}
-          >
-            {isCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="right" className="ml-2">
-          <p>{isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-
-
-  const renderSidebarContent = ({ effectiveIsCollapsed }: { effectiveIsCollapsed: boolean }) => (
-    <div className={cn("flex flex-col h-full bg-card border-r border-border", effectiveIsCollapsed ? "" : "")}>
-      <div className={cn(
-        "flex h-16 items-center border-b border-border shrink-0",
-        effectiveIsCollapsed ? "justify-center px-1 py-1" : "px-4 justify-between"
-      )}>
-        {!effectiveIsCollapsed && (
-          <Link href="/" className="flex items-center gap-2 font-semibold mr-2" onClick={() => setMobileSheetOpen(false)}>
-            <h1 className="text-xl">
-              <span className="text-foreground">SmartDVM</span>
-            </h1>
-          </Link>
+  const sidebarContent = (currentViewCollapsed: boolean) => (
+    <div className="flex flex-col h-full">
+      <div className={cn("flex items-center p-4", currentViewCollapsed ? "justify-center" : "justify-between")}>
+        {!currentViewCollapsed && (
+          <h1 className="text-2xl font-bold text-primary">SmartDVM</h1>
         )}
-        <CollapseToggleButton forHeader={true} />
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onToggleCollapse}
+          className="rounded-full"
+          aria-label={currentViewCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {currentViewCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+        </Button>
       </div>
 
-      {!effectiveIsCollapsed && (
-        <div className="p-3 border-b border-border">
-          <div className="relative">
-            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="p-4">
+        {!currentViewCollapsed && (
+          <div className="relative mb-4">
+            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              type="text"
               placeholder="Search menu..."
-              className="pl-8 w-full"
+              className="w-full pl-9"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      <nav className={cn(
-        "flex-1 overflow-y-auto custom-scrollbar p-2 transition-all duration-150 ease-in-out",
-        effectiveIsCollapsed ? "space-y-1" : "space-y-1.5"
-      )}>
-        {renderNavItems({ currentViewCollapsed: effectiveIsCollapsed })}
+      <nav className="flex-1 overflow-y-auto px-2 pb-4 scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+        <ul className={cn("space-y-1", currentViewCollapsed ? "items-center" : "")}>
+          {renderNavItems({ currentViewCollapsed })}
+        </ul>
       </nav>
 
-      <div className={cn(
-        "mt-auto border-t border-border flex items-center p-3 transition-all duration-150 ease-in-out",
-        effectiveIsCollapsed ? "justify-center" : "justify-between"
-      )}>
-        {user?.role && (
+      <div className={cn("p-4 border-t border-border flex", currentViewCollapsed ? "justify-center" : "justify-between items-center")}>
+        {user ? (
           <>
-            {!effectiveIsCollapsed && (
-              <div className="flex items-center gap-2">
-                <Avatar className="h-8 w-8">
+            {!currentViewCollapsed && (
+              <div className="flex items-center space-x-3">
+                <Avatar className="h-9 w-9">
                   <AvatarFallback>{getInitials(user.email || user.name)}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium truncate max-w-[120px]">{user.name || user.email || "User"}</span>
-                  <Badge variant="secondary" className="w-fit text-xs px-1 py-0">{user.role}</Badge>
+                  <span className="font-medium text-sm truncate max-w-[120px]">{user.name || user.email}</span>
+                  <span className="text-xs text-muted-foreground capitalize">{user.role?.toLowerCase().replace(/_/g, ' ')}</span>
                 </div>
               </div>
             )}
@@ -992,33 +1053,42 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
-                    size={effectiveIsCollapsed ? "icon" : "sm"}
-                    onClick={logout}
-                    className={cn(
-                      "text-muted-foreground hover:text-destructive",
-                      effectiveIsCollapsed ? "h-9 w-9" : "h-8 px-2"
-                    )}
+                    size={currentViewCollapsed ? "icon" : "sm"}
+                    onClick={async () => {
+                      await logout();
+                      router.push('/auth/login');
+                    }}
+                    className={currentViewCollapsed ? "" : "ml-auto"}
+                    aria-label="Logout"
                   >
-                    <LogOut className={cn("h-5 w-5", !effectiveIsCollapsed && "mr-2")} />
-                    {!effectiveIsCollapsed && <span className="sr-only sm:not-sr-only">Logout</span>}
+                    <LogOut className="h-5 w-5" />
+                    {!currentViewCollapsed && <span className="ml-2">Logout</span>}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side={effectiveIsCollapsed ? "right" : "top"} className={effectiveIsCollapsed ? "ml-2" : ""}>
-                  <p>Logout</p>
-                </TooltipContent>
+                {currentViewCollapsed && <TooltipContent side="right">Logout</TooltipContent>}
               </Tooltip>
             </TooltipProvider>
           </>
-        )}
-        {!user?.role && initialAuthChecked && (
-          <Link href="/auth/login" className={cn(
-            "flex items-center text-sm font-medium rounded-md transition-colors duration-150",
-            "group text-foreground/70 hover:bg-accent hover:text-accent-foreground",
-            effectiveIsCollapsed ? "justify-center py-3 px-0 w-full" : "px-3 py-2.5 w-full"
-          )}>
-            <LogIn className={cn("h-5 w-5", effectiveIsCollapsed ? "mx-auto" : "mr-3 shrink-0")} />
-            {!effectiveIsCollapsed && <span className="truncate flex-1">Login</span>}
-          </Link>
+        ) : (
+          !userIsLoading && initialAuthChecked && (
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size={currentViewCollapsed ? "icon" : "sm"}
+                    onClick={() => router.push('/auth/login')}
+                    className="w-full"
+                    aria-label="Login"
+                  >
+                    <LogIn className="h-5 w-5" />
+                    {!currentViewCollapsed && <span className="ml-2">Login</span>}
+                  </Button>
+                </TooltipTrigger>
+                {currentViewCollapsed && <TooltipContent side="right">Login</TooltipContent>}
+              </Tooltip>
+            </TooltipProvider>
+          )
         )}
       </div>
     </div>
@@ -1026,24 +1096,27 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
 
   return (
     <>
+      {/* Desktop Sidebar */}
+      <aside
+        className={cn(
+          "hidden md:flex flex-col border-r bg-background transition-all duration-300 ease-in-out",
+          isCollapsed ? "w-[72px]" : "w-[260px]"
+        )}
+      >
+        {sidebarContent(isCollapsed)}
+      </aside>
+
+      {/* Mobile Sidebar */}
       <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
-        <SheetTrigger asChild className="lg:hidden">
-          <Button variant="ghost" size="icon" className="fixed top-4 left-4 z-50">
+        <SheetTrigger asChild className="md:hidden p-4">
+          <Button variant="ghost" size="icon" aria-label="Open menu">
             <Menu className="h-6 w-6" />
-            <span className="sr-only">Open menu</span>
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-64">
-          {renderSidebarContent({ effectiveIsCollapsed: false })}
+        <SheetContent side="left" className="w-[260px] p-0 flex flex-col">
+          {sidebarContent(false)}
         </SheetContent>
       </Sheet>
-
-      <aside className={cn(
-        "hidden lg:flex flex-col h-screen transition-all duration-300 ease-in-out shrink-0 border-r border-border",
-        isCollapsed ? "w-[72px]" : "w-64"
-      )}>
-        {renderSidebarContent({ effectiveIsCollapsed: isCollapsed })}
-      </aside>
     </>
   );
 }

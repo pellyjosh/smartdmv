@@ -1,2 +1,0 @@
-ALTER TABLE `administrator_accessible_practices` ADD `createdAt` integer DEFAULT CURRENT_TIMESTAMP NOT NULL;--> statement-breakpoint
-ALTER TABLE `administrator_accessible_practices` ADD `updatedAt` integer DEFAULT CURRENT_TIMESTAMP NOT NULL;

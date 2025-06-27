@@ -7,7 +7,21 @@ import { sessions } from './sessionsSchema';
 
 const isSqlite = process.env.DB_TYPE === 'sqlite';
 
-export const UserRoleEnum = ['CLIENT', 'PRACTICE_ADMINISTRATOR', 'ADMINISTRATOR', 'VETERINARIAN', 'TECHNICIAN', 'RECEPTIONIST', 'PRACTICE_MANAGER', 'PRACTICE_ADMIN', 'SUPER_ADMIN', 'ACCOUNTANT'] as const;
+// export enum UserRoleEnum = ['CLIENT', 'PRACTICE_ADMINISTRATOR', 'ADMINISTRATOR', 'VETERINARIAN', 'TECHNICIAN', 'RECEPTIONIST', 'PRACTICE_MANAGER', 'PRACTICE_ADMIN', 'SUPER_ADMIN', 'ACCOUNTANT'] as const;
+export enum UserRoleEnum {
+  CLIENT = 'CLIENT',
+  PRACTICE_ADMINISTRATOR = 'PRACTICE_ADMINISTRATOR',
+  ADMINISTRATOR = 'ADMINISTRATOR',
+  VETERINARIAN = 'VETERINARIAN',
+  TECHNICIAN = 'TECHNICIAN',
+  RECEPTIONIST = 'RECEPTIONIST',
+  PRACTICE_MANAGER = 'PRACTICE_MANAGER',
+  PRACTICE_ADMIN = 'PRACTICE_ADMIN',
+  SUPER_ADMIN = 'SUPER_ADMIN', // Assuming this is also a role
+  ACCOUNTANT = 'ACCOUNTANT',
+  CASHIER = 'CASHIER', // Add any missing roles from your full list
+  OFFICE_MANAGER = 'OFFICE_MANAGER', // Add any missing roles
+}
 
 export type UserRole = typeof UserRoleEnum[number];
 

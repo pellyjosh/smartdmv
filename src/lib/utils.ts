@@ -42,3 +42,48 @@ export function hexToHslParts(hex: string): string | null {
 
   return `${H} ${S}% ${L}%`;
 }
+
+export function getPetAvatarColors(name: string) {
+  // Define a set of vibrant color combinations (bg + text)
+  const colorPairs = [
+    { bg: "bg-blue-100", text: "text-blue-800" },
+    { bg: "bg-green-100", text: "text-green-800" },
+    { bg: "bg-purple-100", text: "text-purple-800" },
+    { bg: "bg-pink-100", text: "text-pink-800" },
+    { bg: "bg-indigo-100", text: "text-indigo-800" },
+    { bg: "bg-yellow-100", text: "text-yellow-800" },
+    { bg: "bg-orange-100", text: "text-orange-800" },
+    { bg: "bg-teal-100", text: "text-teal-800" },
+    { bg: "bg-cyan-100", text: "text-cyan-800" },
+    { bg: "bg-rose-100", text: "text-rose-800" },
+  ]
+
+  // Calculate a consistent index based on the name
+  let hashCode = 0
+  for (let i = 0; i < name.length; i++) {
+    hashCode = (hashCode << 5) - hashCode + name.charCodeAt(i)
+    hashCode = hashCode & hashCode // Convert to 32bit integer
+  }
+
+  // Use absolute value and modulo to get an index
+  const index = Math.abs(hashCode) % colorPairs.length
+  
+  return colorPairs[index]
+}
+
+/**
+ * Format a date in a user-friendly way
+ * @param date The date to format
+ * @returns Formatted date string (e.g., "May 6, 2025")
+ */
+export function formatDate(date: Date): string {
+  if (!date || isNaN(date.getTime())) {
+    return 'Invalid date';
+  }
+  
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}

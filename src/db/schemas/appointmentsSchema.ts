@@ -7,7 +7,7 @@ import { practices } from './practicesSchema';
 
 const isSqlite = process.env.DB_TYPE === 'sqlite';
 
-export const appointmentStatusEnum = ['scheduled', 'completed', 'cancelled', 'confirmed', 'pending'] as const;
+export const appointmentStatusEnum = ['approved', 'rejected', 'pending'] as const;
 
 export const appointments = dbTable('appointments', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -19,6 +19,8 @@ export const appointments = dbTable('appointments', {
   petId: text('pet_id').references(() => pets.id, { onDelete: 'cascade' }), // Can be nullable if appointment is not for a pet
   clientId: text('client_id').references(() => users.id, { onDelete: 'set null' }), // User who booked, if applicable
   staffId: text('staff_id').references(() => users.id, { onDelete: 'set null' }), // Vet/Technician assigned
+  // New practitionerId column, linked to the users table
+  practitionerId: text('practitioner_id').references(() => users.id, { onDelete: 'set null' }), // Practitioner assigned to the appointment
   practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
 
   createdAt: isSqlite
@@ -45,6 +47,12 @@ export const appointmentsRelations = relations(appointments, ({ one }) => ({
     references: [users.id],
     relationName: 'appointmentStaff',
   }),
+  // New relation for practitioner
+  practitioner: one(users, {
+    fields: [appointments.practitionerId],
+    references: [users.id],
+    relationName: 'appointmentPractitioner', // Give it a distinct relation name
+  }),
   practice: one(practices, {
     fields: [appointments.practiceId],
     references: [practices.id],
@@ -64,6 +72,7 @@ export interface Appointment {
   petId: string | null;
   clientId: string | null;
   staffId: string | null;
+  practitionerId: string | null; // Add to the TypeScript interface
   practiceId: string;
   createdAt: Date;
   updatedAt: Date;

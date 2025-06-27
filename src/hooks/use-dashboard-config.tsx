@@ -24,6 +24,7 @@ export interface DashboardConfigData {
 export interface DashboardConfig {
   id: number;
   config: string; // or DashboardConfigData if you stringify on the way out.
+  isDefault: boolean;
 }
 
 // Generate default widgets for specific roles
@@ -235,9 +236,11 @@ export function generateDefaultWidgetsForRole(role: string): WidgetConfig[] {
 
 export interface InsertDashboardConfig {
   name: string;
-  userId: string;
-  practiceId: string | null;
+  userId: number;
+  practiceId: number | null;
   config: string; // or DashboardConfigData if you stringify on the way out.
+  role: string;
+  isDefault: boolean;
 }
 
 export function useDashboardConfigs() {
@@ -250,6 +253,10 @@ export function useDashboardConfigs() {
     error: configsError 
   } = useQuery<DashboardConfig[]>({ 
     queryKey: ['/api/dashboard-configs'],
+    queryFn: async () => {
+      const response = await apiRequest("GET", '/api/dashboard-configs');
+      return response.json();
+    },
     refetchOnWindowFocus: false, // Prevent refetching dashboard structure on window focus
   });
 

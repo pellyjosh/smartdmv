@@ -144,22 +144,22 @@ const menuGroups: MenuGroup[] = [
     keywords: ["home", "main", "overview", "practice admin panel"],
     roles: ['PRACTICE_ADMINISTRATOR', 'PRACTICE_ADMIN']
   },
-  {
-    id: "client-dashboard",
-    title: "Client Dashboard",
-    href: "/client",
-    icon: LayoutDashboard,
-    keywords: ["home", "main", "overview", "my pets"],
-    roles: ['CLIENT']
-  },
-  {
-    id: "client-settings",
-    title: "Client Settings",
-    href: "/client-settings",
-    icon: Settings,
-    keywords: ["options", "configuration", "preferences", "profile", "account"],
-    roles: ['CLIENT'],
-  },
+  // {
+  //   id: "client-dashboard",
+  //   title: "Client Dashboard",
+  //   href: "/client",
+  //   icon: LayoutDashboard,
+  //   keywords: ["home", "main", "overview", "my pets"],
+  //   roles: ['CLIENT']
+  // },
+  // {
+  //   id: "client-settings",
+  //   title: "Client Settings",
+  //   href: "/client-settings",
+  //   icon: Settings,
+  //   keywords: ["options", "configuration", "preferences", "profile", "account"],
+  //   roles: ['CLIENT'],
+  // },
   {
     id: "appointments",
     title: "Appointments",
@@ -168,20 +168,20 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "Appointments",
-        href: "/appointments",
+        href: "/admin/appointments",
         icon: Calendar,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN", "RECEPTIONIST"]
       },
       {
         title: "Website Requests",
-        href: "/appointment-requests",
+        href: "/admin/appointment-requests",
         icon: ClipboardCheck,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "RECEPTIONIST"],
         marketplaceAddOn: true
       },
       {
         title: "Telemedicine",
-        href: "/telemedicine",
+        href: "/admin/telemedicine",
         icon: VideoIcon,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"],
         marketplaceAddOn: true
@@ -196,25 +196,25 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "Clients & Pets",
-        href: "/clients",
+        href: "/admin/clients",
         icon: Users,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN", "RECEPTIONIST"]
       },
       {
         title: "Pet Admissions",
-        href: "/pet-admissions",
+        href: "/admin/pet-admissions",
         icon: Building2,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
       },
       {
         title: "Health Plans",
-        href: "/health-plans",
+        href: "/admin/health-plans",
         icon: Heart,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "RECEPTIONIST"]
       },
       {
         title: "Vaccinations",
-        href: "/vaccinations",
+        href: "/admin/vaccinations",
         icon: Pill,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
       }
@@ -632,41 +632,41 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
   // Transform the menuGroups into the NavItem structure
   const allNavItems: NavItem[] = React.useMemo(() => {
     const clientSpecificItems: NavItem[] = [
-      {
-        title: "Dashboard",
-        href: "/client",
-        icon: LayoutDashboard,
-        keywords: ["home", "main", "overview"],
-        roles: ['CLIENT']
-      },
-      {
-        title: "Favorites",
-        href: "/favorites",
-        icon: Heart,
-        keywords: ["saved", "bookmarked", "liked", "pets"],
-        roles: ['CLIENT']
-      },
-      {
-        title: "Symptom Checker",
-        href: "/symptom-checker",
-        icon: Sparkles,
-        keywords: ["ai", "diagnosis", "assessment", "pet health", "check"],
-        roles: ['CLIENT']
-      },
-      {
-        title: "Vet Services",
-        href: "/vet-services",
-        icon: ClipboardList,
-        keywords: ["offerings", "treatments", "procedures", "vet", "clinics", "hospitals"],
-        roles: ['CLIENT']
-      },
-      {
-        title: "Settings",
-        href: "/settings",
-        icon: Settings,
-        keywords: ["options", "configuration", "preferences", "profile", "account"],
-        roles: ['CLIENT'],
-      },
+      // {
+      //   title: "Dashboard",
+      //   href: "/client",
+      //   icon: LayoutDashboard,
+      //   keywords: ["home", "main", "overview"],
+      //   roles: ['CLIENT']
+      // },
+      // {
+      //   title: "Favorites",
+      //   href: "/favorites",
+      //   icon: Heart,
+      //   keywords: ["saved", "bookmarked", "liked", "pets"],
+      //   roles: ['CLIENT']
+      // },
+      // {
+      //   title: "Symptom Checker",
+      //   href: "/symptom-checker",
+      //   icon: Sparkles,
+      //   keywords: ["ai", "diagnosis", "assessment", "pet health", "check"],
+      //   roles: ['CLIENT']
+      // },
+      // {
+      //   title: "Vet Services",
+      //   href: "/vet-services",
+      //   icon: ClipboardList,
+      //   keywords: ["offerings", "treatments", "procedures", "vet", "clinics", "hospitals"],
+      //   roles: ['CLIENT']
+      // },
+      // {
+      //   title: "Settings",
+      //   href: "/settings",
+      //   icon: Settings,
+      //   keywords: ["options", "configuration", "preferences", "profile", "account"],
+      //   roles: ['CLIENT'],
+      // },
     ];
 
     const processedGroups: NavItem[] = menuGroups.map(group => ({

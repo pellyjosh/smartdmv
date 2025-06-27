@@ -193,7 +193,7 @@ export default function PetDetailPage() {
                 <div className="flex justify-between">
                   <span className="text-slate-500">Gender:</span>
                   <span className="font-medium">{
-                  .gender}</span>
+                  pet.gender}</span>
                 </div>
               )}
               {pet.color && (

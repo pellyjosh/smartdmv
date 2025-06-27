@@ -4,7 +4,7 @@ import { relations, sql } from 'drizzle-orm';
 import { users } from './usersSchema';
 import { practices } from './practicesSchema';
 import { appointments } from './appointmentsSchema';
-import { healthPlans } from './healthplansSchema';
+import { healthPlans } from './healthPlansSchema';
 import { whiteboardItems } from './whiteboardItemsSchema';
 
 const isSqlite = process.env.DB_TYPE === 'sqlite';
@@ -14,7 +14,7 @@ export const pets = dbTable('pets', {
   name: text('name').notNull(),
   species: text('species'),
   breed: text('breed'),
-  dateOfBirth: timestamp('date_of_birth', { mode: 'date' }),
+  date_of_birth: timestamp('date_of_birth', { mode: 'date' }),
   ownerId: text('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
 

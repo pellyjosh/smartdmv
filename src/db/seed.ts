@@ -1,4 +1,3 @@
-
 import { config } from 'dotenv';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
@@ -6,23 +5,22 @@ import crypto from 'crypto';
 config(); // Load environment variables from .env file
 
 import { db } from './index';
-import { practices, users, administratorAccessiblePractices, userRoleEnum } from './schema';
+// Import all necessary schemas
+import {
+  practices,
+  users,
+  administratorAccessiblePractices,
+  UserRoleEnum,
+  customFieldCategories,
+  customFieldGroups,
+  customFieldValues,
+  pets // <--- Import pets schema
+} from './schema';
 import { User } from '@/context/UserContext';
-// import type { User } from '@/hooks/useAuth'; // For role enum consistency
-// import { sql } from 'drizzle-orm'; // Not used directly in this version of seed
-
-// For SQLite, we might want to enable foreign keys explicitly if not done by the driver by default
-// Though for `better-sqlite3` driver, it's usually on.
-// async function enableForeignKeysForSqlite() {
-//   if (process.env.DB_TYPE === 'sqlite') {
-//     await db.run(sql`PRAGMA foreign_keys = ON;`);
-//     console.log('SQLite foreign_keys enabled.');
-//   }
-// }
 
 async function seed() {
   console.log('🌱 Starting database seeding...');
-  console.log(`Database type from env: ${process.env.DB_TYPE}`); // Log to confirm env var is read
+  console.log(`Database type from env: ${process.env.DB_TYPE}`);
 
   const password = await bcrypt.hash("password", 10);
 
@@ -32,11 +30,10 @@ async function seed() {
     { id: 'practice_SOUTH', name: 'South Valley Vets' },
   ];
 
-  // Pre-generate UUIDs for users to ensure consistent linking
   const adminUserId = crypto.randomUUID();
   const practiceAdminUserId = crypto.randomUUID();
-  const client1UserId = crypto.randomUUID();
-  const client2UserId = crypto.randomUUID();
+  const client1UserId = crypto.randomUUID(); // This client will own pets for practice_NORTH
+  const client2UserId = crypto.randomUUID(); // This client will own pets for practice_SOUTH
 
   const usersData = [
     {
@@ -44,8 +41,8 @@ async function seed() {
       email: 'admin@vetconnect.pro',
       name: 'Admin User',
       password: password,
-      role: 'ADMINISTRATOR' as User['role'],
-      practiceId: null, // Global admin might not be tied to a single practice in this way
+      role: 'ADMINISTRATOR' as typeof UserRoleEnum.ADMINISTRATOR,
+      practiceId: null,
       currentPracticeId: 'practice_MAIN_HQ',
     },
     {
@@ -53,8 +50,8 @@ async function seed() {
       email: 'vet@vetconnect.pro',
       name: 'Dr. Vet PracticeAdmin',
       password: password,
-      role: 'PRACTICE_ADMINISTRATOR' as User['role'],
-      practiceId: 'practice_NORTH', // Manages North Clinic
+      role: 'PRACTICE_ADMINISTRATOR' as typeof UserRoleEnum.PRACTICE_ADMINISTRATOR,
+      practiceId: 'practice_NORTH',
       currentPracticeId: 'practice_NORTH',
     },
     {
@@ -62,8 +59,8 @@ async function seed() {
       email: 'client@vetconnect.pro',
       name: 'Pet Owner Client',
       password: password,
-      role: 'CLIENT' as User['role'],
-      practiceId: 'practice_NORTH', // Belongs to North Clinic
+      role: 'CLIENT' as typeof UserRoleEnum.CLIENT,
+      practiceId: 'practice_NORTH',
       currentPracticeId: null,
     },
     {
@@ -71,8 +68,8 @@ async function seed() {
       email: 'testclient@example.com',
       name: 'Test Client Example',
       password: password,
-      role: 'CLIENT' as User['role'],
-      practiceId: 'practice_SOUTH', // Belongs to South Clinic
+      role: 'CLIENT' as typeof UserRoleEnum.CLIENT,
+      practiceId: 'practice_SOUTH',
       currentPracticeId: null,
     },
   ];
@@ -83,19 +80,62 @@ async function seed() {
     { administratorId: adminUserId, practiceId: 'practice_SOUTH' },
   ];
 
-  // await enableForeignKeysForSqlite(); // If needed
+  let appointmentCategoryId: number | undefined;
+  let appointmentTypeId: number | undefined;
 
-  // For simplicity, we'll delete existing data first to make the seeder idempotent.
-  // In a production-like seeder, you might want more sophisticated checks or updates.
+  const customFieldCategoriesData = [
+    { practiceId: 'practice_NORTH', name: 'Appointments', description: 'Categories for appointment-related custom fields' },
+  ];
+
+  // --- New Pets Data ---
+  const petsData = [
+    {
+      id: crypto.randomUUID(),
+      name: 'Buddy',
+      species: 'Dog',
+      breed: 'Golden Retriever',
+      dateOfBirth: new Date('2020-05-15'), // Example Date object
+      ownerId: client1UserId,
+      practiceId: 'practice_NORTH',
+    },
+    {
+      id: crypto.randomUUID(),
+      name: 'Whiskers',
+      species: 'Cat',
+      breed: 'Siamese',
+      dateOfBirth: new Date('2021-02-28'),
+      ownerId: client1UserId,
+      practiceId: 'practice_NORTH',
+    },
+    {
+      id: crypto.randomUUID(),
+      name: 'Captain Fluff',
+      species: 'Guinea Pig',
+      breed: null,
+      dateOfBirth: new Date('2023-01-10'),
+      ownerId: client2UserId,
+      practiceId: 'practice_SOUTH',
+    },
+  ];
+
   console.log('🗑️ Clearing existing data...');
   try {
-    // Order of deletion matters due to foreign key constraints if they are enforced
+    // ORDER IS CRUCIAL DUE TO FOREIGN KEY CONSTRAINTS
+    // Delete tables that depend on others first
+    // (e.g., appointments, healthPlans, whiteboardItems would depend on pets/users)
+    // For simplicity, we are deleting pets before users/practices here,
+    // assuming no direct foreign keys from pets to those yet, or cascade is handled.
+    // If you add appointments later, they must be deleted BEFORE pets.
+    await db.delete(customFieldValues);
+    await db.delete(customFieldGroups);
+    await db.delete(customFieldCategories);
+    await db.delete(pets); // <--- Add pets to deletion order
     await db.delete(administratorAccessiblePractices);
     await db.delete(users);
     await db.delete(practices);
     console.log('✅ Existing data cleared.');
   } catch (error) {
-    console.error('⚠️ Error clearing data (might be okay if tables are empty):', error);
+    console.error('⚠️ Error clearing data (might be okay if tables are empty or FKs are deferred):', error);
   }
 
   console.log('Inserting practices...');
@@ -104,20 +144,18 @@ async function seed() {
     console.log(`✅ Inserted ${practicesData.length} practices.`);
   } catch (error) {
     console.error('❌ Error inserting practices:', error);
-    throw error; // Stop seeding if critical data fails
+    throw error;
   }
 
   console.log('Inserting users...');
   try {
-    // Ensure role values are correctly typed for insertion
     const typedUsersData = usersData.map(user => ({
       ...user,
-      role: user.role as typeof userRoleEnum[number], // Cast to the specific enum type Drizzle expects for the column
+      role: user.role,
     }));
     await db.insert(users).values(typedUsersData);
     console.log(`✅ Inserted ${usersData.length} users.`);
-  } catch (error)
- {
+  } catch (error) {
     console.error('❌ Error inserting users:', error);
     throw error;
   }
@@ -131,6 +169,74 @@ async function seed() {
     throw error;
   }
 
+  // --- Insert Pets (after users and practices, as pets depend on them) ---
+  console.log('Inserting pets...');
+  try {
+    await db.insert(pets).values(petsData);
+    console.log(`✅ Inserted ${petsData.length} pets.`);
+  } catch (error) {
+    console.error('❌ Error inserting pets:', error);
+    throw error;
+  }
+
+  // --- Custom Fields Seeding ---
+  console.log('Inserting custom field categories...');
+  try {
+    const insertedCategories = await db.insert(customFieldCategories).values(customFieldCategoriesData).returning({ id: customFieldCategories.id });
+    if (insertedCategories.length > 0) {
+      appointmentCategoryId = insertedCategories[0].id;
+      console.log(`✅ Inserted ${insertedCategories.length} custom field categories. First ID: ${appointmentCategoryId}`);
+    } else {
+      console.warn('⚠️ No categories were inserted or ID was not returned.');
+    }
+  } catch (error) {
+    console.error('❌ Error inserting custom field categories:', error);
+    throw error;
+  }
+
+  if (appointmentCategoryId) {
+    const customFieldGroupsData = [
+      { categoryId: appointmentCategoryId, practiceId: 'practice_NORTH', name: 'Appointment Types', key: 'appointment_types', description: 'Types of appointments available' },
+    ];
+
+    console.log('Inserting custom field groups...');
+    try {
+      const insertedGroups = await db.insert(customFieldGroups).values(customFieldGroupsData).returning({ id: customFieldGroups.id });
+      if (insertedGroups.length > 0) {
+        appointmentTypeId = insertedGroups[0].id;
+        console.log(`✅ Inserted ${insertedGroups.length} custom field groups. First ID: ${appointmentTypeId}`);
+      } else {
+        console.warn('⚠️ No groups were inserted or ID was not returned.');
+      }
+    } catch (error) {
+      console.error('❌ Error inserting custom field groups:', error);
+      throw error;
+    }
+  } else {
+    console.warn('⚠️ Skipping custom field group insertion: No category ID available.');
+  }
+
+  if (appointmentTypeId) {
+    const customFieldValuesData = [
+      { groupId: appointmentTypeId, practiceId: 'practice_NORTH', value: 'virtual', label: 'Virtual Consultation', isActive: 1 },
+      { groupId: appointmentTypeId, practiceId: 'practice_NORTH', value: 'in-person', label: 'In-Person Visit', isActive: 1 },
+      { groupId: appointmentTypeId, practiceId: 'practice_NORTH', value: 'emergency', label: 'Emergency Visit', isActive: 1 },
+      { groupId: appointmentTypeId, practiceId: 'practice_NORTH', value: 'follow-up', label: 'Follow-up Check', isActive: 1 },
+      { groupId: appointmentTypeId, practiceId: 'practice_NORTH', value: 'surgery', label: 'Surgery Consultation', isActive: 0 },
+    ];
+
+    console.log('Inserting custom field values...');
+    try {
+      await db.insert(customFieldValues).values(customFieldValuesData);
+      console.log(`✅ Inserted ${customFieldValuesData.length} custom field values.`);
+    } catch (error) {
+      console.error('❌ Error inserting custom field values:', error);
+      throw error;
+    }
+  } else {
+    console.warn('⚠️ Skipping custom field value insertion: No group ID available.');
+  }
+
   console.log('🌳 Database seeding completed successfully!');
 }
 
@@ -141,9 +247,5 @@ seed()
     process.exit(1);
   })
   .finally(async () => {
-    // If your db client has a close/end method, you might call it here.
-    // For `postgres` (node-postgres), it's `await sql.end()`.
-    // For `better-sqlite3`, the `db` object in `src/db/index.ts` is derived from `sqliteClient.close()`.
-    // Node.js will typically handle resource cleanup on script exit if not explicitly closed.
     console.log('🌱 Seeder script finished.');
   });
