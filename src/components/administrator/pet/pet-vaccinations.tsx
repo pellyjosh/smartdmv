@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import Link from "next/link";
 import { format } from "date-fns";
 import { 
   ChevronDown,
@@ -28,11 +28,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useAuth } from "@/hooks/use-auth";
-import { UserRole } from "@shared/schema";
+import { useUser } from "@/context/UserContext";
 
-const PetVaccinations = ({ petId }) => {
-  const { user } = useAuth();
+const PetVaccinations = ({ petId }: { petId: string }) => {
+  const { user } = useUser();
   const [expanded, setExpanded] = useState(true);
   
   // Fetch vaccinations for the pet
@@ -53,13 +52,13 @@ const PetVaccinations = ({ petId }) => {
   });
 
   // Format date for display
-  const formatDate = (dateString) => {
+  const formatDate = (dateString: string | null) => {
     if (!dateString) return "N/A";
     return format(new Date(dateString), "MMM d, yyyy");
   };
 
   // Get status of a vaccination
-  const getVaccinationStatus = (vaccination) => {
+  const getVaccinationStatus = (vaccination: any) => {
     if (vaccination.status === "scheduled") {
       return {
         label: "Scheduled",
@@ -119,9 +118,9 @@ const PetVaccinations = ({ petId }) => {
     };
   };
 
-  const isPracticeAdmin = user?.role === UserRole.PRACTICE_ADMIN;
-  const isSuperAdmin = user?.role === UserRole.SUPER_ADMIN;
-  const isVet = user?.role === UserRole.VETERINARIAN;
+  const isPracticeAdmin = user?.role === "PRACTICE_ADMINISTRATOR";
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const isVet = user?.role === "VETERINARIAN";
   const canManageVaccinations = isPracticeAdmin || isSuperAdmin || isVet;
 
   return (
@@ -135,14 +134,14 @@ const PetVaccinations = ({ petId }) => {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            {canManageVaccinations && (
-              <Link href={`/vaccinations/add?petId=${petId}`}>
-                <Button size="sm" className="h-8 gap-1">
-                  <Plus className="h-4 w-4" />
-                  Add Vaccination
-                </Button>
-              </Link>
-            )}
+              {canManageVaccinations && (
+                <Link href={`/vaccinations/add?petId=${petId}`}>
+                  <Button size="sm" className="h-8 gap-1">
+                    <Plus className="h-4 w-4" />
+                    Add Vaccination
+                  </Button>
+                </Link>
+              )}
             <Button
               variant="ghost"
               size="sm"
@@ -194,7 +193,7 @@ const PetVaccinations = ({ petId }) => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {vaccinations.map((vaccination) => {
+                  {vaccinations.map((vaccination: any) => {
                     const status = getVaccinationStatus(vaccination);
                     
                     return (
@@ -221,18 +220,18 @@ const PetVaccinations = ({ petId }) => {
                         {canManageVaccinations && (
                           <TableCell className="text-right">
                             <div className="flex gap-2 justify-end">
-                              <Link href={`/vaccinations/${vaccination.id}`}>
-                                <Button variant="ghost" size="sm">
-                                  Details
+                            <Link href={`/vaccinations/${vaccination.id}`}>
+                              <Button variant="ghost" size="sm">
+                                Details
+                              </Button>
+                            </Link>
+                            {vaccination.status === "completed" && (
+                              <Link href={`/vaccinations/certificate/${vaccination.id}`}>
+                                <Button variant="outline" size="sm">
+                                  Certificate
                                 </Button>
                               </Link>
-                              {vaccination.status === "completed" && (
-                                <Link href={`/vaccinations/certificate/${vaccination.id}`}>
-                                  <Button variant="outline" size="sm">
-                                    Certificate
-                                  </Button>
-                                </Link>
-                              )}
+                            )}
                             </div>
                           </TableCell>
                         )}

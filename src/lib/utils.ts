@@ -87,3 +87,46 @@ export function formatDate(date: Date): string {
     day: 'numeric',
   });
 }
+
+export function getInitials(name: string): string {
+  if (!name) return "?";
+  
+  const parts = name.trim().split(/\s+/);
+  
+  if (parts.length === 1) {
+    return parts[0].charAt(0).toUpperCase();
+  }
+  
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
+/**
+ * Generate a consistent background color for an avatar based on a name
+ * @param name The name to generate a color from
+ * @returns A CSS color value
+ */
+export function getAvatarColorFromName(name: string): string {
+  if (!name) return "#6366f1"; // Default to indigo
+
+  const colors = [
+    "#f97316", // orange-500
+    "#8b5cf6", // violet-500
+    "#06b6d4", // cyan-500
+    "#22c55e", // green-500
+    "#f43f5e", // rose-500
+    "#3b82f6", // blue-500
+    "#14b8a6", // teal-500
+    "#a855f7", // purple-500
+    "#f59e0b", // amber-500
+    "#6366f1", // indigo-500
+  ];
+
+  // Similar hash function as getPetAvatarColors
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+}

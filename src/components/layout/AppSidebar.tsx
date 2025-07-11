@@ -228,25 +228,25 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "SOAP Notes",
-        href: "/soap-notes",
+        href: "/admin/soap-notes",
         icon: FileEdit,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
       },
       {
         title: "Patient Timeline",
-        href: "/patient-timeline",
+        href: "/admin/patient-timeline",
         icon: ClipboardList,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
       },
       {
         title: "Whiteboard",
-        href: "/whiteboard",
+        href: "/admin/whiteboard",
         icon: Tablet,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
       },
       {
         title: "Checklists",
-        href: "/checklists",
+        href: "/admin/checklists",
         icon: ClipboardList,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
       }
@@ -260,26 +260,26 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "Lab Integration",
-        href: "/lab-integration",
+        href: "/admin/lab-integration",
         icon: Microscope,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
       },
       {
         title: "Medical Imaging",
-        href: "/medical-imaging",
+        href: "/admin/medical-imaging",
         icon: FlaskConical,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
       },
       {
         title: "Disease Reporting",
-        href: "/disease-reporting",
+        href: "/admin/disease-reporting",
         icon: AlertTriangle,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN"],
         marketplaceAddOn: true
       },
       {
         title: "AI Diagnostic Assistant",
-        href: "/ai-diagnostic-assistant",
+        href: "/admin/ai-diagnostic-assistant",
         icon: CircuitBoard,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN"]
       }
@@ -293,26 +293,26 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "Inventory",
-        href: "/inventory",
+        href: "/admin/inventory",
         icon: Package,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
       },
       {
         title: "Boarding",
-        href: "/boarding",
+        href: "/admin/boarding",
         icon: Warehouse,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN", "RECEPTIONIST"]
       },
       {
         title: "Point of Sale",
-        href: "/pos",
+        href: "/admin/pos",
         icon: CreditCard,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "ACCOUNTANT", "RECEPTIONIST", "CASHIER", "OFFICE_MANAGER"],
         marketplaceAddOn: true
       },
       {
         title: "Referrals",
-        href: "/referrals",
+        href: "/admin/referrals",
         icon: Trophy,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN"]
       }

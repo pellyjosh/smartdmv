@@ -14,13 +14,18 @@ export const text = (
   name: string,
   // Drizzle's text config can include enums.
   // Example: { enum: ["value1", "value2"] }
-  config?: { enum?: readonly [string, ...string[]]; length?: number } // Added length for pg
+  config?: { enum?: readonly [string, ...string[]]; length?: number; mode?: 'text' | 'array' } // Added length for pg
 ) => {
+  const baseText = dbType === 'sqlite' ? sqliteCore.text(name) : pgCore.text(name, config);
+
+  if (config?.mode === 'array') {
+    return dbType === 'sqlite' ? sqliteCore.text(name).$type<string[]>() : pgCore.text(name).array();
+  }
   if (dbType === 'sqlite') {
     // sqliteCore.text can take enum: { enum: ["a", "b"] }
     return sqliteCore.text(name, config ? { enum: config.enum } : undefined);
   }
-  // pgCore.text can take enum: { enum: ["a", "b"] } and length
+    // pgCore.text can take enum: { enum: ["a", "b"] } and length
   return pgCore.text(name, config);
 };
 
@@ -42,3 +47,8 @@ export const primaryKey = dbType === 'sqlite' ? sqliteCore.primaryKey : pgCore.p
 
 export const timestamp = (name: string, p0?: { mode: string; }) =>
   dbType === 'sqlite' ? sqliteCore.integer() : pgCore.timestamp(name);
+
+export const boolean = (name: string) => dbType === 'sqlite' ? sqliteCore.integer(name, { mode: 'boolean' }) : pgCore.boolean(name);
+
+export const decimal = (name: string, config?: pgCore.DecimalConfig) =>
+    dbType === 'sqlite' ? sqliteCore.text(name) : pgCore.decimal(name, config);

@@ -96,10 +96,13 @@ export default function AppointmentRequestsPage() {
   // Approve request mutation
   const approveMutation = useMutation({
     mutationFn: async (id: number) => {
+      console.log(`Approving appointment request with ID: ${id}`);
       const res = await apiRequest("POST", `/api/appointment-requests/${id}/approve`);
       if (!res.ok) {
-        throw new Error(`Failed to approve request: ${res.statusText}`);
+        console.error(`Failed to approve request: ${res.status} ${res.statusText}`);
+        throw new Error(`Failed to approve request: ${res.status} ${res.statusText}`);
       }
+      console.log("Request approved successfully");
       return res.json(); // Assuming success returns some data
     },
     onSuccess: () => {
@@ -112,9 +115,10 @@ export default function AppointmentRequestsPage() {
       setIsApproveDialogOpen(false);
     },
     onError: (error: Error) => {
+      console.error("Error approving request:", error);
       toast({
         title: "Error Approving Request",
-        description: error.message,
+        description: error.message || "An unexpected error occurred while approving the request.",
         variant: "destructive",
       });
     },
@@ -123,12 +127,15 @@ export default function AppointmentRequestsPage() {
   // Reject request mutation
   const rejectMutation = useMutation({
     mutationFn: async ({ id, reason }: { id: number; reason: string }) => {
+      console.log(`Rejecting appointment request with ID: ${id}, Reason: ${reason}`);
       const res = await apiRequest("POST", `/api/appointment-requests/${id}/reject`, {
         rejectionReason: reason
       });
       if (!res.ok) {
-        throw new Error(`Failed to reject request: ${res.statusText}`);
+        console.error(`Failed to reject request: ${res.status} ${res.statusText}`);
+        throw new Error(`Failed to reject request: ${res.status} ${res.statusText}`);
       }
+      console.log("Request rejected successfully");
       return res.json(); // Assuming success returns some data
     },
     onSuccess: () => {
@@ -141,9 +148,10 @@ export default function AppointmentRequestsPage() {
       setRejectReason("");
     },
     onError: (error: Error) => {
+      console.error("Error rejecting request:", error);
       toast({
         title: "Error Rejecting Request",
-        description: error.message,
+        description: error.message || "An unexpected error occurred while rejecting the request.",
         variant: "destructive",
       });
     },

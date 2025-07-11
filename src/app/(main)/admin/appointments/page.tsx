@@ -112,8 +112,13 @@ export default function AppointmentsPage() {
 
   // Fetch appointments
   const { data: appointments, isLoading: isLoadingAppointments } = useQuery<Appointment[]>({
-    queryKey: ["/api/appointments"],
+    queryKey: ["/api/appointments", ],
     enabled: !!user,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/appointments?practiceId=${userPracticeId}`);
+      if (!res.ok) throw new Error("Failed to fetch appointments");
+      return res.json();
+    },
   });
 
   // Fetch pets for dropdown
@@ -132,6 +137,13 @@ export default function AppointmentsPage() {
   // Fetch staff for dropdown (only when needed)
   const { data: staff, isLoading: isLoadingStaff } = useQuery<any[]>({
     queryKey: ["/api/users"],
+    queryFn: async () => {
+      const res = await fetch(`/api/users?practiceId=${userPracticeId}`);
+      if (!res.ok) {
+        throw new Error("Failed to fetch staff");
+      }
+      return res.json();
+    },
     enabled: !!user && user.role === UserRoleEnum.PRACTICE_ADMINISTRATOR,
   });
 

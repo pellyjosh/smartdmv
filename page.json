@@ -1,0 +1,7 @@
+{
+    "status": "FAILED",
+    "message": "Kindly enter the mobile no registered with your bank",
+    "transactionReference": "MNFY|56|20250709134155|032771",
+    "paymentReference": "KF-card-686e6392d8367",
+    "authorizedAmount": 0
+}

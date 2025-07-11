@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
+import { useForm, useFormContext } from 'react-hook-form';
 import { z } from 'zod';
 import { Loader2, Plus, X, User, Clipboard, Home, CalendarClock, Edit, FileText } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-
+import { useUser } from '@/context/UserContext';
 // Types for the admission data
 type AdmissionStatus = 'admitted' | 'discharged' | 'hold' | 'isolation';
 
@@ -46,7 +46,7 @@ type AdmissionRoom = {
   roomNumber: string;
   type: string;
   capacity: number;
-  isAvailable: number;
+  status: string;
   notes: string | null;
   practiceId: number;
   createdAt: string;
@@ -78,18 +78,21 @@ type Pet = {
   name: string;
   species: string;
   breed: string | null;
+  ownerId: Text
 };
 
 type User = {
   id: number;
   username: string;
   email: string;
+  role: string;
 };
 
 // Form schemas
 const admissionFormSchema = z.object({
   petId: z.string().min(1, { message: "Pet is required" }),
   clientId: z.string().min(1, { message: "Client is required" }),
+  practiceId: z.string().min(1, { message: "PricticeId is required" }),
   attendingVetId: z.string().min(1, { message: "Attending veterinarian is required" }),
   reason: z.string().min(1, { message: "Reason for admission is required" }),
   notes: z.string().optional(),
@@ -143,29 +146,71 @@ const PetAdmissionPage = () => {
   const [addMedicationDialogOpen, setAddMedicationDialogOpen] = useState(false);
   const [addRoomDialogOpen, setAddRoomDialogOpen] = useState(false);
 
+  const { userPracticeId } = useUser();
+
   // Queries
   const { data: admissions = [], isLoading: isLoadingAdmissions, refetch: refetchAdmissions } = useQuery<Admission[]>({
     queryKey: ['/api/admissions'],
+    queryFn: async () => { // Added queryFn here
+      const res = await apiRequest("GET", "/api/admissions");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to fetch admissions");
+      }
+      return await res.json();
+    },
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const { data: rooms = [], isLoading: isLoadingRooms, refetch: refetchRooms } = useQuery<AdmissionRoom[]>({
     queryKey: ['/api/admission-rooms'],
+    queryFn: async () => { // Added queryFn here
+      const res = await apiRequest("GET", "/api/admission-rooms");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to fetch rooms");
+      }
+      return await res.json();
+    },
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const { data: availableRooms = [], refetch: refetchAvailableRooms } = useQuery<AdmissionRoom[]>({
-    queryKey: ['/api/admission-rooms/available'],
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    queryKey: ['/api/admission-rooms', 'available'],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admission-rooms?available=true");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to fetch available rooms");
+      }
+      return await res.json();
+    },
+    staleTime: 1000 * 60 * 5,
   });
 
   const { data: pets = [] } = useQuery<Pet[]>({
     queryKey: ['/api/pets'],
+    queryFn: async () => { // Added queryFn here
+      const res = await apiRequest("GET", `/api/pets?practiceId=${userPracticeId}`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to fetch pets");
+      }
+      return await res.json();
+    },
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ['/api/users'],
+    queryFn: async () => { 
+      const res = await apiRequest("GET", `/api/users?practiceId=${userPracticeId}`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to fetch users");
+      }
+      return await res.json();
+    },
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
@@ -180,6 +225,7 @@ const PetAdmissionPage = () => {
       notes: "",
       roomId: "",
       status: "admitted",
+      practiceId: userPracticeId,
     },
   });
 
@@ -228,12 +274,14 @@ const PetAdmissionPage = () => {
     },
     onSuccess: () => {
       toast({
-        title: "Success",
+        title: "Admission Created",
         description: "Pet has been admitted",
       });
+      setAddRoomDialogOpen(false);
       admissionForm.reset();
       queryClient.invalidateQueries({ queryKey: ['/api/admissions'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admission-rooms/available'] });
+      // Invalidate the parent key to refetch both all rooms and available rooms
+      queryClient.invalidateQueries({ queryKey: ['/api/admission-rooms'] });
     },
     onError: (error) => {
       toast({
@@ -255,14 +303,15 @@ const PetAdmissionPage = () => {
     },
     onSuccess: () => {
       toast({
-        title: "Success",
+        title: "Pet Discharged",
         description: "Pet has been discharged",
       });
       dischargeForm.reset();
       setDischargeDialogOpen(false);
       setSelectedAdmission(null);
       queryClient.invalidateQueries({ queryKey: ['/api/admissions'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admission-rooms/available'] });
+      // Invalidate the parent key to refetch both all rooms and available rooms
+      queryClient.invalidateQueries({ queryKey: ['/api/admission-rooms'] });
     },
     onError: (error) => {
       toast({
@@ -284,11 +333,12 @@ const PetAdmissionPage = () => {
     },
     onSuccess: () => {
       toast({
-        title: "Success",
+        title: "Note Added",
         description: "Note has been added",
       });
       noteForm.reset();
       setAddNoteDialogOpen(false);
+      // Invalidate specific admission notes query if implemented, otherwise general admissions
       if (selectedAdmission) {
         queryClient.invalidateQueries({ queryKey: [`/api/admissions/${selectedAdmission.id}/notes`] });
       }
@@ -313,11 +363,12 @@ const PetAdmissionPage = () => {
     },
     onSuccess: () => {
       toast({
-        title: "Success",
+        title: "Medication Recorded",
         description: "Medication administration has been recorded",
       });
       medicationForm.reset();
       setAddMedicationDialogOpen(false);
+      // Invalidate specific admission medications query if implemented, otherwise general admissions
       if (selectedAdmission) {
         queryClient.invalidateQueries({ queryKey: [`/api/admissions/${selectedAdmission.id}/medications`] });
       }
@@ -333,7 +384,8 @@ const PetAdmissionPage = () => {
 
   const createRoomMutation = useMutation({
     mutationFn: async (data: z.infer<typeof roomFormSchema>) => {
-      const res = await apiRequest("POST", "/api/admission-rooms", data);
+      const payload = { ...data, practiceId: userPracticeId };
+      const res = await apiRequest("POST", "/api/admission-rooms", payload);
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to create room");
@@ -342,13 +394,14 @@ const PetAdmissionPage = () => {
     },
     onSuccess: () => {
       toast({
-        title: "Success",
+        title: "Room Created",
         description: "Room has been created",
       });
       roomForm.reset();
       setAddRoomDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/admission-rooms'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admission-rooms/available'] });
+      refetchRooms(); // Explicitly refetch all rooms
+    refetchAvailableRooms(); 
+      queryClient.invalidateQueries({ queryKey: ['/api/admission-rooms'] }); // This will invalidate both room queries
     },
     onError: (error) => {
       toast({
@@ -361,6 +414,7 @@ const PetAdmissionPage = () => {
 
   // Handlers
   const onAdmissionSubmit = (data: z.infer<typeof admissionFormSchema>) => {
+    // Convert string IDs to numbers for the mutation
     createAdmissionMutation.mutate(data);
   };
 
@@ -372,14 +426,14 @@ const PetAdmissionPage = () => {
 
   const onNoteSubmit = (data: z.infer<typeof noteFormSchema>) => {
     if (selectedAdmission) {
-      addNoteMutation.mutate({ admissionId: selectedAdmission.id, note: data.note });
+      addNoteMutation.mutate({ admissionId: selectedAdmission.id, note: data.note }); // Ensure note is string
     }
   };
 
   const onMedicationSubmit = (data: z.infer<typeof medicationFormSchema>) => {
     if (selectedAdmission) {
       addMedicationMutation.mutate({ 
-        admissionId: selectedAdmission.id, 
+        admissionId: selectedAdmission.id, // Ensure admissionId is number
         medicationName: data.medicationName, 
         dosage: data.dosage, 
         notes: data.notes 
@@ -388,7 +442,9 @@ const PetAdmissionPage = () => {
   };
 
   const onRoomSubmit = (data: z.infer<typeof roomFormSchema>) => {
-    createRoomMutation.mutate(data);
+    // Convert capacity to number for the mutation
+    const numericData = { ...data, capacity: Number(data.capacity) };
+    createRoomMutation.mutate(numericData);
   };
 
   const handleDischargeClick = (admission: Admission) => {
@@ -409,7 +465,7 @@ const PetAdmissionPage = () => {
   // Filter admissions by status for active tab
   const filteredAdmissions = activeTab === "active" 
     ? admissions.filter(a => ['admitted', 'hold', 'isolation'].includes(a.status))
-    : admissions.filter(a => a.status === 'discharged');
+    : admissions.filter(a => a.status === 'discharged'); // Ensure 'discharged' is correctly filtered
 
   // Component
   return (
@@ -438,7 +494,20 @@ const PetAdmissionPage = () => {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Pet</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select
+                        onValueChange={(value) => {
+                          field.onChange(value); // Update the petId field
+                          const selectedPet = pets.find(pet => pet.id.toString() === value);
+                          if (selectedPet) {
+                            admissionForm.setValue("clientId", selectedPet.ownerId.toString(), {
+                              shouldValidate: true,
+                            });
+                          } else {
+                            admissionForm.setValue("clientId", "", { shouldValidate: true });
+                          }
+                        }}
+                        defaultValue={field.value}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select a pet" />
@@ -460,26 +529,27 @@ const PetAdmissionPage = () => {
                 <FormField
                   control={admissionForm.control}
                   name="clientId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Client (Owner)</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  render={({ field }) => {
+                    const selectedClient = users.find(user => user.id.toString() === field.value);
+                    return (
+                      <FormItem>
+                        <FormLabel>Client (Owner)</FormLabel>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a client" />
-                          </SelectTrigger>
+                          <input
+                            type="text"
+                            value={
+                              selectedClient
+                                ? `${selectedClient.username} (${selectedClient.email})`
+                                : ''
+                            }
+                            disabled
+                            className="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 cursor-not-allowed"
+                          />
                         </FormControl>
-                        <SelectContent>
-                          {users.filter(user => user.id !== 1).map(user => (
-                            <SelectItem key={user.id} value={user.id.toString()}>
-                              {user.username} ({user.email})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
 
                 <FormField
@@ -495,9 +565,11 @@ const PetAdmissionPage = () => {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {users.map(user => (
+                        {users
+                          .filter(user => user.role === "VETERINARIAN")
+                          .map(user => (
                             <SelectItem key={user.id} value={user.id.toString()}>
-                              {user.username}
+                              {user.username} ({user.email})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -777,7 +849,7 @@ const PetAdmissionPage = () => {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+      <div className="w-full gap-6 mt-6">
         <Card>
           <CardHeader>
             <CardTitle>Admission Rooms</CardTitle>
@@ -809,8 +881,8 @@ const PetAdmissionPage = () => {
                       <TableCell>{room.type}</TableCell>
                       <TableCell>{room.capacity}</TableCell>
                       <TableCell>
-                        <Badge variant={room.isAvailable ? "default" : "secondary"}>
-                          {room.isAvailable ? "Available" : "Occupied"}
+                        <Badge variant={room.status === "available" ? "default" : "secondary"}>
+                          {room.status === "available" ? "Available" : "Occupied"}
                         </Badge>
                       </TableCell>
                     </TableRow>

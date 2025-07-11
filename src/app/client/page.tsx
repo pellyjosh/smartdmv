@@ -591,7 +591,16 @@ export default function ClientPortalPage() {
   } = useQuery<Pet[]>({ 
     queryKey: ['/api/pets'],
     enabled: user?.role === 'CLIENT'
+    ,queryFn: async () => {
+      const res = await fetch("/api/pets");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to fetch pets");
+      }
+      return await res.json();
+    },
   });
+
 
   // Fetch appointments 
   const { 
@@ -599,7 +608,16 @@ export default function ClientPortalPage() {
     isLoading: isLoadingAppointments,
     error: appointmentsError
   } = useQuery<Appointment[]>({ 
-    queryKey: ['/api/appointments'],
+    queryKey: ['/api/appointments/client'],
+    queryFn: async () => {
+      const res = await fetch(`/api/appointments?clientId=${user?.id}`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to fetch client appointments");
+      }
+      return await res.json();
+    },
+
     enabled: user?.role === 'CLIENT'
   });
 
@@ -610,16 +628,32 @@ export default function ClientPortalPage() {
     error: healthPlansError
   } = useQuery<HealthPlan[]>({ 
     queryKey: ['/api/health-plans'],
+    queryFn: async () => {
+      const res = await fetch(`/api/health-plans/client`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to fetch health plans");
+      }
+      return await res.json();
+    },
     enabled: user?.role === 'CLIENT'
   });
 
   // Fetch notifications
   const { 
-    data: notifications = [],
+    data: notifications = undefined, // Initialize with undefined
     isLoading: isLoadingNotifications,
     error: notificationsError
   } = useQuery<Notification[]>({ 
-    queryKey: ['/api/notifications'],
+    queryKey: ['/api/notifications/client'],
+    queryFn: async () => {
+      const res = await fetch(`/api/notifications/client`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to fetch notifications");
+      }
+      return await res.json();
+    },
     enabled: user?.role === 'CLIENT'
   });
 
@@ -658,35 +692,38 @@ export default function ClientPortalPage() {
   };
 
   // Error handling
-  if (petsError || appointmentsError || healthPlansError || notificationsError) {
-    return (
-      <div className="container mx-auto py-10 px-4 max-w-5xl">
-        <Card>
-          <CardHeader>
-            <CardTitle>Error</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-red-500">
-              {petsError?.message || 
-               appointmentsError?.message || 
-               healthPlansError?.message || 
-               notificationsError?.message || 
-               "An error occurred while loading your data."}
-            </p>
-            <Button onClick={() => window.location.reload()} className="mt-4">
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // if (petsError || appointmentsError || healthPlansError || notificationsError) {
+  //   return (
+  //     <div className="container mx-auto py-10 px-4 max-w-5xl">
+  //       <Card>
+  //         <CardHeader>
+  //           <CardTitle>Error</CardTitle>
+  //         </CardHeader>
+  //         <CardContent>
+  //           <p className="text-red-500">
+  //             {petsError?.message || 
+  //              appointmentsError?.message || 
+  //              healthPlansError?.message || 
+  //              notificationsError?.message || 
+  //              "An error occurred while loading your data."}
+  //           </p>
+  //           <Button onClick={() => window.location.reload()} className="mt-4">
+  //             Retry
+  //           </Button>
+  //         </CardContent>
+  //       </Card>
+  //     </div>
+  //   );
+  // }
 
   // Calculate unread notifications count
   const unreadCount = notifications?.filter((n: any) => !n.read).length || 0;
 
   // User Profile component with Dialog
-  const UserProfileContent = () => {
+
+
+    // User Profile component with Dialog
+    const UserProfileContent = () => {
     const { user } = useUser();
     
     return (
@@ -1364,7 +1401,7 @@ export default function ClientPortalPage() {
               {notifications
                 .filter((n: any) => !n.read)
                 .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                .map((notification: any) => (
+                .map((notification: any) => notifications && (
                   <NotificationCard 
                     key={notification.id} 
                     notification={notification} 

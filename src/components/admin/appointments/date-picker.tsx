@@ -142,10 +142,10 @@ export function DatePicker({ selectedDate, onDateSelect }: DatePickerProps) {
             <button 
               className={`w-8 h-8 rounded-full text-sm relative
                 ${isSelectedDate(day, true) 
-                  ? "bg-primary-500 text-white font-medium hover:bg-primary-600" 
+                  ? "bg-primary-500 text-white dark:bg-primary-400 dark:text-black font-medium hover:bg-primary-600 dark:hover:bg-primary-500" 
                   : isCurrentMonth && day === todayDate
-                    ? "bg-primary-50 text-primary-700 font-medium hover:bg-primary-100"
-                    : "text-slate-700 hover:bg-slate-100"
+                    ? "bg-primary-50 text-primary-700 dark:bg-primary-900 dark:text-primary-200 font-medium hover:bg-primary-100 dark:hover:bg-primary-800"
+                    : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                 }`}
               onClick={() => selectDate(day, true)}
             >

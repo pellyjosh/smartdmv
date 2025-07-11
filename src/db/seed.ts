@@ -17,6 +17,7 @@ import {
   pets // <--- Import pets schema
 } from './schema';
 import { User } from '@/context/UserContext';
+import { Phone } from 'lucide-react';
 
 async function seed() {
   console.log('🌱 Starting database seeding...');
@@ -39,6 +40,12 @@ async function seed() {
     {
       id: adminUserId,
       email: 'admin@vetconnect.pro',
+      username: 'superadmin',
+      phone: '08101572723',
+      address: '123, New Ave drive, Ikeja Lagos',
+      state: 'Lagos',
+      zip_code: '123456',
+      country: 'Nigeria',
       name: 'Admin User',
       password: password,
       role: 'ADMINISTRATOR' as typeof UserRoleEnum.ADMINISTRATOR,
@@ -49,27 +56,45 @@ async function seed() {
       id: practiceAdminUserId,
       email: 'vet@vetconnect.pro',
       name: 'Dr. Vet PracticeAdmin',
+      username: 'admin',
+      phone: '08101572723',
+      address: '123, New Ave drive, Ikeja Lagos',
+      state: 'Lagos',
+      zip_code: '123456',
+      country: 'Nigeria',
       password: password,
       role: 'PRACTICE_ADMINISTRATOR' as typeof UserRoleEnum.PRACTICE_ADMINISTRATOR,
-      practiceId: 'practice_NORTH',
-      currentPracticeId: 'practice_NORTH',
+      practiceId: 'practice_MAIN_HQ',
+      currentPracticeId: 'practice_MAIN_HQ',
     },
     {
       id: client1UserId,
       email: 'client@vetconnect.pro',
       name: 'Pet Owner Client',
+      username: 'client1',
+      phone: '08101572723',
+      address: '123, New Ave drive, Ikeja Lagos',
+      state: 'Lagos',
+      zip_code: '123456',
+      country: 'Nigeria',
       password: password,
       role: 'CLIENT' as typeof UserRoleEnum.CLIENT,
-      practiceId: 'practice_NORTH',
+      practiceId: 'practice_MAIN_HQ',
       currentPracticeId: null,
     },
     {
       id: client2UserId,
       email: 'testclient@example.com',
       name: 'Test Client Example',
+      username: 'client2',
+      phone: '08101572723',
+      address: '123, New Ave drive, Ikeja Lagos',
+      state: 'Lagos',
+      zip_code: '123456',
+      country: 'Nigeria',
       password: password,
       role: 'CLIENT' as typeof UserRoleEnum.CLIENT,
-      practiceId: 'practice_SOUTH',
+      practiceId: 'practice_MAIN_HQ',
       currentPracticeId: null,
     },
   ];
@@ -84,7 +109,7 @@ async function seed() {
   let appointmentTypeId: number | undefined;
 
   const customFieldCategoriesData = [
-    { practiceId: 'practice_NORTH', name: 'Appointments', description: 'Categories for appointment-related custom fields' },
+    { practiceId: 'practice_MAIN_HQ', name: 'Appointments', description: 'Categories for appointment-related custom fields' },
   ];
 
   // --- New Pets Data ---
@@ -96,7 +121,7 @@ async function seed() {
       breed: 'Golden Retriever',
       dateOfBirth: new Date('2020-05-15'), // Example Date object
       ownerId: client1UserId,
-      practiceId: 'practice_NORTH',
+      practiceId: 'practice_MAIN_HQ',
     },
     {
       id: crypto.randomUUID(),
@@ -105,7 +130,7 @@ async function seed() {
       breed: 'Siamese',
       dateOfBirth: new Date('2021-02-28'),
       ownerId: client1UserId,
-      practiceId: 'practice_NORTH',
+      practiceId: 'practice_MAIN_HQ',
     },
     {
       id: crypto.randomUUID(),
@@ -114,7 +139,7 @@ async function seed() {
       breed: null,
       dateOfBirth: new Date('2023-01-10'),
       ownerId: client2UserId,
-      practiceId: 'practice_SOUTH',
+      practiceId: 'practice_MAIN_HQ',
     },
   ];
 
@@ -196,7 +221,7 @@ async function seed() {
 
   if (appointmentCategoryId) {
     const customFieldGroupsData = [
-      { categoryId: appointmentCategoryId, practiceId: 'practice_NORTH', name: 'Appointment Types', key: 'appointment_types', description: 'Types of appointments available' },
+      { categoryId: appointmentCategoryId, practiceId: 'practice_MAIN_HQ', name: 'Appointment Types', key: 'appointment_types', description: 'Types of appointments available' },
     ];
 
     console.log('Inserting custom field groups...');
@@ -218,11 +243,11 @@ async function seed() {
 
   if (appointmentTypeId) {
     const customFieldValuesData = [
-      { groupId: appointmentTypeId, practiceId: 'practice_NORTH', value: 'virtual', label: 'Virtual Consultation', isActive: 1 },
-      { groupId: appointmentTypeId, practiceId: 'practice_NORTH', value: 'in-person', label: 'In-Person Visit', isActive: 1 },
-      { groupId: appointmentTypeId, practiceId: 'practice_NORTH', value: 'emergency', label: 'Emergency Visit', isActive: 1 },
-      { groupId: appointmentTypeId, practiceId: 'practice_NORTH', value: 'follow-up', label: 'Follow-up Check', isActive: 1 },
-      { groupId: appointmentTypeId, practiceId: 'practice_NORTH', value: 'surgery', label: 'Surgery Consultation', isActive: 0 },
+      { groupId: appointmentTypeId, practiceId: 'practice_MAIN_HQ', value: 'virtual', label: 'Virtual Consultation', isActive: 1 },
+      { groupId: appointmentTypeId, practiceId: 'practice_MAIN_HQ', value: 'in-person', label: 'In-Person Visit', isActive: 1 },
+      { groupId: appointmentTypeId, practiceId: 'practice_MAIN_HQ', value: 'emergency', label: 'Emergency Visit', isActive: 1 },
+      { groupId: appointmentTypeId, practiceId: 'practice_MAIN_HQ', value: 'follow-up', label: 'Follow-up Check', isActive: 1 },
+      { groupId: appointmentTypeId, practiceId: 'practice_MAIN_HQ', value: 'surgery', label: 'Surgery Consultation', isActive: 0 },
     ];
 
     console.log('Inserting custom field values...');

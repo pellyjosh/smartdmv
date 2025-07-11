@@ -23,14 +23,25 @@ export enum UserRoleEnum {
   OFFICE_MANAGER = 'OFFICE_MANAGER', // Add any missing roles
 }
 
-export type UserRole = typeof UserRoleEnum[number];
+export type UserRole = `${UserRoleEnum}`;
+export const userRoleEnumValues = Object.values(UserRoleEnum);
 
 export const users = dbTable('users', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   email: text('email').notNull().unique(),
+  username: text('username').notNull().unique(),
   name: text('name'),
   password: text('password').notNull(),
-  role: text('role', { enum: UserRoleEnum }).notNull(),
+  phone: text('phone'),
+  address: text('address'),
+  city: text('city'),
+  state: text('state'),
+  zipCode: text('zip_code'),
+  country: text('country'),
+  emergencyContactName: text('emergency_contact_name'),
+  emergencyContactPhone: text('emergency_contact_phone'),
+  emergencyContactRelationship: text('emergency_contact_relationship'),
+  role: text('role', { enum: userRoleEnumValues }).notNull(),
   practiceId: text('practice_id').references(() => practices.id as any, { onDelete: 'set null' }),
   currentPracticeId: text('current_practice_id').references(() => practices.id as any, { onDelete: 'set null' }),
 
@@ -91,8 +102,18 @@ export const administratorAccessiblePracticesRelations = relations(administrator
 export interface User {
   id: string;
   email: string;
+  username: string;
   name: string | null;
   password: string;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zipCode: string | null;
+  country: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  emergencyContactRelationship: string | null;
   role: UserRole;
   practiceId: string | null;
   currentPracticeId: string | null;

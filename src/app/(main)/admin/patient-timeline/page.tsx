@@ -1,0 +1,811 @@
+'use client';
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useRouter } from 'next/navigation';
+import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@/context/UserContext";
+import { format, parseISO, compareDesc, safeParse } from "@/lib/date-utils";
+import { Calendar, Check, ChevronLeft, ChevronRight, Filter, Search, Stethoscope, Clipboard, CalendarCheck, Pill, HeartPulse, Pen, AlertTriangle, Clock, Video } from "lucide-react";
+
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { UserRoleEnum } from "@/db/schema";
+
+// Define types for the timeline items
+export type TimelineItemType = 
+  | "appointment" 
+  | "telemedicine"
+  | "soap_note" 
+  | "prescription" 
+  | "health_plan" 
+  | "health_plan_milestone" 
+  | "checklist"
+  | "checklist_item";
+
+export interface TimelineItem {
+  id: number;
+  type: TimelineItemType;
+  title: string;
+  description: string;
+  date: string;
+  status: string;
+  petId: number;
+  petName?: string;
+  metadata?: any;
+}
+
+export default function PatientTimelinePage() {
+  const { user } = useUser();
+  const { toast } = useToast();
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedPetId, setSelectedPetId] = useState<number | null>(null);
+  const [selectedEventTypes, setSelectedEventTypes] = useState<TimelineItemType[]>([
+    "appointment", "telemedicine", "soap_note", "prescription", "health_plan", "health_plan_milestone", "checklist", "checklist_item"
+  ]);
+  const [timelineView, setTimelineView] = useState<"all" | "completed" | "pending">("all");
+  const [dateRangeStart, setDateRangeStart] = useState<Date | null>(null);
+  const [dateRangeEnd, setDateRangeEnd] = useState<Date | null>(null);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [groupByDate, setGroupByDate] = useState(true);
+
+  // Get the petId from URL query params if available
+  const searchParams = new URLSearchParams(window.location.search);
+  const petIdFromUrl = searchParams.get("petId");
+
+  // When the component mounts, if petId is in URL, set the selected pet
+  useState(() => {
+    if (petIdFromUrl) {
+      setSelectedPetId(Number(petIdFromUrl));
+    }
+  });
+
+  // Check permissions
+  const isPractitioner = [UserRoleEnum.VETERINARIAN, UserRoleEnum.TECHNICIAN, UserRoleEnum.PRACTICE_ADMIN, UserRoleEnum.SUPER_ADMIN, UserRoleEnum.ADMINISTRATOR].includes(user?.role as UserRoleEnum);
+  
+  if (!isPractitioner) {
+    return (
+      <div className="container mx-auto p-4">
+        <Card>
+          <CardContent className="pt-6 text-center">
+            <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold mb-2">Access Restricted</h2>
+            <p className="text-muted-foreground">
+              You don't have permission to access the patient timeline. This feature is available to veterinarians, technicians, and administrators.
+            </p>
+            <Button className="mt-4" onClick={() => router.push("/")}>
+              Return to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Fetch all pets
+  const { data: pets, isLoading: isPetsLoading } = useQuery({
+    queryKey: ["/api/pets"],
+  });
+
+  // Fetch timeline data for the selected pet
+  const { data: timelineData, isLoading: isTimelineLoading, error: timelineError } = useQuery({
+    queryKey: ["/api/pets", selectedPetId, "timeline"],
+    enabled: !!selectedPetId,
+    queryFn: async ({ queryKey }) => {
+      const petId = queryKey[1];
+      console.log(`Fetching timeline data for pet ${petId}...`);
+      
+      try {
+        // First, try to fetch regular pet timeline data
+        const response = await fetch(`/api/pets/${petId}/timeline`, {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Error fetching timeline data: ${response.status} ${response.statusText} - ${errorText}`);
+          throw new Error(`Failed to fetch timeline data: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log(`Timeline data fetched for pet ${petId}: ${data.length} items`);
+        
+        // Check if telemedicine data is present
+        const hasTelemedEvents = data.some(item => item.type === "telemedicine");
+        if (!hasTelemedEvents) {
+          console.log("No telemedicine events found in the regular timeline data");
+          console.log("Will query for virtual appointments separately");
+          
+          // Make a query to get any telemedicine appointments that might be missing
+          try {
+            // For debugging, let's query for any virtual appointments for this pet
+            // Use forTimeline=true to get all historical virtual appointments too
+            const virtualApptsResponse = await fetch(`/api/appointments/virtual?petId=${petId}&forTimeline=true`, {
+              credentials: 'include',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              }
+            });
+            
+            if (virtualApptsResponse.ok) {
+              const virtualAppts = await virtualApptsResponse.json();
+              console.log(`Found ${virtualAppts.length} virtual appointments for pet ${petId}:`, virtualAppts);
+              
+              // If found, transform virtual appointments into timeline items and add them
+              const telemedEvents = virtualAppts.map(appt => ({
+                id: appt.id,
+                type: "telemedicine",
+                title: appt.title || "Virtual Consultation",
+                description: `Virtual appointment with ${appt.practitionerId ? `Dr. ${appt.practitionerId}` : 'a provider'}`,
+                date: appt.date,
+                status: appt.status,
+                petId: appt.petId,
+                petName: data[0]?.petName || "Unknown",
+                metadata: {
+                  practitionerId: appt.practitionerId,
+                  duration: appt.duration,
+                  notes: appt.notes,
+                  summary: appt.summary
+                }
+              }));
+              
+              console.log(`Adding ${telemedEvents.length} telemedicine events to the timeline data`);
+              return [...data, ...telemedEvents];
+            }
+          } catch (virtualError) {
+            console.error("Error fetching virtual appointments:", virtualError);
+            // Don't fail the main timeline if this supplementary query fails
+          }
+        }
+        
+        return data;
+      } catch (error) {
+        console.error("Timeline data fetch error:", error);
+        throw error;
+      }
+    },
+  });
+
+  // Get the selected pet details
+  const selectedPet = useMemo(() => {
+    if (!pets || !selectedPetId) return null;
+    return pets.find((pet: any) => pet.id === selectedPetId);
+  }, [pets, selectedPetId]);
+
+  // Filter and sort timeline items
+  const filteredTimelineItems = useMemo(() => {
+    if (!timelineData) return [];
+    
+    let items = [...timelineData];
+    
+    console.log(`Filtering ${items.length} timeline items`);
+    
+    // Debug telemedicine items
+    const telemedicineItems = items.filter(item => item.type === "telemedicine");
+    if (telemedicineItems.length > 0) {
+      console.log(`Found ${telemedicineItems.length} telemedicine items:`, telemedicineItems);
+    } else {
+      console.log(`No telemedicine items found in the timeline data`);
+    }
+    
+    // Filter by event types
+    items = items.filter(item => selectedEventTypes.includes(item.type));
+    
+    // Filter by status
+    if (timelineView === "completed") {
+      items = items.filter(item => 
+        item.status === "completed" || 
+        item.status === "fulfilled" || 
+        item.status === "locked"
+      );
+    } else if (timelineView === "pending") {
+      items = items.filter(item => 
+        item.status === "scheduled" || 
+        item.status === "active" || 
+        item.status === "pending"
+      );
+    }
+    
+    // Filter by date range
+    if (dateRangeStart) {
+      console.log(`Filtering by start date: ${dateRangeStart}`);
+      // Create a new date object to avoid modifying the original
+      const startDateNoTime = new Date(dateRangeStart);
+      startDateNoTime.setHours(0, 0, 0, 0);
+      
+      items = items.filter(item => {
+        const parsedDate = safeParse(item.date);
+        if (!parsedDate) {
+          console.warn(`Invalid date encountered: ${item.date}`);
+          return false; // Filter out items with invalid dates
+        }
+        console.log(`Item date: ${parsedDate}, comparing with start date: ${startDateNoTime}, result: ${parsedDate >= startDateNoTime}`);
+        return parsedDate >= startDateNoTime;
+      });
+    }
+    if (dateRangeEnd) {
+      console.log(`Filtering by end date: ${dateRangeEnd}`);
+      const endDate = new Date(dateRangeEnd);
+      endDate.setHours(23, 59, 59, 999);
+      
+      items = items.filter(item => {
+        const parsedDate = safeParse(item.date);
+        if (!parsedDate) {
+          console.warn(`Invalid date encountered: ${item.date}`);
+          return false; // Filter out items with invalid dates
+        }
+        console.log(`Item date: ${parsedDate}, comparing with end date: ${endDate}, result: ${parsedDate <= endDate}`);
+        return parsedDate <= endDate;
+      });
+    }
+    
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      items = items.filter(item => 
+        item.title.toLowerCase().includes(query) || 
+        item.description.toLowerCase().includes(query)
+      );
+    }
+    
+    // Sort by date, most recent first
+    items.sort((a, b) => {
+      const dateA = safeParse(a.date);
+      const dateB = safeParse(b.date);
+      
+      // Handle case where one or both dates are invalid
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return 1; // Invalid dates go to the end
+      if (!dateB) return -1;
+      
+      return compareDesc(dateA, dateB);
+    });
+    
+    return items;
+  }, [timelineData, selectedEventTypes, timelineView, dateRangeStart, dateRangeEnd, searchQuery]);
+
+  // Group timeline items by date
+  const groupedTimelineItems = useMemo(() => {
+    if (!filteredTimelineItems || !groupByDate) return null;
+    
+    const groups: Record<string, TimelineItem[]> = {};
+    
+    filteredTimelineItems.forEach(item => {
+      const parsedDate = safeParse(item.date);
+      
+      // Skip items with invalid dates
+      if (!parsedDate) {
+        console.warn(`Invalid date encountered in grouping: ${item.date}`);
+        return;
+      }
+      
+      const dateStr = format(parsedDate, 'yyyy-MM-dd');
+      
+      if (!groups[dateStr]) {
+        groups[dateStr] = [];
+      }
+      
+      groups[dateStr].push(item);
+    });
+    
+    return groups;
+  }, [filteredTimelineItems, groupByDate]);
+
+  // Functions to toggle event type filters
+  const toggleEventType = (type: TimelineItemType) => {
+    if (selectedEventTypes.includes(type)) {
+      setSelectedEventTypes(selectedEventTypes.filter(t => t !== type));
+    } else {
+      setSelectedEventTypes([...selectedEventTypes, type]);
+    }
+  };
+
+  // Reset filters
+  const resetFilters = () => {
+    setSelectedEventTypes(["appointment", "telemedicine", "soap_note", "prescription", "health_plan", "health_plan_milestone", "checklist", "checklist_item"]);
+    setTimelineView("all");
+    setDateRangeStart(null);
+    setDateRangeEnd(null);
+    setSearchQuery("");
+  };
+
+  // Helper to get an icon for the timeline item type
+  const getTimelineItemIcon = (type: TimelineItemType) => {
+    switch (type) {
+      case "appointment":
+        return <Calendar className="h-4 w-4" />;
+      case "telemedicine":
+        return <Video className="h-4 w-4" />;
+      case "soap_note":
+        return <Pen className="h-4 w-4" />;
+      case "prescription":
+        return <Pill className="h-4 w-4" />;
+      case "health_plan":
+        return <HeartPulse className="h-4 w-4" />;
+      case "health_plan_milestone":
+        return <Check className="h-4 w-4" />;
+      case "checklist":
+        return <Clipboard className="h-4 w-4" />;
+      case "checklist_item":
+        return <CalendarCheck className="h-4 w-4" />;
+      default:
+        return <Calendar className="h-4 w-4" />;
+    }
+  };
+
+  // Helper to get a label for the timeline item type
+  const getTimelineItemTypeLabel = (type: TimelineItemType) => {
+    switch (type) {
+      case "appointment":
+        return "Appointment";
+      case "telemedicine":
+        return "Telemedicine";
+      case "soap_note":
+        return "SOAP Note";
+      case "prescription":
+        return "Prescription";
+      case "health_plan":
+        return "Health Plan";
+      case "health_plan_milestone":
+        return "Health Plan Milestone";
+      case "checklist":
+        return "Checklist";
+      case "checklist_item":
+        return "Checklist Item";
+      default:
+        return type;
+    }
+  };
+
+  // Helper to get a color for the timeline item status
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "completed":
+      case "fulfilled":
+      case "locked":
+        return "bg-green-100 text-green-800 border-green-200";
+      case "pending":
+      case "active":
+      case "scheduled":
+        return "bg-blue-100 text-blue-800 border-blue-200";
+      case "overdue":
+      case "cancelled":
+        return "bg-red-100 text-red-800 border-red-200";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200";
+    }
+  };
+
+  // Render individual timeline item
+  const renderTimelineItem = (item: TimelineItem) => {
+    return (
+      <Card key={`${item.type}-${item.id}`} className="mb-4">
+        <CardHeader className="pb-2">
+          <div className="flex justify-between items-start">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-slate-100">
+                {getTimelineItemIcon(item.type)}
+              </div>
+              <div>
+                <CardTitle className="text-base">{item.title}</CardTitle>
+                <CardDescription>
+                  {getTimelineItemTypeLabel(item.type)} • {
+                    (() => {
+                      const parsedDate = safeParse(item.date);
+                      return parsedDate ? format(parsedDate, 'PPp') : 'Date unavailable';
+                    })()
+                  }
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className={`${getStatusColor(item.status)}`}>
+              {item.status}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-slate-600">{item.description}</p>
+          
+          {/* Render additional metadata based on item type */}
+          {item.metadata && (
+            <div className="mt-4 text-sm">
+              {item.type === "prescription" && (
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex items-center gap-1">
+                    <Pill className="h-3 w-3" />
+                    <span className="text-slate-500">Medication:</span>
+                    <span className="font-medium">{item.metadata.medication}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    <span className="text-slate-500">Dosage:</span>
+                    <span className="font-medium">{item.metadata.dosage}</span>
+                  </div>
+                </div>
+              )}
+              
+              {item.type === "appointment" && (
+                <div className="text-sm text-slate-500 mt-2">
+                  {item.metadata.notes && (
+                    <div className="mt-2">
+                      <span className="font-medium">Notes: </span>
+                      {item.metadata.notes}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {item.type === "telemedicine" && (
+                <div className="text-sm text-slate-500 mt-2">
+                  <div className="flex items-center gap-1 text-blue-600">
+                    <Video className="h-3 w-3" />
+                    <span className="font-medium">Virtual Consultation</span>
+                  </div>
+                  {item.metadata?.duration && (
+                    <div className="mt-1">
+                      <span className="font-medium">Duration: </span>
+                      {Math.floor(item.metadata.duration / 60)} minutes
+                    </div>
+                  )}
+                  {item.metadata?.notes && (
+                    <div className="mt-2">
+                      <span className="font-medium">Notes: </span>
+                      {item.metadata.notes}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+        <CardFooter>
+          <div className="flex justify-between w-full">
+            <Button variant="outline" size="sm" 
+              onClick={() => {
+                // Navigate to the detailed view based on item type
+                switch (item.type) {
+                  case "appointment":
+                    router.push(`/appointments/${item.id}`);
+                    break;
+                  case "telemedicine":
+                    router.push(`/telemedicine/${item.id}`);
+                    break;
+                  case "soap_note":
+                    router.push(`/soap-notes?noteId=${item.id}`);
+                    break;
+                  case "prescription":
+                    router.push(`/soap-notes?noteId=${item.metadata?.soapNoteId}`);
+                    break;
+                  case "health_plan":
+                    router.push(`/health-plans?planId=${item.id}`);
+                    break;
+                  case "checklist":
+                  case "checklist_item":
+                    router.push(`/checklists?checklistId=${item.type === "checklist" ? item.id : item.metadata?.checklistId}`);
+                    break;
+                  default:
+                    break;
+                }
+              }}
+            >
+              View Details
+            </Button>
+            <span className="text-xs text-slate-500">ID: {item.id}</span>
+          </div>
+        </CardFooter>
+      </Card>
+    );
+  };
+
+  return (
+    <div className="container mx-auto p-4">
+      <div className="flex flex-col space-y-2 md:flex-row md:items-center md:justify-between md:space-y-0 mb-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Patient Timeline</h1>
+          <p className="text-muted-foreground">
+            Comprehensive chronological view of patient events and activities
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Select 
+            value={selectedPetId?.toString() || ""} 
+            onValueChange={(value) => setSelectedPetId(Number(value))}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Select a patient" />
+            </SelectTrigger>
+            <SelectContent>
+              {isPetsLoading ? (
+                <div className="p-2">Loading pets...</div>
+              ) : pets && pets.length > 0 ? (
+                pets.map((pet: any) => (
+                  <SelectItem key={pet.id} value={pet.id.toString()}>
+                    {pet.name} ({pet.species})
+                  </SelectItem>
+                ))
+              ) : (
+                <div className="p-2">No pets found</div>
+              )}
+            </SelectContent>
+          </Select>
+          
+          <Button 
+            variant="outline" 
+            size="icon"
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+          >
+            <Filter className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      
+      {selectedPet && (
+        <Card className="mb-6">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4">
+              <Avatar className="h-16 w-16">
+                {selectedPet.photoPath ? (
+                  <AvatarImage src={selectedPet.photoPath} alt={selectedPet.name} />
+                ) : (
+                  <AvatarFallback className="text-lg bg-primary-100 text-primary-800">
+                    {selectedPet.name.substring(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                )}
+              </Avatar>
+              
+              <div>
+                <h2 className="text-2xl font-bold">{selectedPet.name}</h2>
+                <div className="flex items-center gap-2 text-slate-500">
+                  <span>{selectedPet.species}</span>
+                  {selectedPet.breed && (
+                    <>
+                      <span>•</span>
+                      <span>{selectedPet.breed}</span>
+                    </>
+                  )}
+                  {selectedPet.dateOfBirth && (
+                    <>
+                      <span>•</span>
+                      <span>Born: {
+                        (() => {
+                          const parsedDate = safeParse(selectedPet.dateOfBirth);
+                          return parsedDate ? format(parsedDate, 'MMM dd, yyyy') : 'Date unavailable';
+                        })()
+                      }</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Filters Collapsible */}
+      <Collapsible open={isFilterOpen} onOpenChange={setIsFilterOpen} className="mb-6">
+        <CollapsibleContent>
+          <Card>
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div>
+                  <h3 className="text-sm font-medium mb-3">Event Types</h3>
+                  <div className="space-y-2">
+                    {(["appointment", "telemedicine", "soap_note", "prescription", "health_plan", "health_plan_milestone", "checklist", "checklist_item"] as TimelineItemType[]).map(type => (
+                      <div key={type} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id={`event-type-${type}`}
+                          checked={selectedEventTypes.includes(type)}
+                          onChange={() => toggleEventType(type)}
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <label htmlFor={`event-type-${type}`} className="flex items-center gap-1.5 text-sm">
+                          {getTimelineItemIcon(type)}
+                          {getTimelineItemTypeLabel(type)}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium mb-3">Status Filter</h3>
+                  <div className="space-y-2">
+                    <Tabs value={timelineView} onValueChange={(value) => setTimelineView(value as any)}>
+                      <TabsList className="w-full">
+                        <TabsTrigger value="all" className="flex-1">All</TabsTrigger>
+                        <TabsTrigger value="completed" className="flex-1">Completed</TabsTrigger>
+                        <TabsTrigger value="pending" className="flex-1">Pending</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  </div>
+                  
+                  <h3 className="text-sm font-medium mb-3 mt-6">Date Range</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="justify-start text-left font-normal w-full">
+                          <Calendar className="mr-2 h-4 w-4" />
+                          {dateRangeStart ? format(dateRangeStart, 'PP') : "Start date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={dateRangeStart as Date}
+                          onSelect={setDateRangeStart}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="justify-start text-left font-normal w-full">
+                          <Calendar className="mr-2 h-4 w-4" />
+                          {dateRangeEnd ? format(dateRangeEnd, 'PP') : "End date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={dateRangeEnd as Date}
+                          onSelect={setDateRangeEnd}
+                          initialFocus
+                          disabled={(date) => dateRangeStart ? date < dateRangeStart : false}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium mb-3">Search & View Options</h3>
+                  <div className="relative mb-4">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                    <Input
+                      type="search"
+                      placeholder="Search timeline..."
+                      className="pl-9"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center space-x-2 mt-4">
+                    <Switch
+                      id="group-by-date"
+                      checked={groupByDate}
+                      onCheckedChange={setGroupByDate}
+                    />
+                    <Label htmlFor="group-by-date">Group by date</Label>
+                  </div>
+                  
+                  <Button 
+                    variant="outline" 
+                    className="w-full mt-4" 
+                    onClick={resetFilters}
+                  >
+                    Reset Filters
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Timeline Content */}
+      <div className="mt-6">
+        {!selectedPetId ? (
+          <Card>
+            <CardContent className="py-10 text-center">
+              <Stethoscope className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+              <h3 className="text-xl font-medium">Select a Patient</h3>
+              <p className="text-muted-foreground mt-2 mb-4">
+                Choose a pet from the dropdown above to view their timeline
+              </p>
+            </CardContent>
+          </Card>
+        ) : isTimelineLoading ? (
+          <div className="space-y-4">
+            {Array(5).fill(0).map((_, i) => (
+              <Card key={i}>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-10 w-10 rounded-full" />
+                      <div>
+                        <Skeleton className="h-5 w-48" />
+                        <Skeleton className="h-4 w-32 mt-1" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-6 w-24" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-4 w-full mt-2" />
+                  <Skeleton className="h-4 w-3/4 mt-2" />
+                </CardContent>
+                <CardFooter>
+                  <Skeleton className="h-9 w-28" />
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        ) : filteredTimelineItems.length === 0 ? (
+          <Card>
+            <CardContent className="py-10 text-center">
+              <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+              <h3 className="text-xl font-medium">No Events Found</h3>
+              <p className="text-muted-foreground mt-2">
+                No timeline events match your current filters
+              </p>
+              <Button onClick={resetFilters} className="mt-4">
+                Reset Filters
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            {groupByDate && groupedTimelineItems ? (
+              Object.keys(groupedTimelineItems)
+                .sort((a, b) => {
+                  const dateA = safeParse(a);
+                  const dateB = safeParse(b);
+                  
+                  // Handle case where one or both dates are invalid
+                  if (!dateA && !dateB) return 0;
+                  if (!dateA) return 1; // Invalid dates go to the end
+                  if (!dateB) return -1;
+                  
+                  return compareDesc(dateA, dateB);
+                })
+                .map(dateStr => (
+                  <div key={dateStr}>
+                    <div className="relative flex items-center py-2 mb-4">
+                      <div className="flex-grow border-t border-gray-200"></div>
+                      <span className="flex-shrink mx-4 text-gray-600 text-sm font-medium">
+                        {
+                          (() => {
+                            const parsedDate = safeParse(dateStr);
+                            return parsedDate ? format(parsedDate, 'MMMM d, yyyy') : 'Date unavailable';
+                          })()
+                        }
+                      </span>
+                      <div className="flex-grow border-t border-gray-200"></div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {groupedTimelineItems[dateStr].map(item => renderTimelineItem(item))}
+                    </div>
+                  </div>
+                ))
+            ) : (
+              <div className="space-y-4">
+                {filteredTimelineItems.map(item => renderTimelineItem(item))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -14,9 +14,17 @@ export const pets = dbTable('pets', {
   name: text('name').notNull(),
   species: text('species'),
   breed: text('breed'),
-  date_of_birth: timestamp('date_of_birth', { mode: 'date' }),
+  dateOfBirth: timestamp('dateOfBirth', { mode: 'date' }),
   ownerId: text('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
+
+  weight: text('weight'),
+  allergies: text('allergies'),
+  color: text('color'),
+  gender: text('gender'),
+  microchipNumber: text('microchip_number'),
+  pet_type: text('pet_type'),
+  photoPath: text('photo_path'),
 
   createdAt: isSqlite
     ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
@@ -54,4 +62,11 @@ export interface Pet {
   practiceId: string;
   createdAt: Date;
   updatedAt: Date;
+  weight: string | null;
+  allergies: string | null;
+  color: string | null;
+  gender: string | null;
+  microchipNumber: string | null;
+  pet_type: string | null;
+  photoPath: string | null;
 }

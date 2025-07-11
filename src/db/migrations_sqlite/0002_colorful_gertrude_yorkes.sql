@@ -1,0 +1,20 @@
+CREATE TABLE `treatment_templates` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`practice_id` integer NOT NULL,
+	`name` text NOT NULL,
+	`category` text NOT NULL,
+	`description` text,
+	`default_dosage` text,
+	`default_route` text,
+	`default_frequency` text,
+	`default_duration` text,
+	`default_instructions` text,
+	`default_procedure_code` text,
+	`common_diagnoses` text,
+	`inventory_item_id` integer,
+	`sort_order` integer DEFAULT 0,
+	`is_active` integer DEFAULT true,
+	`created_by_id` integer NOT NULL,
+	`createdAt` integer DEFAULT (strftime('%s', 'now') * 1000) NOT NULL,
+	`updatedAt` integer DEFAULT (strftime('%s', 'now') * 1000) NOT NULL
+);

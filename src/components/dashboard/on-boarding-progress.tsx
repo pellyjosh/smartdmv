@@ -2,13 +2,13 @@ import React from 'react';
 import { useOnboarding } from '@/hooks/use-onboarding';
 import { TaskChecklist } from '@/components/onboarding/TaskChecklist';
 import { TourHelpButton } from '@/components/guided-tour/TourOverlay';
-import { useLocation } from 'wouter';
+import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { CircleCheck, CircleX, ArrowRight } from 'lucide-react';
 
 export function OnboardingProgress() {
-  const [, navigate] = useLocation();
+  const pathname = usePathname();
   const { isLoading, progress, completedTasksCount, totalTasks, isFirstLogin } = useOnboarding();
 
   if (isLoading) {

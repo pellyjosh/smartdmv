@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db'; // Your Drizzle DB instance
 import { appointments, pets, appointmentStatusEnum } from '@/db/schema'; // Import appointments and pets schema
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 
 // Define a Zod schema for the incoming request body
@@ -104,6 +104,44 @@ export async function POST(req: Request) {
     // Provide a more specific error if possible, otherwise a generic 500
     return NextResponse.json(
       { error: 'Failed to create appointment', details: (error as Error).message },
+      { status: 500 }
+    );
+  }
+}
+
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const clientId = searchParams.get("clientId");
+    const practiceId = searchParams.get("practiceId");
+
+    if (!clientId && !practiceId) {
+      return NextResponse.json(
+        { error: "Either clientId or practiceId is required" },
+        { status: 400 }
+      );
+    }
+
+    const conditions = [];
+    if (clientId) conditions.push(eq(appointments.clientId, clientId));
+    if (practiceId) conditions.push(eq(appointments.practiceId, practiceId));
+
+    const result = await db.query.appointments.findMany({
+      where: and(...conditions),
+      with: {
+        pet: true,
+        practitioner: true,
+        practice: true,
+      },
+      orderBy: (appointments, { desc }) => [desc(appointments.date)],
+    });
+
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("Error fetching appointments:", error);
+    return NextResponse.json(
+      { error: "Failed to retrieve appointments", details: (error as Error).message },
       { status: 500 }
     );
   }

@@ -29,6 +29,11 @@ export interface VeterinarianUser extends BaseUser {
   practiceId: string;
 }
 
+export interface PracticeManagerUser extends BaseUser {
+  role: 'PRACTICE_MANAGER';
+  practiceId: string;
+}
+
 export interface AdministratorUser extends BaseUser {
   role: 'ADMINISTRATOR';
   accessiblePracticeIds: string[];
@@ -41,7 +46,7 @@ export interface SuperAdminUser extends BaseUser {
   currentPracticeId: string;
 }
 
-export type User = ClientUser | PracticeAdminUser | AdministratorUser | SuperAdminUser | VeterinarianUser;
+export type User = ClientUser | PracticeAdminUser | AdministratorUser | SuperAdminUser | VeterinarianUser | PracticeManagerUser;
 
 const AUTH_PAGE = '/auth/login';
 

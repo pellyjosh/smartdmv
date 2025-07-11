@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
 import {
   Dialog,
   DialogContent,
@@ -159,7 +160,7 @@ function ComboboxSelect({
   emptyMessage = "No option found."
 }: {
   options: { value: string; label: string }[];
-  value: string;
+  value: string | undefined;
   onValueChange: (value: string) => void;
   placeholder?: string;
   className?: string;
@@ -230,7 +231,28 @@ const clientFormSchema = z.object({
   role: z.string().default("CLIENT"),
 });
 
+const updateClientFormSchema = z.object({
+  name: z.string().min(2, { message: "Name must be at least 2 characters" }),
+  email: z.string().email({ message: "Please enter a valid email" }),
+  // password: z.string()
+  //   .min(6, { message: "Password must be at least 6 characters" })
+  //   .optional()
+  //   .transform(e => e === "" ? undefined : e), 
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zipCode: z.string().optional(),
+  country: z.string().optional(),
+  emergencyContactName: z.string().optional(),
+  emergencyContactPhone: z.string().optional(),
+  emergencyContactRelationship: z.string().optional(),
+  practiceId: z.string({ message: "Practice is required" }),
+  role: z.string().default("CLIENT"),
+});
+
 type ClientFormValues = z.infer<typeof clientFormSchema>;
+type UpdateClientFormValues = z.infer<typeof updateClientFormSchema>;
 
 // Pet form schema
 const petFormSchema = z.object({
@@ -260,7 +282,7 @@ export default function ClientsPage() {
   const [isDeleteClientDialogOpen, setIsDeleteClientDialogOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<User | null>(null);
   const [petPhoto, setPetPhoto] = useState<File | null>(null);
-  const [editPetId, setEditPetId] = useState<number | null>(null);
+  const [editPetId, setEditPetId] = useState<string | null>(null);
   const [selectedSpecies, setSelectedSpecies] = useState<string>("");
   const [selectedAddPetSpecies, setSelectedAddPetSpecies] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -382,7 +404,13 @@ export default function ClientsPage() {
     
     // Fall back to hardcoded breeds if custom fields fail
     console.log(`Falling back to hardcoded breeds for ${species}`);
-    return breedsBySpecies[species as keyof typeof breedsBySpecies] || breedsBySpecies.Default;
+    if (!species) {
+      return [];
+    }
+    // Find the key in a case-insensitive way to handle potential inconsistencies from the combobox
+    const speciesKey = Object.keys(breedsBySpecies).find(key => key.toLowerCase() === species.toLowerCase());
+    // Return the breeds for the found key, or an empty array if not found
+    return speciesKey ? breedsBySpecies[speciesKey as keyof typeof breedsBySpecies] : [];
   };
 
   const getColorList = () => {
@@ -550,6 +578,26 @@ export default function ClientsPage() {
     },
   });
 
+  const updateClientForm = useForm<UpdateClientFormValues>({
+    resolver: zodResolver(updateClientFormSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+      phone: "",
+      address: "",
+      city: "",
+      state: "",
+      zipCode: "",
+      country: "",
+      emergencyContactName: "",
+      emergencyContactPhone: "",
+      emergencyContactRelationship: "",
+      practiceId: userPracticeId || "",
+      role: "CLIENT",
+    },
+  });
+
   // Create client mutation
   const createClientMutation = useMutation({
     mutationFn: async (data: ClientFormValues) => {
@@ -583,42 +631,63 @@ export default function ClientsPage() {
     },
   });
   
-  // Update client mutation
-  const updateClientMutation = useMutation({
-    mutationFn: async (data: ClientFormValues & { id: number }) => {
-      const { id, ...clientData } = data;
-      const res = await apiRequest("PATCH", `/api/users/${id}`, clientData);
-      return await res.json();
-    },
-    onSuccess: (updatedClient) => {
-      // Invalidate queries to refresh the client list
-      queryClient.invalidateQueries({ queryKey: ["/api/users/clients"] });
-      // Show success message
-      toast({
-        title: "Client updated",
-        description: "The client has been successfully updated.",
+// Update client mutation
+const updateClientMutation = useMutation({
+  mutationFn: async (data: UpdateClientFormValues & { id: string }) => {
+    const { id, password, ...clientData } = data;
+
+    const payload: Partial<Omit<User, 'id' | 'username'>> = { ...clientData };
+
+    if (password && password.length > 0) {
+      payload.password = password;
+    }
+
+    console.log("Sending update payload:", payload); // Log the payload to ensure it's correct
+
+    const res = await apiRequest("PATCH", `/api/users/${id}`, payload);
+    return await res.json();
+  },
+  onSuccess: (updatedClient) => {
+    queryClient.invalidateQueries({ queryKey: ["/api/users/clients"] });
+    toast({
+      title: "Client updated",
+      description: "The client has been successfully updated.",
+    });
+    setIsEditClientDialogOpen(false);
+    
+    // Reset the form with the updated client's data, but clear password field
+    if (updatedClient) {
+      updateClientForm.reset({ // Use updateClientForm here
+        name: updatedClient.name || "",
+        email: updatedClient.email || "",
+        password: "", // Keep password field cleared
+        phone: updatedClient.phone || "",
+        address: updatedClient.address || "",
+        city: updatedClient.city || "",
+        state: updatedClient.state || "",
+        zipCode: updatedClient.zipCode || "",
+        country: updatedClient.country || "",
+        emergencyContactName: updatedClient.emergencyContactName || "",
+        emergencyContactPhone: updatedClient.emergencyContactPhone || "",
+        emergencyContactRelationship: updatedClient.emergencyContactRelationship || "",
+        practiceId: updatedClient.practiceId || userPracticeId || "",
+        role: updatedClient.role || "CLIENT",
       });
-      // Close dialog and reset form
-      setIsEditClientDialogOpen(false);
-      clientForm.reset();
-      
-      // Update selected client with new data
-      if (updatedClient) {
-        setSelectedClient(updatedClient);
-      }
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Failed to update client",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+      setSelectedClient(updatedClient); // Update selected client in state
+    }
+  },
+  onError: (error: Error) => {
+    toast({
+      title: "Failed to update client",
+      description: error.message,
+      variant: "destructive",
+    });
+  },
+});
   
   // Delete client mutation
   const deleteClientMutation = useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: string) => {
       const res = await apiRequest("DELETE", `/api/users/${id}`);
       if (!res.ok) {
         const errorData = await res.json();
@@ -666,8 +735,8 @@ export default function ClientsPage() {
       color: "",
       gender: "",
       microchipNumber: "",
-      ownerId: 0,
-      practiceId: user?.practiceId || 0,
+      ownerId: '0',
+      practiceId: userPracticeId || '0',
     },
   });
 
@@ -677,25 +746,25 @@ export default function ClientsPage() {
       try {
         // If a photo was selected, upload it first
         let photoPath = null;
-        if (petPhoto) {
-          const formData = new FormData();
-          formData.append('photo', petPhoto);
+        // if (petPhoto) {
+        //   const formData = new FormData();
+        //   formData.append('photo', petPhoto);
           
-          // Upload the photo
-          const uploadRes = await fetch('/api/pets/upload-photo', {
-            method: 'POST',
-            body: formData,
-            credentials: 'include',
-          });
+        //   // Upload the photo
+        //   const uploadRes = await fetch('/api/pets/upload-photo', {
+        //     method: 'POST',
+        //     body: formData,
+        //     credentials: 'include',
+        //   });
           
-          if (!uploadRes.ok) {
-            throw new Error('Failed to upload pet photo');
-          }
+        //   if (!uploadRes.ok) {
+        //     throw new Error('Failed to upload pet photo');
+        //   }
           
-          const uploadData = await uploadRes.json();
-          photoPath = uploadData.photoPath;
-          console.log("Photo uploaded successfully:", photoPath);
-        }
+        //   const uploadData = await uploadRes.json();
+        //   photoPath = uploadData.photoPath;
+        //   console.log("Photo uploaded successfully:", photoPath);
+        // }
         
         // Create the pet with the photo path
         const petData = {
@@ -738,25 +807,25 @@ export default function ClientsPage() {
       try {
         // If a photo was selected, upload it first
         let photoPath = undefined;
-        if (petPhoto) {
-          const formData = new FormData();
-          formData.append('photo', petPhoto);
+        // if (petPhoto) {
+        //   const formData = new FormData();
+        //   formData.append('photo', petPhoto);
           
-          // Upload the photo
-          const uploadRes = await fetch('/api/pets/upload-photo', {
-            method: 'POST',
-            body: formData,
-            credentials: 'include',
-          });
+        //   // Upload the photo
+        //   const uploadRes = await fetch('/api/pets/upload-photo', {
+        //     method: 'POST',
+        //     body: formData,
+        //     credentials: 'include',
+        //   });
           
-          if (!uploadRes.ok) {
-            throw new Error('Failed to upload pet photo');
-          }
+        //   if (!uploadRes.ok) {
+        //     throw new Error('Failed to upload pet photo');
+        //   }
           
-          const uploadData = await uploadRes.json();
-          photoPath = uploadData.photoPath;
-          console.log("Photo uploaded successfully:", photoPath);
-        }
+        //   const uploadData = await uploadRes.json();
+        //   photoPath = uploadData.photoPath;
+        //   console.log("Photo uploaded successfully:", photoPath);
+        // }
         
         // Create the pet update data with the photo path
         const { id, ...updateData } = data;
@@ -798,48 +867,50 @@ export default function ClientsPage() {
     // Set owner ID in pet form
     petForm.setValue("ownerId", client.id);
     // Set practice ID in pet form if it exists
-    if (user?.practiceId) {
-      petForm.setValue("practiceId", user.practiceId);
+    if (userPracticeId) {
+      petForm.setValue("practiceId", userPracticeId);
     }
   };
 
-  // Handle client form submission
-  const onClientFormSubmit = (data: ClientFormValues) => {
+  const onClientFormSubmit = (data: ClientFormValues | UpdateClientFormValues) => { // Adjust type to accept both
+    // The selectedClient will already be populated if it's an edit action
     if (selectedClient && isEditClientDialogOpen) {
-      // Update existing client
+      // This is an update operation
+      // Ensure you pass the correct ID to the mutation
       updateClientMutation.mutate({
-        ...data,
-        id: selectedClient.id
+        ...(data as UpdateClientFormValues), // Cast to UpdateClientFormValues for clarity
+        id: selectedClient.id // Pass the actual ID of the selected client
       });
     } else {
-      // Create new client
-      createClientMutation.mutate(data);
+      // This is a create operation
+      createClientMutation.mutate(data as ClientFormValues); // Cast to ClientFormValues
     }
   };
   
-  // Open edit client dialog with the selected client's data
-  const handleEditClient = () => {
-    if (selectedClient) {
-      clientForm.reset({
-        name: selectedClient.name || "",
-        email: selectedClient.email || "",
-        username: selectedClient.username || "",
-        password: "", // Password field is cleared for security
-        phone: selectedClient.phone || "",
-        address: selectedClient.address || "",
-        city: selectedClient.city || "",
-        state: selectedClient.state || "",
-        zipCode: selectedClient.zipCode || "",
-        country: selectedClient.country || "",
-        emergencyContactName: selectedClient.emergencyContactName || "",
-        emergencyContactPhone: selectedClient.emergencyContactPhone || "",
-        emergencyContactRelationship: selectedClient.emergencyContactRelationship || "",
-        practiceId: selectedClient.practiceId || user?.practiceId || 0,
-        role: selectedClient.role || "CLIENT"
-      });
-      setIsEditClientDialogOpen(true);
-    }
-  };
+  
+// Open edit client dialog with the selected client's data
+const handleEditClient = () => {
+  if (selectedClient) {
+    // Populate the updateClientForm with the selected client's data
+    updateClientForm.reset({
+      name: selectedClient.name || "",
+      email: selectedClient.email || "",
+      // password: "", // Always clear password for security when opening edit form
+      phone: selectedClient.phone || "",
+      address: selectedClient.address || "",
+      city: selectedClient.city || "",
+      state: selectedClient.state || "",
+      zipCode: selectedClient.zipCode || "",
+      country: selectedClient.country || "",
+      emergencyContactName: selectedClient.emergencyContactName || "",
+      emergencyContactPhone: selectedClient.emergencyContactPhone || "",
+      emergencyContactRelationship: selectedClient.emergencyContactRelationship || "",
+      practiceId: selectedClient.practiceId || userPracticeId || "",
+      role: selectedClient.role || "CLIENT"
+    });
+    setIsEditClientDialogOpen(true);
+  }
+};
 
   // Handle pet form submission
   const onPetFormSubmit = (data: PetFormValues) => {
@@ -1179,9 +1250,9 @@ export default function ClientsPage() {
                             <p className="font-medium text-slate-900">{client.name}</p>
                             <p className="text-xs text-slate-500">{client.email}</p>
                           </div>
-                          <div className="flex gap-1">
+                            <div className="flex gap-1">
                             <Button variant="ghost" size="sm" asChild className="shrink-0">
-                              <Link href={`/clients/${client.id}`}>View</Link>
+                              <Link href={`/admin/clients/${client.id}`}>View</Link>
                             </Button>
                             <Button 
                               variant="ghost" 
@@ -1608,6 +1679,7 @@ export default function ClientsPage() {
                                           practiceId: pet.practiceId,
                                         });
                                         // Open the edit dialog
+                                        setSelectedSpecies(pet.species || "");
                                         setEditPetId(pet.id);
                                         setIsEditPetDialogOpen(true);
                                       }}
@@ -1864,7 +1936,7 @@ export default function ClientsPage() {
                         <FormLabel>Species</FormLabel>
                         <FormControl>
                           <ComboboxSelect
-                            options={speciesList}
+                            options={getSpeciesList()}
                             value={field.value}
                             onValueChange={(value) => {
                               field.onChange(value);
@@ -1888,7 +1960,7 @@ export default function ClientsPage() {
                         <FormLabel>Breed</FormLabel>
                         <FormControl>
                           <ComboboxSelect
-                            options={breedsBySpecies[selectedSpecies] || []}
+                            options={selectedSpecies ? getBreedsList(selectedSpecies) : []}
                             value={field.value}
                             onValueChange={field.onChange}
                             placeholder="Select breed"
@@ -1908,7 +1980,7 @@ export default function ClientsPage() {
                         <FormLabel>Color</FormLabel>
                         <FormControl>
                           <ComboboxSelect
-                            options={colorList}
+                            options={getColorList()}
                             value={field.value}
                             onValueChange={field.onChange}
                             placeholder="Select color"
@@ -1927,7 +1999,7 @@ export default function ClientsPage() {
                         <FormLabel>Gender</FormLabel>
                         <FormControl>
                           <ComboboxSelect
-                            options={genderList}
+                            options={getGenderList()}
                             value={field.value}
                             onValueChange={field.onChange}
                             placeholder="Select gender"
@@ -2091,8 +2163,8 @@ export default function ClientsPage() {
             </DialogDescription>
           </DialogHeader>
           
-          <Form {...clientForm}>
-            <form onSubmit={clientForm.handleSubmit(onClientFormSubmit)} className="space-y-4 pt-4">
+          <Form {...updateClientForm}>
+            <form onSubmit={updateClientForm.handleSubmit(onClientFormSubmit)} className="space-y-4 pt-4">
               {/* Main form grid with two columns */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Left column - Contact Details */}
@@ -2102,7 +2174,7 @@ export default function ClientsPage() {
                   </h3>
                   
                   <FormField
-                    control={clientForm.control}
+                    control={updateClientForm.control}
                     name="name"
                     render={({ field }) => (
                       <FormItem>
@@ -2116,7 +2188,7 @@ export default function ClientsPage() {
                   />
                   
                   <FormField
-                    control={clientForm.control}
+                    control={updateClientForm.control}
                     name="email"
                     render={({ field }) => (
                       <FormItem>
@@ -2130,7 +2202,7 @@ export default function ClientsPage() {
                   />
                   
                   <FormField
-                    control={clientForm.control}
+                    control={updateClientForm.control}
                     name="phone"
                     render={({ field }) => (
                       <FormItem>
@@ -2143,8 +2215,8 @@ export default function ClientsPage() {
                     )}
                   />
                   
-                  <FormField
-                    control={clientForm.control}
+                  {/* <FormField
+                    control={updateClientForm.control}
                     name="username"
                     render={({ field }) => (
                       <FormItem>
@@ -2155,10 +2227,24 @@ export default function ClientsPage() {
                         <FormMessage />
                       </FormItem>
                     )}
+                  /> */}
+
+                  <FormField
+                    control={updateClientForm.control}
+                    name="username" 
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Username</FormLabel>
+                        <FormControl>
+                          <Input {...field} readOnly disabled value={selectedClient?.username || ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
                   
                   <FormField
-                    control={clientForm.control}
+                    control={updateClientForm.control}
                     name="password"
                     render={({ field }) => (
                       <FormItem>
@@ -2181,7 +2267,7 @@ export default function ClientsPage() {
                     </h3>
                     
                     <FormField
-                      control={clientForm.control}
+                      control={updateClientForm.control}
                       name="emergencyContactName"
                       render={({ field }) => (
                         <FormItem>
@@ -2196,7 +2282,7 @@ export default function ClientsPage() {
                     
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
-                        control={clientForm.control}
+                        control={updateClientForm.control}
                         name="emergencyContactPhone"
                         render={({ field }) => (
                           <FormItem>
@@ -2209,7 +2295,7 @@ export default function ClientsPage() {
                         )}
                       />
                       <FormField
-                        control={clientForm.control}
+                        control={updateClientForm.control}
                         name="emergencyContactRelationship"
                         render={({ field }) => (
                           <FormItem>
@@ -2232,7 +2318,7 @@ export default function ClientsPage() {
                   </h3>
                   
                   <FormField
-                    control={clientForm.control}
+                    control={updateClientForm.control}
                     name="address"
                     render={({ field }) => (
                       <FormItem>
@@ -2247,7 +2333,7 @@ export default function ClientsPage() {
                   
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
-                      control={clientForm.control}
+                      control={updateClientForm.control}
                       name="city"
                       render={({ field }) => (
                         <FormItem>
@@ -2260,7 +2346,7 @@ export default function ClientsPage() {
                       )}
                     />
                     <FormField
-                      control={clientForm.control}
+                      control={updateClientForm.control}
                       name="state"
                       render={({ field }) => (
                         <FormItem>
@@ -2276,7 +2362,7 @@ export default function ClientsPage() {
                   
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
-                      control={clientForm.control}
+                      control={updateClientForm.control}
                       name="zipCode"
                       render={({ field }) => (
                         <FormItem>
@@ -2289,7 +2375,7 @@ export default function ClientsPage() {
                       )}
                     />
                     <FormField
-                      control={clientForm.control}
+                      control={updateClientForm.control}
                       name="country"
                       render={({ field }) => (
                         <FormItem>
@@ -2311,7 +2397,7 @@ export default function ClientsPage() {
                   variant="outline"
                   onClick={() => {
                     setIsEditClientDialogOpen(false);
-                    clientForm.reset();
+                    updateClientForm.reset();
                   }}
                 >
                   Cancel
@@ -2392,7 +2478,7 @@ export default function ClientsPage() {
 
 // Client Appointments List Component
 interface ClientAppointmentsListProps {
-  clientId: number;
+  clientId: string;
 }
 
 function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
@@ -2401,7 +2487,7 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
   const { data: appointments, isLoading, error } = useQuery({
     queryKey: ['/api/appointments/client', clientId],
     queryFn: async () => {
-      const response = await fetch(`/api/appointments/client/${clientId}`);
+      const response = await fetch(`/api/appointments?clientId=${clientId}`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch client appointments');

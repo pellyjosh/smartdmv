@@ -1,5 +1,5 @@
 // src/db/schemas/whiteboardItemsSchema.ts
-import { dbTable, text, timestamp } from '@/db/db.config';
+import { dbTable, text, timestamp, integer } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { pets } from './petsSchema';
 import { users } from './usersSchema';
@@ -11,7 +11,7 @@ export const whiteboardItemUrgencyEnum = ['high', 'medium', 'low', 'none'] as co
 export const whiteboardItemStatusEnum = ['active', 'inactive', 'resolved', 'pending_pickup', 'in_treatment'] as const;
 
 export const whiteboardItems = dbTable('whiteboard_items', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
   petId: text('pet_id').notNull().references(() => pets.id, { onDelete: 'cascade' }),
   practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
   notes: text('notes'),
