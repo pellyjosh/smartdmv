@@ -1,7 +1,12 @@
 'use client';
 import React, { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { 
+  useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { 
   Accordion,
@@ -51,10 +56,6 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { format } from "date-fns";
 import PageHeader from "@/components/page-header";
 import Breadcrumbs from "@/components/breadcrumbs";
 import LoadingSpinner from "@/components/loading-spinner";
@@ -64,11 +65,11 @@ import { apiRequest } from "@/lib/queryClient";
 
 // Validation schema for new medical imaging record
 const createMedicalImagingSchema = z.object({
-  petId: z.number(),
+  petId: z.string().min(1, "Please select a pet"),
   studyDate: z.string(),
-  studyType: z.string(),
+  studyType: z.string().min(1, "Please select a study type"),
   description: z.string().optional(),
-  veterinarianId: z.number()
+  veterinarianId: z.string().min(1, "Please select a veterinarian")
 });
 
 // Validation schema for new imaging series
@@ -76,15 +77,15 @@ const createImagingSeriesSchema = z.object({
   modality: z.string(),
   description: z.string().optional(),
   bodyPart: z.string().optional(),
-  medicalImagingId: z.number()
+  medicalImagingId: z.string()
 });
 
 const MedicalImagingPage: React.FC = () => {
   const params = useParams();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedMedicalImaging, setSelectedMedicalImaging] = useState<number | null>(null);
-  const [selectedSeries, setSelectedSeries] = useState<number | null>(null);
+  const [selectedMedicalImaging, setSelectedMedicalImaging] = useState<string | null>(null);
+  const [selectedSeries, setSelectedSeries] = useState<string | null>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isNewStudyDialogOpen, setIsNewStudyDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -104,20 +105,19 @@ const MedicalImagingPage: React.FC = () => {
     enabled: !!petId
   });
   
-  // Query to get all medical imaging studies for the pet
+  // Query to get all medical imaging studies
   const { 
     data: medicalImaging,
     isLoading: isMedicalImagingLoading,
     isError: isMedicalImagingError
   } = useQuery({
-    queryKey: ['/api/medical-imaging/pet', petId],
+    queryKey: petId ? ['/api/medical-imaging/pet', petId] : ['/api/medical-imaging'],
     queryFn: async () => {
-      if (!petId) return [];
-      const response = await fetch(`/api/medical-imaging/pet/${petId}`);
+      const url = petId ? `/api/medical-imaging/pet/${petId}` : `/api/medical-imaging`;
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch medical imaging data");
       return response.json();
-    },
-    enabled: !!petId
+    }
   });
   
   // Query to get all series for the selected medical imaging
@@ -178,16 +178,29 @@ const MedicalImagingPage: React.FC = () => {
       return response.json();
     }
   });
+
+  // Query to get all pets for dropdown
+  const {
+    data: pets,
+    isLoading: isPetsLoading
+  } = useQuery({
+    queryKey: ['/api/pets'],
+    queryFn: async () => {
+      const response = await fetch('/api/pets');
+      if (!response.ok) throw new Error("Failed to fetch pets");
+      return response.json();
+    }
+  });
   
   // Form for creating a new medical imaging study
   const newStudyForm = useForm<z.infer<typeof createMedicalImagingSchema>>({
     resolver: zodResolver(createMedicalImagingSchema),
     defaultValues: {
-      petId: petId || 0,
+      petId: petId?.toString() || "",
       studyDate: format(new Date(), 'yyyy-MM-dd'),
       studyType: "",
       description: "",
-      veterinarianId: 0
+      veterinarianId: ""
     }
   });
   
@@ -198,7 +211,7 @@ const MedicalImagingPage: React.FC = () => {
       modality: "",
       description: "",
       bodyPart: "",
-      medicalImagingId: selectedMedicalImaging || 0
+      medicalImagingId: selectedMedicalImaging || ""
     }
   });
   
@@ -212,13 +225,31 @@ const MedicalImagingPage: React.FC = () => {
   // Mutation for creating a new medical imaging record
   const createMedicalImagingMutation = useMutation({
     mutationFn: async (data: z.infer<typeof createMedicalImagingSchema>) => {
-      const response = await apiRequest("POST", "/api/medical-imaging", data);
+      const response = await fetch("/api/medical-imaging", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          petId: data.petId,
+          practiceId: "default-practice", // You might want to get this from context
+          imagingType: data.studyType,
+          anatomicalRegion: "other", // Default value
+          studyName: data.studyType,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to create medical imaging record");
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/medical-imaging/pet', petId] });
+      // Invalidate the appropriate query based on whether we have a petId
+      if (petId) {
+        queryClient.invalidateQueries({ queryKey: ['/api/medical-imaging/pet', petId] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['/api/medical-imaging'] });
+      }
       setSelectedMedicalImaging(data.id);
       setIsNewStudyDialogOpen(false);
+      newStudyForm.reset();
       toast({
         title: "Success",
         description: "New imaging study created successfully",
@@ -367,8 +398,8 @@ const MedicalImagingPage: React.FC = () => {
               <Accordion
                 type="single"
                 collapsible
-                value={selectedMedicalImaging?.toString()}
-                onValueChange={(value) => setSelectedMedicalImaging(value ? parseInt(value) : null)}
+                value={selectedMedicalImaging || undefined}
+                onValueChange={(value) => setSelectedMedicalImaging(value || null)}
               >
                 {medicalImaging?.map((study: any) => (
                   <AccordionItem value={study.id.toString()} key={study.id}>
@@ -511,6 +542,39 @@ const MedicalImagingPage: React.FC = () => {
           
           <Form {...newStudyForm}>
             <form onSubmit={newStudyForm.handleSubmit(onSubmitNewStudy)} className="space-y-4">
+              {/* Only show pet selection if we're not in a pet-specific view */}
+              {!petId && (
+                <FormField
+                  control={newStudyForm.control}
+                  name="petId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Pet</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a pet" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {isPetsLoading ? (
+                            <SelectItem value="" disabled>Loading pets...</SelectItem>
+                          ) : pets?.map((pet: any) => (
+                            <SelectItem key={pet.id} value={pet.id.toString()}>
+                              {pet.name} - {pet.species}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+              
               <FormField
                 control={newStudyForm.control}
                 name="studyType"
@@ -557,35 +621,33 @@ const MedicalImagingPage: React.FC = () => {
                 )}
               />
               
-              <FormField
-                control={newStudyForm.control}
-                name="veterinarianId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Veterinarian</FormLabel>
-                    <Select
-                      onValueChange={(value) => field.onChange(parseInt(value))}
-                      value={field.value.toString()}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select veterinarian" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {veterinarians?.map((vet: any) => (
-                          <SelectItem key={vet.id} value={vet.id.toString()}>
-                            {vet.firstName} {vet.lastName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
+                <FormField
+                  control={newStudyForm.control}
+                  name="veterinarianId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Veterinarian</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select veterinarian" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {veterinarians?.map((vet: any) => (
+                            <SelectItem key={vet.id} value={vet.id}>
+                              {vet.firstName} {vet.lastName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />              <FormField
                 control={newStudyForm.control}
                 name="description"
                 render={({ field }) => (

@@ -22,6 +22,69 @@
       "when": 1751644742368,
       "tag": "0002_colorful_gertrude_yorkes",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1752587519461,
+      "tag": "0003_moaning_paladin",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1752595673567,
+      "tag": "0004_remarkable_forge",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1752601705272,
+      "tag": "0005_quick_darkhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1752602154940,
+      "tag": "0006_light_tomas",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1752602374471,
+      "tag": "0007_black_tyrannus",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1752654391939,
+      "tag": "0008_glorious_leech",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1752659691984,
+      "tag": "0009_spotty_infant_terrible",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1753258225240,
+      "tag": "0010_gorgeous_grandmaster",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1753271728313,
+      "tag": "0011_funny_morlun",
+      "breakpoints": true
     }
   ]
 }

@@ -14,7 +14,11 @@ import {
   customFieldCategories,
   customFieldGroups,
   customFieldValues,
-  pets // <--- Import pets schema
+  pets, // <--- Import pets schema
+  referrals,
+  ReferralStatus,
+  ReferralPriority,
+  VetSpecialty
 } from './schema';
 import { User } from '@/context/UserContext';
 import { Phone } from 'lucide-react';
@@ -35,6 +39,9 @@ async function seed() {
   const practiceAdminUserId = crypto.randomUUID();
   const client1UserId = crypto.randomUUID(); // This client will own pets for practice_NORTH
   const client2UserId = crypto.randomUUID(); // This client will own pets for practice_SOUTH
+  const vet1UserId = crypto.randomUUID(); // Veterinarian 1
+  const vet2UserId = crypto.randomUUID(); // Veterinarian 2
+  const vet3UserId = crypto.randomUUID(); // Veterinarian 3
 
   const usersData = [
     {
@@ -96,6 +103,52 @@ async function seed() {
       role: 'CLIENT' as typeof UserRoleEnum.CLIENT,
       practiceId: 'practice_MAIN_HQ',
       currentPracticeId: null,
+    },
+    // Add veterinarians for referrals
+    {
+      id: vet1UserId,
+      email: 'dr.smith@vetconnect.pro',
+      name: 'Dr. John Smith',
+      username: 'dr_smith',
+      phone: '08101572724',
+      address: '456, Vet Ave, Victoria Island Lagos',
+      state: 'Lagos',
+      zip_code: '123456',
+      country: 'Nigeria',
+      password: password,
+      role: 'VETERINARIAN' as typeof UserRoleEnum.VETERINARIAN,
+      practiceId: 'practice_MAIN_HQ',
+      currentPracticeId: 'practice_MAIN_HQ',
+    },
+    {
+      id: vet2UserId,
+      email: 'dr.jones@northpaws.com',
+      name: 'Dr. Emily Jones',
+      username: 'dr_jones',
+      phone: '08101572725',
+      address: '789, North St, Ikeja Lagos',
+      state: 'Lagos',
+      zip_code: '123456',
+      country: 'Nigeria',
+      password: password,
+      role: 'VETERINARIAN' as typeof UserRoleEnum.VETERINARIAN,
+      practiceId: 'practice_NORTH',
+      currentPracticeId: 'practice_NORTH',
+    },
+    {
+      id: vet3UserId,
+      email: 'dr.wilson@southvalley.com',
+      name: 'Dr. Sarah Wilson',
+      username: 'dr_wilson',
+      phone: '08101572726',
+      address: '321, South Valley Rd, Ikoyi Lagos',
+      state: 'Lagos',
+      zip_code: '123456',
+      country: 'Nigeria',
+      password: password,
+      role: 'VETERINARIAN' as typeof UserRoleEnum.VETERINARIAN,
+      practiceId: 'practice_SOUTH',
+      currentPracticeId: 'practice_SOUTH',
     },
   ];
 

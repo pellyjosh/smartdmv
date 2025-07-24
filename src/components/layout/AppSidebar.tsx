@@ -364,7 +364,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "Marketplace",
-        href: "/marketplace",
+        href: "/admin/marketplace",
         icon: ShoppingCart,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"]
       },

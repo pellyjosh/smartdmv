@@ -236,10 +236,10 @@ export function generateDefaultWidgetsForRole(role: string): WidgetConfig[] {
 
 export interface InsertDashboardConfig {
   name: string;
-  userId: number;
-  practiceId: number | null;
+  userId: string;
+  practiceId: string | null;
   config: string; // or DashboardConfigData if you stringify on the way out.
-  role: string;
+  role: string | null;
   isDefault: boolean;
 }
 
@@ -252,9 +252,9 @@ export function useDashboardConfigs() {
     isLoading: isLoadingConfigs,
     error: configsError 
   } = useQuery<DashboardConfig[]>({ 
-    queryKey: ['/api/dashboard-configs'],
+    queryKey: ['/api/admin/dashboard-configs'],
     queryFn: async () => {
-      const response = await apiRequest("GET", '/api/dashboard-configs');
+      const response = await apiRequest("GET", '/api/admin/dashboard-configs');
       return response.json();
     },
     refetchOnWindowFocus: false, // Prevent refetching dashboard structure on window focus
@@ -271,7 +271,7 @@ export function useDashboardConfigs() {
   // Get role-based dashboard config template
   const getRoleBasedConfigTemplate = async (role: string) => {
     try {
-      const response = await apiRequest("GET", `/api/dashboard-configs/role/${role}`);
+      const response = await apiRequest("GET", `/api/admin/dashboard-configs/role/${role}`);
       return await response.json();
     } catch (error) {
       console.error("Error fetching role config template:", error);
@@ -283,11 +283,11 @@ export function useDashboardConfigs() {
   // Create a new dashboard configuration
   const createConfigMutation = useMutation({
     mutationFn: async (config: InsertDashboardConfig) => {
-      const response = await apiRequest("POST", "/api/dashboard-configs", config);
+      const response = await apiRequest("POST", "/api/admin/dashboard-configs", config);
       return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/dashboard-configs'] });
       toast({
         title: "Dashboard configuration created",
         description: "Your dashboard configuration has been created successfully.",
@@ -305,11 +305,11 @@ export function useDashboardConfigs() {
   // Update a dashboard configuration
   const updateConfigMutation = useMutation({
     mutationFn: async ({ id, config }: { id: number, config: Partial<InsertDashboardConfig> }) => {
-      const response = await apiRequest("PATCH", `/api/dashboard-configs/${id}`, config);
+      const response = await apiRequest("PATCH", `/api/admin/dashboard-configs/${id}`, config);
       return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/dashboard-configs'] });
       toast({
         title: "Dashboard configuration updated",
         description: "Your dashboard configuration has been updated successfully.",
@@ -327,10 +327,10 @@ export function useDashboardConfigs() {
   // Delete a dashboard configuration
   const deleteConfigMutation = useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/dashboard-configs/${id}`);
+      await apiRequest("DELETE", `/api/admin/dashboard-configs/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/dashboard-configs'] });
       toast({
         title: "Dashboard configuration deleted",
         description: "The dashboard configuration has been deleted successfully.",
@@ -348,11 +348,11 @@ export function useDashboardConfigs() {
   // Set a configuration as default
   const setDefaultConfigMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await apiRequest("PATCH", `/api/dashboard-configs/${id}`, { isDefault: true });
+      const response = await apiRequest("PATCH", `/api/admin/dashboard-configs/${id}`, { isDefault: true });
       return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/dashboard-configs'] });
       toast({
         title: "Default configuration set",
         description: "Your default dashboard configuration has been updated.",
@@ -379,8 +379,8 @@ export function useDashboardConfigs() {
       role: string; 
       name: string; 
       config: DashboardConfigData; 
-      userId: number; 
-      practiceId: number 
+      userId: string; 
+      practiceId: string 
     }) => {
       const templateConfig: InsertDashboardConfig = {
         name,
@@ -391,11 +391,11 @@ export function useDashboardConfigs() {
         isDefault: true // Make it the default for this role
       };
       
-      const response = await apiRequest("POST", "/api/dashboard-configs", templateConfig);
+      const response = await apiRequest("POST", "/api/admin/dashboard-configs", templateConfig);
       return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/dashboard-configs'] });
       toast({
         title: "Role template created",
         description: "The role-based dashboard template has been created successfully.",

@@ -33,7 +33,7 @@ import {
 
 interface MeasurementToolsProps {
   imageRef: React.RefObject<HTMLImageElement>;
-  seriesId: number;
+  seriesId: string;
   onMeasurementAdded?: (measurement: any) => void;
 }
 
@@ -406,7 +406,7 @@ const MeasurementTools: React.FC<MeasurementToolsProps> = ({
               top: `${(startPoint.y + endPoint.y) / 2 - 2}%`,
             }}
           >
-            {calculateMeasurement()} {unit}
+            {calculateMeasurement()} {typeof unit === "string" ? unit : ""}
           </span>
         </div>
       );
@@ -430,7 +430,7 @@ const MeasurementTools: React.FC<MeasurementToolsProps> = ({
           }}
         >
           <span className="absolute -top-6 left-0 bg-blue-500 text-white text-xs px-1 py-0.5 rounded">
-            {calculateMeasurement()} {unit}²
+            {calculateMeasurement()} {typeof unit === "string" ? unit : ""}²
           </span>
         </div>
       );
@@ -453,7 +453,7 @@ const MeasurementTools: React.FC<MeasurementToolsProps> = ({
           }}
         >
           <span className="absolute -top-6 left-0 bg-blue-500 text-white text-xs px-1 py-0.5 rounded">
-            {calculateMeasurement()} {unit}
+            {calculateMeasurement()} {typeof unit === "string" ? unit : ""}
           </span>
         </div>
       );

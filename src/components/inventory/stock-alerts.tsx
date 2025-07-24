@@ -30,6 +30,13 @@ export function StockAlerts({ onRestock }: StockAlertsProps) {
     refetch,
   } = useQuery<Inventory[]>({
     queryKey: ["/api/inventory/reports/low-stock"],
+    queryFn: async () => {
+      const res = await fetch("/api/inventory/reports/low-stock", {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch low stock items");
+      return res.json();
+    },
   });
 
   // Categorize low stock items by severity

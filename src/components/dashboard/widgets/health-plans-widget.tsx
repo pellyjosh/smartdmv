@@ -17,7 +17,7 @@ export function HealthPlansWidget({ widget }: HealthPlansWidgetProps) {
     // queryFn: async () => { /* Fetch health plans */ }
   });
 
-  const isLoading = loadingPlans || loadingPets;
+  const isLoading = loadingPlans;
 
   if (isLoading) {
     return (

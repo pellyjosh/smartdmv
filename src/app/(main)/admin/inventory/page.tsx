@@ -56,6 +56,55 @@ export default function InventoryPage() {
   const [batchActionDialogOpen, setBatchActionDialogOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
   const [batchAction, setBatchAction] = useState<"adjust" | "delete" | "update">("adjust");
+  const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
+
+  // Quick Add Templates
+  const quickAddTemplates = [
+    {
+      name: "Amoxicillin 500mg",
+      type: "medication",
+      description: "Antibiotic tablets",
+      unit: "tablets",
+      minQuantity: 20,
+    },
+    {
+      name: "Surgical Gloves",
+      type: "supply", 
+      description: "Disposable latex gloves",
+      unit: "boxes",
+      minQuantity: 5,
+    },
+    {
+      name: "Digital Thermometer",
+      type: "equipment",
+      description: "Veterinary digital thermometer",
+      unit: "units",
+      minQuantity: 2,
+    }
+  ];
+
+  // Quick add function
+  const handleQuickAdd = (template: typeof quickAddTemplates[0]) => {
+    const form = document.getElementById('add-item-form') as HTMLFormElement;
+    if (form) {
+      // Fill form with template data
+      (form.elements.namedItem('name') as HTMLInputElement).value = template.name;
+      (form.elements.namedItem('description') as HTMLInputElement).value = template.description;
+      (form.elements.namedItem('unit') as HTMLInputElement).value = template.unit;
+      (form.elements.namedItem('minQuantity') as HTMLInputElement).value = template.minQuantity.toString();
+      
+      // Set select value for type
+      const typeSelect = form.querySelector('[name="type"]') as HTMLElement;
+      if (typeSelect) {
+        typeSelect.setAttribute('data-value', template.type);
+        // Trigger change event
+        typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      
+      // Clear any existing errors
+      setFormErrors({});
+    }
+  };
 
   // Fetch inventory data
   const {
@@ -65,6 +114,13 @@ export default function InventoryPage() {
     refetch,
   } = useQuery<Inventory[]>({
     queryKey: ["/api/inventory"],
+    queryFn: async () => {
+      const res = await fetch("/api/inventory", {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch inventory");
+      return res.json();
+    },
   });
 
   // Calculate totals and metrics
@@ -104,32 +160,130 @@ export default function InventoryPage() {
     return "normal";
   };
 
+  // Add inventory item mutation
+  const addInventoryMutation = useMutation({
+    mutationFn: async (newItem: any) => {
+      const res = await fetch("/api/inventory", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newItem),
+        credentials: "include",
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to add inventory item");
+      }
+      
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Item Added Successfully",
+        description: `${data.name} has been added to your inventory.`,
+      });
+      setAddItemDialogOpen(false);
+      // Reset form and clear errors
+      const form = document.getElementById('add-item-form') as HTMLFormElement;
+      form?.reset();
+      setFormErrors({});
+      refetch();
+    },
+    onError: (error: any) => {
+      // Handle validation errors from server
+      if (error.message.includes('Validation failed')) {
+        try {
+          const errorData = JSON.parse(error.message.split('Validation failed: ')[1]);
+          const newFormErrors: {[key: string]: string} = {};
+          
+          if (errorData.details) {
+            errorData.details.forEach((detail: any) => {
+              if (detail.path && detail.path.length > 0) {
+                newFormErrors[detail.path[0]] = detail.message;
+              }
+            });
+          }
+          
+          setFormErrors(newFormErrors);
+        } catch (parseError) {
+          // Fallback to generic error message
+          toast({
+            title: "Validation Error",
+            description: "Please check your form inputs and try again.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Error Adding Item",
+          description: (error as Error).message,
+          variant: "destructive",
+        });
+      }
+    },
+  });
+
   // Handle add new item
   const handleAddItem = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    // Clear previous errors
+    setFormErrors({});
+    
     const formData = new FormData(e.currentTarget);
     
-    const newItem = {
+    // Parse and validate form data
+    const rawData = {
       name: formData.get("name") as string,
       type: formData.get("type") as string,
-      description: formData.get("description") as string,
-      sku: formData.get("sku") as string,
-      quantity: parseInt(formData.get("quantity") as string, 10),
-      unit: formData.get("unit") as string,
-      minQuantity: parseInt(formData.get("minQuantity") as string, 10),
-      cost: formData.get("cost") as string,
-      price: formData.get("price") as string,
-      location: formData.get("location") as string,
-      supplier: formData.get("supplier") as string,
+      description: formData.get("description") as string || undefined,
+      sku: formData.get("sku") as string || undefined,
+      quantity: parseInt(formData.get("quantity") as string, 10) || 0,
+      unit: formData.get("unit") as string || undefined,
+      minQuantity: formData.get("minQuantity") as string ? parseInt(formData.get("minQuantity") as string, 10) : undefined,
+      cost: formData.get("cost") as string || undefined,
+      price: formData.get("price") as string || undefined,
+      location: formData.get("location") as string || undefined,
+      supplier: formData.get("supplier") as string || undefined,
+      expiryDate: formData.get("expiryDate") as string || undefined,
+      deaSchedule: formData.get("deaSchedule") as string || "none",
+      requiresSpecialAuth: formData.get("requiresSpecialAuth") === "on",
     };
+
+    // Client-side validation
+    const errors: {[key: string]: string} = {};
     
-    try {
-      await apiRequest("POST", "/api/inventory", newItem);
-      setAddItemDialogOpen(false);
-      refetch();
-    } catch (error) {
-      console.error("Failed to add inventory item:", error);
+    if (!rawData.name.trim()) {
+      errors.name = "Item name is required.";
     }
+
+    if (rawData.quantity < 0) {
+      errors.quantity = "Quantity cannot be negative.";
+    }
+
+    if (rawData.minQuantity !== undefined && rawData.minQuantity < 0) {
+      errors.minQuantity = "Minimum quantity cannot be negative.";
+    }
+
+    // If there are validation errors, show them and return
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      toast({
+        title: "Validation Error",
+        description: "Please fix the errors in the form before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Remove empty strings and convert to proper types
+    const newItem = Object.fromEntries(
+      Object.entries(rawData).filter(([_, value]) => value !== undefined && value !== "")
+    );
+    
+    addInventoryMutation.mutate(newItem);
   };
 
   // Batch actions mutations
@@ -137,7 +291,16 @@ export default function InventoryPage() {
   
   const batchAdjustMutation = useMutation({
     mutationFn: async (data: { itemIds: number[], quantityChange: number }) => {
-      return await apiRequest('POST', '/api/inventory/batch-adjust', data);
+      const res = await fetch('/api/inventory/batch-adjust', {
+        method: 'POST',
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to adjust inventory items");
+      return res.json();
     },
     onSuccess: () => {
       toast({
@@ -159,7 +322,16 @@ export default function InventoryPage() {
   
   const batchDeleteMutation = useMutation({
     mutationFn: async (itemIds: number[]) => {
-      return await apiRequest('DELETE', '/api/inventory/batch-delete', { itemIds });
+      const res = await fetch('/api/inventory/batch-delete', {
+        method: 'DELETE',
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ itemIds }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to delete inventory items");
+      return res.json();
     },
     onSuccess: () => {
       toast({
@@ -199,55 +371,198 @@ export default function InventoryPage() {
     <div className="container py-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Inventory Management</h1>
-        <Dialog open={addItemDialogOpen} onOpenChange={setAddItemDialogOpen}>
+        <Dialog open={addItemDialogOpen} onOpenChange={(open) => {
+          setAddItemDialogOpen(open);
+          if (!open) {
+            // Clear form and errors when dialog closes
+            setTimeout(() => {
+              const form = document.getElementById('add-item-form') as HTMLFormElement;
+              form?.reset();
+              setFormErrors({});
+            }, 100);
+          }
+        }}>
           <DialogTrigger asChild>
             <Button>
               <PlusCircle className="mr-2 h-4 w-4" />
               Add Item
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
-            <form onSubmit={handleAddItem}>
+          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+            <form id="add-item-form" onSubmit={handleAddItem}>
               <DialogHeader>
                 <DialogTitle>Add New Inventory Item</DialogTitle>
                 <DialogDescription>
                   Complete the form below to add a new item to your inventory.
                 </DialogDescription>
+                
+                {/* Quick Add Templates */}
+                <div className="mt-4">
+                  <Label className="text-sm font-medium">Quick Add Templates:</Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {quickAddTemplates.map((template, index) => (
+                      <Button
+                        key={index}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleQuickAdd(template)}
+                        className="text-xs"
+                      >
+                        {template.name}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name</Label>
-                    <Input id="name" name="name" required />
+              <div className="grid gap-6 py-4">
+                {/* Basic Information Section */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium text-muted-foreground border-b pb-2">Basic Information</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Item Name *</Label>
+                      <Input 
+                        id="name" 
+                        name="name" 
+                        required 
+                        placeholder="e.g., Amoxicillin 500mg"
+                        className={formErrors.name ? "border-red-500" : ""}
+                      />
+                      {formErrors.name && (
+                        <p className="text-sm text-red-500">{formErrors.name}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="type">Category *</Label>
+                      <Select name="type" defaultValue="medication">
+                        <SelectTrigger id="type">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="medication">Medication</SelectItem>
+                          <SelectItem value="supply">Supply</SelectItem>
+                          <SelectItem value="equipment">Equipment</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="type">Type</Label>
-                    <Select name="type" defaultValue="medication">
-                      <SelectTrigger id="type">
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="medication">Medication</SelectItem>
-                        <SelectItem value="supply">Supply</SelectItem>
-                        <SelectItem value="equipment">Equipment</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="description">Description</Label>
+                    <Input 
+                      id="description" 
+                      name="description" 
+                      placeholder="Brief description of the item"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="sku">SKU/Item Code</Label>
+                      <Input 
+                        id="sku" 
+                        name="sku" 
+                        placeholder="e.g., MED-AMX-500"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="location">Storage Location</Label>
+                      <Input 
+                        id="location" 
+                        name="location" 
+                        placeholder="e.g., Pharmacy Shelf A2"
+                      />
+                    </div>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Input id="description" name="description" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="sku">SKU/Item Code</Label>
-                    <Input id="sku" name="sku" />
+
+                {/* Quantity & Stock Management */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium text-muted-foreground border-b pb-2">Quantity & Stock Management</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="quantity">Current Quantity *</Label>
+                      <Input 
+                        id="quantity" 
+                        name="quantity" 
+                        type="number" 
+                        min="0" 
+                        required 
+                        defaultValue="0"
+                        placeholder="0"
+                        className={formErrors.quantity ? "border-red-500" : ""}
+                      />
+                      {formErrors.quantity && (
+                        <p className="text-sm text-red-500">{formErrors.quantity}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="unit">Unit</Label>
+                      <Input 
+                        id="unit" 
+                        name="unit" 
+                        placeholder="e.g., tablets, ml, boxes"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="minQuantity">Low Stock Alert Threshold</Label>
+                      <Input
+                        id="minQuantity"
+                        name="minQuantity"
+                        type="number"
+                        min="0"
+                        defaultValue="10"
+                        placeholder="10"
+                      />
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="location">Storage Location</Label>
-                    <Input id="location" name="location" />
+                    <Label htmlFor="expiryDate">Expiry Date (Optional)</Label>
+                    <Input
+                      id="expiryDate"
+                      name="expiryDate"
+                      type="date"
+                      min={new Date().toISOString().split('T')[0]}
+                    />
                   </div>
                 </div>
+
+                {/* Pricing & Supplier */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium text-muted-foreground border-b pb-2">Pricing & Supplier</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="cost">Cost Per Unit ($)</Label>
+                      <Input 
+                        id="cost" 
+                        name="cost" 
+                        type="number" 
+                        step="0.01" 
+                        min="0"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="price">Selling Price Per Unit ($)</Label>
+                      <Input 
+                        id="price" 
+                        name="price" 
+                        type="number" 
+                        step="0.01" 
+                        min="0"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="supplier">Supplier</Label>
+                      <Input 
+                        id="supplier" 
+                        name="supplier" 
+                        placeholder="e.g., VetSource, Patterson"
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 {/* Controlled substance section */}
                 <div className="relative border p-4 pt-6 rounded-md bg-yellow-50/30 border-yellow-200" id="controlled-substance-fields">
                   <div className="absolute -top-3 left-3 inline-flex items-center gap-1">
@@ -256,6 +571,7 @@ export default function InventoryPage() {
                       MARKETPLACE ADD-ON
                     </Badge>
                   </div>
+                  <h4 className="text-sm font-medium text-muted-foreground border-b pb-2 mb-4">Controlled Substance Information</h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="deaSchedule">DEA Schedule</Label>
@@ -282,48 +598,45 @@ export default function InventoryPage() {
                       </div>
                     </div>
                   </div>
-                  <p className="text-sm text-yellow-800 mt-2">Controlled Substance Tracking is a marketplace add-on feature. <Link href="/marketplace" className="underline font-medium">Upgrade in Marketplace</Link></p>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="quantity">Current Quantity</Label>
-                    <Input id="quantity" name="quantity" type="number" min="0" required defaultValue="0" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unit">Unit (e.g., tabs, ml)</Label>
-                    <Input id="unit" name="unit" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="minQuantity">Alert Threshold</Label>
-                    <Input
-                      id="minQuantity"
-                      name="minQuantity"
-                      type="number"
-                      min="0"
-                      defaultValue="10"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="cost">Cost Per Unit ($)</Label>
-                    <Input id="cost" name="cost" type="number" step="0.01" min="0" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="price">Price Per Unit ($)</Label>
-                    <Input id="price" name="price" type="number" step="0.01" min="0" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="supplier">Supplier</Label>
-                    <Input id="supplier" name="supplier" />
-                  </div>
+                  <p className="text-sm text-yellow-800 mt-2">
+                    Controlled Substance Tracking is a marketplace add-on feature. 
+                    <Link href="/marketplace" className="underline font-medium ml-1">Upgrade in Marketplace</Link>
+                  </p>
                 </div>
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setAddItemDialogOpen(false)}>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => {
+                    setAddItemDialogOpen(false);
+                    // Clear form and errors when cancel is clicked
+                    setTimeout(() => {
+                      const form = document.getElementById('add-item-form') as HTMLFormElement;
+                      form?.reset();
+                      setFormErrors({});
+                    }, 100);
+                  }}
+                  disabled={addInventoryMutation.isPending}
+                >
                   Cancel
                 </Button>
-                <Button type="submit">Add Item</Button>
+                <Button 
+                  type="submit" 
+                  disabled={addInventoryMutation.isPending}
+                >
+                  {addInventoryMutation.isPending ? (
+                    <>
+                      <Spinner className="mr-2 h-4 w-4" />
+                      Adding Item...
+                    </>
+                  ) : (
+                    <>
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      Add Item
+                    </>
+                  )}
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>

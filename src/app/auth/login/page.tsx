@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -9,12 +8,13 @@ import NextImage from "next/image"; // Renamed to avoid conflict with local Imag
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { HeartPulse, PawPrint, LogIn as LogInIcon, Eye, EyeOff, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { HeartPulse, PawPrint, LogIn as LogInIcon, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/UserContext";
 import { Checkbox } from "@/components/ui/checkbox";
 import { generateLoginImage } from '@/ai/flows/generate-login-image-flow';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -30,11 +30,16 @@ export default function LoginPage() {
 
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginImage, setLoginImage] = useState<string>("https://placehold.co/800x1200.png");
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState<string | null>(null);
+
+  // Check for session expired error
+  const errorParam = searchParams.get('error');
+  const isSessionExpired = errorParam === 'session_expired';
 
   useEffect(() => {
     const fetchImage = async () => {
@@ -141,6 +146,15 @@ export default function LoginPage() {
                 Sign in to access your veterinary practice
               </p>
             </div>
+
+            {isSessionExpired && (
+              <Alert className="mb-6 border-orange-200 bg-orange-50">
+                <AlertCircle className="h-4 w-4 text-orange-600" />
+                <AlertDescription className="text-orange-800">
+                  Your session has expired. Please sign in again to continue.
+                </AlertDescription>
+              </Alert>
+            )}
 
             <Form {...loginForm}>
               <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-6">

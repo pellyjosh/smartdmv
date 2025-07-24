@@ -12,41 +12,59 @@ export interface BaseUser {
   id: string;
   email: string;
   name?: string;
+  companyId?: string; // Add company context for multi-tenancy
 }
 
 export interface ClientUser extends BaseUser {
   role: 'CLIENT';
   practiceId: string;
+  companyId: string; // Required for tenant users
 }
 
 export interface PracticeAdminUser extends BaseUser {
   role: 'PRACTICE_ADMINISTRATOR';
   practiceId: string;
+  companyId: string; // Required for tenant users
 }
 
 export interface VeterinarianUser extends BaseUser {
   role: 'VETERINARIAN';
   practiceId: string;
+  companyId: string; // Required for tenant users
 }
 
 export interface PracticeManagerUser extends BaseUser {
   role: 'PRACTICE_MANAGER';
   practiceId: string;
+  companyId: string; // Required for tenant users
 }
 
 export interface AdministratorUser extends BaseUser {
   role: 'ADMINISTRATOR';
   accessiblePracticeIds: string[];
   currentPracticeId: string;
+  companyId: string; // Required for tenant users
 }
 
 export interface SuperAdminUser extends BaseUser {
   role: 'SUPER_ADMIN';
   accessiblePracticeIds: string[];
   currentPracticeId: string;
+  companyId: string; // Required for tenant users
 }
 
-export type User = ClientUser | PracticeAdminUser | AdministratorUser | SuperAdminUser | VeterinarianUser | PracticeManagerUser;
+// Owner user types (for platform management)
+export interface OwnerUser extends BaseUser {
+  role: 'OWNER';
+  // No companyId - owners manage multiple companies
+}
+
+export interface CompanyAdminUser extends BaseUser {
+  role: 'COMPANY_ADMIN';
+  companyId: string; // Company they manage
+}
+
+export type User = ClientUser | PracticeAdminUser | AdministratorUser | SuperAdminUser | VeterinarianUser | PracticeManagerUser | OwnerUser | CompanyAdminUser;
 
 const AUTH_PAGE = '/auth/login';
 
@@ -57,6 +75,8 @@ const PROTECTED_PATHS = [
   '/practice-administrator',
   '/favorites',
   '/symptom-checker',
+  '/owner', // Add owner management paths
+  '/company-management',
   // Add other main app routes here that require authentication
 ];
 
@@ -124,6 +144,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
         sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
         setClientCookie(SESSION_TOKEN_COOKIE_NAME, null);
         console.warn(`[UserContext fetchUser API_FAIL] /api/auth/me call failed, status: ${response.status}. Setting user to null.`);
+        
+        // If it's a 401, redirect to login with session expired message
+        if (response.status === 401) {
+          console.log('[UserContext fetchUser] Session expired, redirecting to login');
+          window.location.href = '/auth/login?error=session_expired';
+          return;
+        }
       }
     } catch (error) {
       console.error('[UserContext fetchUser CATCH_ERROR] Error fetching current user:', error);

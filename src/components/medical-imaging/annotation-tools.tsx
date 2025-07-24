@@ -33,7 +33,7 @@ import {
 
 interface AnnotationToolsProps {
   imageRef: React.RefObject<HTMLImageElement>;
-  seriesId: number;
+  seriesId: string;
   onAnnotationAdded?: (annotation: any) => void;
 }
 
@@ -321,7 +321,7 @@ const AnnotationTools: React.FC<AnnotationToolsProps> = ({
             pointerEvents: 'none'
           }}
         >
-          {label}
+          {typeof label === "string" ? label : String(label)}
         </div>
       );
     }

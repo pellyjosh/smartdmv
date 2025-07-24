@@ -73,6 +73,13 @@ export const PracticeProvider = ({ children }: { children: ReactNode }) => {
     refetch: refetchPractices
   } = useQuery<Practice[]>({
     queryKey: ["/api/user-practices"],
+    queryFn: async () => {
+      const res = await fetch("/api/user-practices", {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch user practices");
+      return res.json();
+    },
     enabled: !!user,
   });
 

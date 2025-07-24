@@ -8,13 +8,15 @@ import {
   HeartPulse, PawPrint, BarChart3, ClipboardList, LineChart, Trash2
 } from "lucide-react";
 import { WidgetConfig, DashboardConfigData, useDashboardConfigs } from "@/hooks/use-dashboard-config";
-import { AppointmentsWidget } from "./widgets/appointments-widget";
-import { WhiteboardWidget } from "./widgets/whiteboard-widget";
-import { NotificationsWidget } from "./widgets/notifications-widget";
-import { HealthPlansWidget } from "./widgets/health-plans-widget";
-import { PetStatsWidget } from "./widgets/pet-stats-widget";
-import { PracticeStatsWidget } from "./widgets/practice-stats-widget";
-import { ChartWidget } from "./widgets/chart-widget";
+import { 
+  AppointmentsWidget,
+  WhiteboardWidget,
+  NotificationsWidget,
+  HealthPlansWidget,
+  PetStatsWidget,
+  PracticeStatsWidget,
+  ChartWidget
+} from "./widgets";
 // import { useAuth } from "@/hooks/use-auth";
 import { useUser } from '../../context/UserContext'; 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,7 +33,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-// import { UserRole } from "@shared/schema";
+import { UserRole } from "@/db/schemas/usersSchema";
 
 // Widget definition interface
 interface WidgetDefinition {
@@ -55,7 +57,7 @@ const WIDGET_CATALOG: Record<string, WidgetDefinition> = {
     </div>,
     defaultSize: { w: 6, h: 4 },
     component: AppointmentsWidget,
-    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN", "RECEPTIONIST"]
+    allowedRoles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN", "RECEPTIONIST"]
   },
   whiteboard: {
     type: "whiteboard",
@@ -66,7 +68,7 @@ const WIDGET_CATALOG: Record<string, WidgetDefinition> = {
     </div>,
     defaultSize: { w: 6, h: 4 },
     component: WhiteboardWidget,
-    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
+    allowedRoles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
   },
   notifications: {
     type: "notifications",
@@ -77,7 +79,7 @@ const WIDGET_CATALOG: Record<string, WidgetDefinition> = {
     </div>,
     defaultSize: { w: 4, h: 3 },
     component: NotificationsWidget,
-    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN", "RECEPTIONIST", "ADMINISTRATOR"]
+    allowedRoles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN", "RECEPTIONIST"]
   },
   healthPlans: {
     type: "healthPlans",
@@ -88,7 +90,7 @@ const WIDGET_CATALOG: Record<string, WidgetDefinition> = {
     </div>,
     defaultSize: { w: 6, h: 4 },
     component: HealthPlansWidget,
-    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
+    allowedRoles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN"]
   },
   petStats: {
     type: "petStats",
@@ -99,7 +101,7 @@ const WIDGET_CATALOG: Record<string, WidgetDefinition> = {
     </div>,
     defaultSize: { w: 4, h: 3 },
     component: PetStatsWidget,
-    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN"]
+    allowedRoles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN"]
   },
   practiceStats: {
     type: "practiceStats",
@@ -110,7 +112,7 @@ const WIDGET_CATALOG: Record<string, WidgetDefinition> = {
     </div>,
     defaultSize: { w: 6, h: 4 },
     component: PracticeStatsWidget,
-    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "ACCOUNTANT", "ADMINISTRATOR"]
+    allowedRoles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "ACCOUNTANT"]
   },
   chart: {
     type: "chart",
@@ -121,7 +123,7 @@ const WIDGET_CATALOG: Record<string, WidgetDefinition> = {
     </div>,
     defaultSize: { w: 6, h: 4 },
     component: ChartWidget,
-    allowedRoles: ["SUPER_ADMIN", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "ACCOUNTANT", "ADMINISTRATOR"]
+    allowedRoles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "ACCOUNTANT"]
   }
 };
 
@@ -613,11 +615,22 @@ export function CustomizableDashboard() {
   const handleCreateDashboard = (name: string, isDefault: boolean) => {
     if (!currentConfig || !user) return;
     
+    // Get the correct practice ID based on user type
+    const practiceId = 'currentPracticeId' in user ? user.currentPracticeId : user.practiceId;
+    
+    console.log("Creating dashboard config:", {
+      name,
+      userId: user.id,
+      practiceId,
+      isDefault,
+      userType: user.role
+    });
+    
     // Create a new config in the database
     createConfig({
       name,
       userId: user.id,
-      practiceId: user.practiceId || 1,
+      practiceId: practiceId || "practice_default",
       config: JSON.stringify(currentConfig),
       isDefault,
       role: null
@@ -707,9 +720,17 @@ export function CustomizableDashboard() {
     return <WidgetComponent widget={widget} />;
   };
   
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-200px)]">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+  
   if (!currentConfig || !currentConfig.widgets || currentConfig.widgets.length === 0) {
     return (
-      <div>
+      <div className="p-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-semibold">Dashboard</h1>
           <div className="flex space-x-2">
@@ -725,7 +746,7 @@ export function CustomizableDashboard() {
           </div>
         </div>
         
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
+        <div className="flex flex-col items-center h-[calc(100vh-250px)] text-center">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary mb-6">
             <Layout className="h-10 w-10" />
           </div>

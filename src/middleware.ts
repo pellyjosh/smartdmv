@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { SESSION_TOKEN_COOKIE_NAME, HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
@@ -11,9 +10,12 @@ const ACCESS_DENIED_PAGE = '/access-denied';
 const CLIENT_DASHBOARD = '/client';
 const ADMINISTRATOR_DASHBOARD = '/administrator';
 const PRACTICE_ADMIN_DASHBOARD = '/practice-administrator';
+const OWNER_DASHBOARD = '/owner';
 
 // Other protected routes (relevant for access control, not initial login redirect)
 const OTHER_CLIENT_PROTECTED_ROUTES = ['/favorites', '/symptom-checker'];
+const ADMIN_PROTECTED_ROUTES = ['/admin'];
+const OWNER_PROTECTED_ROUTES = ['/owner', '/company-management'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -38,7 +40,13 @@ export async function middleware(request: NextRequest) {
   }
 
   const isServerAuthenticated = !!httpOnlySessionToken;
-  console.log(`[Middleware] Path: ${pathname}, ServerAuth: ${isServerAuthenticated}, ClientCookieValid: ${isClientCookieValid}, UserRole: ${userFromClientCookie?.role}`);
+  console.log(`[Middleware] Path: ${pathname}, ServerAuth: ${isServerAuthenticated}, ClientCookieValid: ${isClientCookieValid}, UserRole: ${userFromClientCookie?.role}, CompanyId: ${userFromClientCookie?.companyId}`);
+
+  // Extract company context if available
+  let companyId: string | undefined;
+  if (isClientCookieValid && userFromClientCookie && 'companyId' in userFromClientCookie) {
+    companyId = userFromClientCookie.companyId;
+  }
 
   // 1. Handle /auth or /auth/ redirect to /auth/login
   if (pathname === '/auth' || pathname === '/auth/') {
@@ -70,6 +78,7 @@ export async function middleware(request: NextRequest) {
     if (isClientCookieValid && userFromClientCookie) {
         const userRole = userFromClientCookie.role;
         console.log(`[Middleware] Authenticated user (${userFromClientCookie.email} - ${userRole}) on root path. Redirecting to their dashboard.`);
+        if (userRole === 'OWNER') return NextResponse.redirect(new URL(OWNER_DASHBOARD, request.url));
         if (userRole === 'ADMINISTRATOR') return NextResponse.redirect(new URL(ADMINISTRATOR_DASHBOARD, request.url));
         if (userRole === 'PRACTICE_ADMINISTRATOR') return NextResponse.redirect(new URL(PRACTICE_ADMIN_DASHBOARD, request.url));
         if (userRole === 'CLIENT') return NextResponse.redirect(new URL(CLIENT_DASHBOARD, request.url));
@@ -87,8 +96,11 @@ export async function middleware(request: NextRequest) {
   const isClientDashboard = pathname.startsWith(CLIENT_DASHBOARD);
   const isAdminDashboard = pathname.startsWith(ADMINISTRATOR_DASHBOARD);
   const isPracticeAdminDashboard = pathname.startsWith(PRACTICE_ADMIN_DASHBOARD);
+  const isOwnerDashboard = pathname.startsWith(OWNER_DASHBOARD);
   const isOtherClientRoute = OTHER_CLIENT_PROTECTED_ROUTES.some(route => pathname.startsWith(route));
-  const isExplicitlyProtectedPath = isClientDashboard || isAdminDashboard || isPracticeAdminDashboard || isOtherClientRoute;
+  const isAdminRoute = ADMIN_PROTECTED_ROUTES.some(route => pathname.startsWith(route));
+  const isOwnerRoute = OWNER_PROTECTED_ROUTES.some(route => pathname.startsWith(route));
+  const isExplicitlyProtectedPath = isClientDashboard || isAdminDashboard || isPracticeAdminDashboard || isOwnerDashboard || isOtherClientRoute || isAdminRoute || isOwnerRoute;
 
   if (isExplicitlyProtectedPath) {
     if (!isServerAuthenticated) {
@@ -110,21 +122,39 @@ export async function middleware(request: NextRequest) {
 
     // Both server session token and client user details are available. Perform role-based access control.
     const userRole = userFromClientCookie.role;
-    if (userRole === 'CLIENT') {
-      if (isAdminDashboard || isPracticeAdminDashboard) {
+    
+    // Add company context to request headers for tenant isolation
+    const response = NextResponse.next();
+    if (companyId) {
+      response.headers.set('x-company-id', companyId);
+    }
+    
+    // Role-based access control
+    if (userRole === 'OWNER' || userRole === 'COMPANY_ADMIN') {
+      // Owners and company admins can only access owner routes
+      if (!isOwnerDashboard && !isOwnerRoute) {
+        console.log(`[Middleware] Owner/Company Admin (${userFromClientCookie.email}) attempting non-owner route (${pathname}). Redirecting to ${ACCESS_DENIED_PAGE}.`);
+        return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));
+      }
+      return response;
+    } else if (userRole === 'CLIENT') {
+      if (isAdminDashboard || isPracticeAdminDashboard || isAdminRoute || isOwnerDashboard || isOwnerRoute) {
         console.log(`[Middleware] Client (${userFromClientCookie.email}) attempting restricted dashboard (${pathname}). Redirecting to ${ACCESS_DENIED_PAGE}.`);
         return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));
       }
+      return response;
     } else if (userRole === 'ADMINISTRATOR') {
-      if (isClientDashboard || isPracticeAdminDashboard || isOtherClientRoute) {
+      if (isClientDashboard || isPracticeAdminDashboard || isOtherClientRoute || isOwnerDashboard || isOwnerRoute) {
         console.log(`[Middleware] Administrator (${userFromClientCookie.email}) attempting restricted page (${pathname}). Redirecting to ${ACCESS_DENIED_PAGE}.`);
         return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));
       }
+      return response;
     } else if (userRole === 'PRACTICE_ADMINISTRATOR') {
-      if (isClientDashboard || isAdminDashboard || isOtherClientRoute) {
+      if (isClientDashboard || isAdminDashboard || isOtherClientRoute || isAdminRoute || isOwnerDashboard || isOwnerRoute) {
         console.log(`[Middleware] Practice Admin (${userFromClientCookie.email}) attempting restricted page (${pathname}). Redirecting to ${ACCESS_DENIED_PAGE}.`);
         return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));
       }
+      return response;
     } else {
         console.warn(`[Middleware] Unknown role in client cookie: ${userRole} for protected path ${pathname}. Redirecting to ${ACCESS_DENIED_PAGE}.`);
         return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));

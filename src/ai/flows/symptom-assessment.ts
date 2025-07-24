@@ -8,13 +8,14 @@
  * - SymptomAssessmentOutput - The return type for the assessSymptoms function.
  */
 
-import {ai} from '@/ai/genkit';
+import {ai, getPracticeAI} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const SymptomAssessmentInputSchema = z.object({
   species: z.string().describe('The species of the pet (e.g., dog, cat, bird).'),
   age: z.number().describe('The age of the pet in years.'),
   symptoms: z.string().describe('A detailed description of the pet\'s symptoms.'),
+  practiceId: z.string().optional().describe('The practice ID for custom AI configuration.'),
 });
 export type SymptomAssessmentInput = z.infer<typeof SymptomAssessmentInputSchema>;
 
@@ -27,10 +28,14 @@ const SymptomAssessmentOutputSchema = z.object({
 export type SymptomAssessmentOutput = z.infer<typeof SymptomAssessmentOutputSchema>;
 
 export async function assessSymptoms(input: SymptomAssessmentInput): Promise<SymptomAssessmentOutput> {
-  return symptomAssessmentFlow(input);
+  // Get practice-specific AI instance if practiceId is provided
+  const practiceId = input.practiceId as string | undefined;
+  const practiceAI = practiceId ? await getPracticeAI(practiceId) : ai;
+  
+  return symptomAssessmentFlow(input, practiceAI);
 }
 
-const symptomAssessmentPrompt = ai.definePrompt({
+const createSymptomAssessmentPrompt = (aiInstance: any) => aiInstance.definePrompt({
   name: 'symptomAssessmentPrompt',
   input: {schema: SymptomAssessmentInputSchema},
   output: {schema: SymptomAssessmentOutputSchema},
@@ -47,14 +52,21 @@ const symptomAssessmentPrompt = ai.definePrompt({
   Format your repsonse as a valid JSON conforming to the output schema.`,
 });
 
-const symptomAssessmentFlow = ai.defineFlow(
+const createSymptomAssessmentFlow = (aiInstance: any) => aiInstance.defineFlow(
   {
     name: 'symptomAssessmentFlow',
     inputSchema: SymptomAssessmentInputSchema,
     outputSchema: SymptomAssessmentOutputSchema,
   },
-  async input => {
-    const {output} = await symptomAssessmentPrompt(input);
+  async (input: SymptomAssessmentInput) => {
+    const prompt = createSymptomAssessmentPrompt(aiInstance);
+    const {output} = await prompt(input);
     return output!;
   }
 );
+
+// Function to handle the flow with dynamic AI instance
+async function symptomAssessmentFlow(input: SymptomAssessmentInput, aiInstance: any): Promise<SymptomAssessmentOutput> {
+  const flow = createSymptomAssessmentFlow(aiInstance);
+  return await flow(input);
+}

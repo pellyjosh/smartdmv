@@ -53,6 +53,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Search, FileText, Send, Calendar, CheckCircle, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -66,14 +67,21 @@ import { usePractice } from "@/hooks/use-practice";
 
 // Create the referral form schema
 const referralFormSchema = z.object({
-  petId: z.string(),
-  referringPracticeId: z.string(),
-  referringVetId: z.string(),
+  petId: z.string().min(1, "Please select a patient"),
+  referringVetId: z.string().min(1, "Please select a referring veterinarian"),
+  specialistId: z.string().optional(),
+  specialistPracticeId: z.string().optional(),
   referralReason: z.string().min(3, "Please provide a reason for the referral"),
+  specialty: z.enum(Object.values(VetSpecialty) as [string, ...string[]], {
+    required_error: "Please select a specialty"
+  }),
+  clinicalHistory: z.string().optional(),
+  currentMedications: z.string().optional(),
+  diagnosticTests: z.string().optional(),
   referralNotes: z.string().optional(),
-  specialty: z.enum(Object.values(VetSpecialty) as [string, ...string[]]),
   priority: z.enum(Object.values(ReferralPriority) as [string, ...string[]]),
   scheduledDate: z.string().optional(),
+  createAppointment: z.boolean().default(false),
 });
 type ReferralFormValues = z.infer<typeof referralFormSchema>;
 
@@ -85,31 +93,65 @@ export default function ReferralsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   // Fetch referrals
-  const { data: outboundReferrals, isLoading: isLoadingOutbound } = useQuery({
+  const { data: outboundReferrals, isLoading: isLoadingOutbound, refetch: refetchOutbound } = useQuery({
     queryKey: ['/api/referrals/outbound'],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/referrals/outbound");
+      return await response.json();
+    },
     enabled: !!practice?.id,
+    staleTime: 0, // Always consider data stale for immediate updates
+    refetchOnWindowFocus: true,
   });
 
-  const { data: inboundReferrals, isLoading: isLoadingInbound } = useQuery({
+  const { data: inboundReferrals, isLoading: isLoadingInbound, refetch: refetchInbound } = useQuery({
     queryKey: ['/api/referrals/inbound'],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/referrals/inbound");
+      return await response.json();
+    },
     enabled: !!practice?.id,
+    staleTime: 0, // Always consider data stale for immediate updates
+    refetchOnWindowFocus: true,
   });
 
-  // Fetch specialists/veterinarians for the form
+  // Fetch specialists for the form
   const { data: specialists, isLoading: isLoadingSpecialists } = useQuery({
     queryKey: ['/api/veterinarians/specialists'],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/veterinarians/specialists");
+      return await response.json();
+    },
+    enabled: !!practice?.id,
+  });
+
+  // Fetch veterinarians for the current practice
+  const { data: veterinarians, isLoading: isLoadingVets } = useQuery({
+    queryKey: ['/api/veterinarians'],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/veterinarians");
+      return await response.json();
+    },
     enabled: !!practice?.id,
   });
 
   // Fetch practices for the form
   const { data: practices, isLoading: isLoadingPractices } = useQuery({
     queryKey: ['/api/practices'],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/practices");
+      return await response.json();
+    },
     enabled: !!practice?.id,
   });
   
-  // Fetch pets for the form
+  // Fetch pets for the form  
   const { data: pets, isLoading: isLoadingPets } = useQuery({
     queryKey: ['/api/pets'],
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/pets?practiceId=${practice?.id}`);
+      return await response.json();
+    },
     enabled: !!practice?.id,
   });
   
@@ -119,18 +161,21 @@ export default function ReferralsPage() {
       const response = await apiRequest("POST", "/api/referrals", values);
       return await response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/referrals/outbound'] });
+    onSuccess: async (newReferral) => {
+      // Immediately refetch the outbound referrals
+      await refetchOutbound();
+      
+      form.reset(); // Reset the form
       setIsCreateDialogOpen(false);
       toast({
         title: "Referral created",
         description: "The referral has been successfully created.",
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
         title: "Failed to create referral",
-        description: error.message,
+        description: error.message || "An error occurred while creating the referral",
         variant: "destructive",
       });
     }
@@ -142,18 +187,63 @@ export default function ReferralsPage() {
       const response = await apiRequest("PATCH", `/api/referrals/${id}/status`, { status });
       return await response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/referrals/outbound'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/referrals/inbound'] });
+    onMutate: async ({ id, status }) => {
+      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+      await queryClient.cancelQueries({ queryKey: ['/api/referrals/outbound'] });
+      await queryClient.cancelQueries({ queryKey: ['/api/referrals/inbound'] });
+
+      // Snapshot the previous values
+      const previousOutbound = queryClient.getQueryData(['/api/referrals/outbound']);
+      const previousInbound = queryClient.getQueryData(['/api/referrals/inbound']);
+
+      // Optimistically update the referral status
+      queryClient.setQueryData(['/api/referrals/outbound'], (old: any) => {
+        if (!old) return old;
+        return old.map((referral: any) => 
+          referral.id === id ? { ...referral, status } : referral
+        );
+      });
+
+      queryClient.setQueryData(['/api/referrals/inbound'], (old: any) => {
+        if (!old) return old;
+        return old.map((referral: any) => 
+          referral.id === id ? { ...referral, status } : referral
+        );
+      });
+
+      // Return a context object with the snapshotted values
+      return { previousOutbound, previousInbound };
+    },
+    onSuccess: async () => {
+      // Force immediate refetch of both queries
+      await Promise.all([
+        refetchOutbound(),
+        refetchInbound()
+      ]);
+      
       toast({
         title: "Referral updated",
         description: "The referral status has been successfully updated.",
       });
     },
-    onError: (error) => {
+    onError: async (error: any, variables, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousOutbound) {
+        queryClient.setQueryData(['/api/referrals/outbound'], context.previousOutbound);
+      }
+      if (context?.previousInbound) {
+        queryClient.setQueryData(['/api/referrals/inbound'], context.previousInbound);
+      }
+      
+      // Also refetch to ensure we have the correct data
+      await Promise.all([
+        refetchOutbound(),
+        refetchInbound()
+      ]);
+      
       toast({
         title: "Failed to update referral",
-        description: error.message,
+        description: error.message || "An error occurred while updating the referral",
         variant: "destructive",
       });
     }
@@ -164,7 +254,6 @@ export default function ReferralsPage() {
     resolver: zodResolver(referralFormSchema),
     defaultValues: {
       petId: "",
-      referringPracticeId: practice?.id?.toString() || "",
       referringVetId: "",
       specialistId: "",
       specialistPracticeId: "",
@@ -175,19 +264,10 @@ export default function ReferralsPage() {
       diagnosticTests: "",
       referralNotes: "",
       priority: ReferralPriority.ROUTINE,
-      status: ReferralStatus.DRAFT,
       scheduledDate: "",
-      attachments: false,
       createAppointment: false,
     }
   });
-type ReferralFormValues = z.infer<typeof referralFormSchema>;
-
-  useEffect(() => {
-    if (practice?.id && !form.getValues("referringPracticeId")) {
-      form.setValue("referringPracticeId", practice.id);
-    }
-  }, [practice, form]);
 
   function onSubmit(values: ReferralFormValues) {
     createReferralMutation.mutate(values);
@@ -298,6 +378,40 @@ type ReferralFormValues = z.infer<typeof referralFormSchema>;
                       
                       <FormField
                         control={form.control}
+                        name="referringVetId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Referring Veterinarian</FormLabel>
+                            <Select 
+                              onValueChange={field.onChange} 
+                              defaultValue={field.value?.toString()}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select referring vet" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {isLoadingVets ? (
+                                  <div className="flex justify-center p-2">
+                                    <Loader2 className="h-5 w-5 animate-spin" />
+                                  </div>
+                                ) : (
+                                  veterinarians?.map((vet: any) => (
+                                    <SelectItem key={vet.id} value={vet.id.toString()}>
+                                      {vet.name}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
                         name="petId"
                         render={({ field }) => (
                           <FormItem>
@@ -319,7 +433,7 @@ type ReferralFormValues = z.infer<typeof referralFormSchema>;
                                 ) : (
                                   pets?.map((pet: any) => (
                                     <SelectItem key={pet.id} value={pet.id.toString()}>
-                                      {pet.name} ({pet.species})
+                                      {pet.name} ({pet.species}) - {pet.owner?.name}
                                     </SelectItem>
                                   ))
                                 )}
@@ -482,18 +596,18 @@ type ReferralFormValues = z.infer<typeof referralFormSchema>;
                           control={form.control}
                           name="createAppointment"
                           render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-2 space-y-0 pt-2">
+                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-2">
                               <FormControl>
-                                <input
-                                  type="checkbox"
+                                <Checkbox
                                   checked={field.value}
-                                  onChange={field.onChange}
-                                  className="checkbox"
+                                  onCheckedChange={field.onChange}
                                 />
                               </FormControl>
-                              <FormLabel className="font-normal">
-                                Create appointment automatically
-                              </FormLabel>
+                              <div className="space-y-1 leading-none">
+                                <FormLabel className="font-normal">
+                                  Create appointment automatically
+                                </FormLabel>
+                              </div>
                             </FormItem>
                           )}
                         />
@@ -676,7 +790,11 @@ type ReferralFormValues = z.infer<typeof referralFormSchema>;
                                   onClick={() => updateReferralStatusMutation.mutate({ id: referral.id, status: ReferralStatus.PENDING })}
                                   disabled={updateReferralStatusMutation.isPending}
                                 >
-                                  <Send className="h-4 w-4 mr-1" />
+                                  {updateReferralStatusMutation.isPending ? (
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  ) : (
+                                    <Send className="h-4 w-4 mr-1" />
+                                  )}
                                   Send
                                 </Button>
                               )}
@@ -688,7 +806,11 @@ type ReferralFormValues = z.infer<typeof referralFormSchema>;
                                   onClick={() => updateReferralStatusMutation.mutate({ id: referral.id, status: ReferralStatus.CANCELLED })}
                                   disabled={updateReferralStatusMutation.isPending}
                                 >
-                                  <XCircle className="h-4 w-4 mr-1" />
+                                  {updateReferralStatusMutation.isPending ? (
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  ) : (
+                                    <XCircle className="h-4 w-4 mr-1" />
+                                  )}
                                   Cancel
                                 </Button>
                               )}
@@ -781,7 +903,11 @@ type ReferralFormValues = z.infer<typeof referralFormSchema>;
                                     onClick={() => updateReferralStatusMutation.mutate({ id: referral.id, status: ReferralStatus.ACCEPTED })}
                                     disabled={updateReferralStatusMutation.isPending}
                                   >
-                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                    {updateReferralStatusMutation.isPending ? (
+                                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                    ) : (
+                                      <CheckCircle className="h-4 w-4 mr-1" />
+                                    )}
                                     Accept
                                   </Button>
                                   <Button 
@@ -790,7 +916,11 @@ type ReferralFormValues = z.infer<typeof referralFormSchema>;
                                     onClick={() => updateReferralStatusMutation.mutate({ id: referral.id, status: ReferralStatus.DECLINED })}
                                     disabled={updateReferralStatusMutation.isPending}
                                   >
-                                    <XCircle className="h-4 w-4 mr-1" />
+                                    {updateReferralStatusMutation.isPending ? (
+                                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                    ) : (
+                                      <XCircle className="h-4 w-4 mr-1" />
+                                    )}
                                     Decline
                                   </Button>
                                 </>
@@ -802,7 +932,11 @@ type ReferralFormValues = z.infer<typeof referralFormSchema>;
                                   onClick={() => updateReferralStatusMutation.mutate({ id: referral.id, status: ReferralStatus.COMPLETED })}
                                   disabled={updateReferralStatusMutation.isPending}
                                 >
-                                  <CheckCircle className="h-4 w-4 mr-1" />
+                                  {updateReferralStatusMutation.isPending ? (
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  ) : (
+                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                  )}
                                   Complete
                                 </Button>
                               )}

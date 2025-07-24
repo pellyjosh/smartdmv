@@ -5,6 +5,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { assessSymptoms, type SymptomAssessmentInput, type SymptomAssessmentOutput } from '@/ai/flows/symptom-assessment';
+import { useUser } from '@/context/UserContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -23,6 +24,7 @@ const symptomCheckerFormSchema = z.object({
 type SymptomCheckerFormValues = z.infer<typeof symptomCheckerFormSchema>;
 
 export default function SymptomCheckerPage() {
+  const { userPracticeId } = useUser();
   const [assessmentResult, setAssessmentResult] = useState<SymptomAssessmentOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,13 @@ export default function SymptomCheckerPage() {
     setAssessmentResult(null);
     setError(null);
     try {
-      const result = await assessSymptoms(data as SymptomAssessmentInput);
+      // Include practiceId if available for practice-specific AI configuration
+      const inputData: SymptomAssessmentInput = {
+        ...data,
+        ...(userPracticeId && { practiceId: userPracticeId })
+      };
+      
+      const result = await assessSymptoms(inputData);
       setAssessmentResult(result);
       toast({
         title: "Assessment Complete",

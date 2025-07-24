@@ -292,7 +292,13 @@ export default function AppointmentsPage() {
                 <CardContent className="pt-4">
                   <EnhancedCalendar
                     practiceId={userPracticeId}
-                    userRole={user.role}
+                    userRole={
+                      user.role === "CLIENT" ||
+                      user.role === "PRACTICE_ADMINISTRATOR" ||
+                      user.role === "ADMINISTRATOR"
+                        ? user.role
+                        : "CLIENT"
+                    }
                     userId={user.id}
                   />
                 </CardContent>
@@ -304,7 +310,13 @@ export default function AppointmentsPage() {
                 <CardContent className="p-0 overflow-visible">
                   <DraggableCalendar
                     practiceId={userPracticeId}
-                    userRole={user.role}
+                    userRole={
+                      user.role === "CLIENT" ||
+                      user.role === "PRACTICE_ADMINISTRATOR" ||
+                      user.role === "ADMINISTRATOR"
+                        ? user.role
+                        : "CLIENT"
+                    }
                     userId={user.id}
                   />
                 </CardContent>

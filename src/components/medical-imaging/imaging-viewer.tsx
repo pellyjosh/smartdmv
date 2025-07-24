@@ -31,9 +31,16 @@ import {
 import LoadingSpinner from "../loading-spinner";
 
 interface ImagingViewerProps {
-  seriesId: number;
-  petId: number;
+  seriesId: string;
+  petId?: number;
   initialImageIndex?: number;
+  imageUrl?: string;
+  title?: string;
+  description?: string;
+  annotations?: any[];
+  measurements?: any[];
+  onAnnotationAdded?: (annotation: any) => void;
+  onMeasurementAdded?: (measurement: any) => void;
 }
 
 type Annotation = {

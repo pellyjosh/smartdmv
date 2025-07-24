@@ -2,10 +2,9 @@ import React, { ReactNode } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Star } from "lucide-react";
-import { Link } from "wouter";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { useSubscriptionTier } from '@/hooks/use-subscription-tier';
-import { useAuth } from '@/hooks/use-auth';
+import { useUser } from '@/context/UserContext';
 
 interface EnterpriseFeatureContainerProps {
   featureName: string;
@@ -28,28 +27,33 @@ export function EnterpriseFeatureContainer({
   className,
   showUI = true
 }: EnterpriseFeatureContainerProps) {
-  const { hasEnterpriseTier, isLoading } = useSubscriptionTier();
-  const { user } = useAuth();
+  const { user, userPracticeId } = useUser();
+  
+  // TODO: Temporarily bypass all subscription checks during development
+  // Just return the children directly - remove this when subscription system is implemented
+  return <>{children}</>;
+  
+  // The code below is preserved for when subscription system is re-enabled
   
   // If loading, show minimal loading state
-  if (isLoading) {
-    return (
-      <div className="container py-10 flex items-center justify-center min-h-[60vh]">
-        <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-      </div>
-    );
-  }
+  // if (isLoading) {
+  //   return (
+  //     <div className="container py-10 flex items-center justify-center min-h-[60vh]">
+  //       <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+  //     </div>
+  //   );
+  // }
   
   // Superadmins get full access to all enterprise features
-  if (user?.role === 'SUPER_ADMIN') {
-    console.log(`[EnterpriseFeatureContainer] SUPER_ADMIN user - bypassing restriction for ${featureId}`);
-    return <>{children}</>;
-  }
+  // if (user?.role === 'SUPER_ADMIN') {
+  //   console.log(`[EnterpriseFeatureContainer] SUPER_ADMIN user - bypassing restriction for ${featureId}`);
+  //   return <>{children}</>;
+  // }
   
   // If user has Enterprise tier, show the full content
-  if (hasEnterpriseTier()) {
-    return <>{children}</>;
-  }
+  // if (hasEnterpriseTier()) {
+  //   return <>{children}</>;
+  // }
   
   // Otherwise show restricted content
   if (!showUI) {

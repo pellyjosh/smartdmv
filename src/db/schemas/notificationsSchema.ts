@@ -1,31 +1,43 @@
 // src/db/schemas/notificationsSchema.ts
-import { dbTable, text, timestamp, } from '@/db/db.config';
+import { dbTable, text, timestamp, boolean, integer } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { users } from './usersSchema';
 import { practices } from './practicesSchema';
 
 const isSqlite = process.env.DB_TYPE === 'sqlite';
 
-export const notificationTypeEnum = ['info', 'alert', 'reminder', 'system'] as const;
+export const notificationTypeEnum = ['appointment', 'healthPlan', 'message', 'system', 'info', 'alert', 'reminder'] as const;
 
 export const notifications = dbTable('notifications', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), // The user this notification is for
-  practiceId: text('practice_id').references(() => practices.id, { onDelete: 'cascade' }), // Contextual practice
+  // Use text UUID for both PostgreSQL and SQLite
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID() as any),
+  
+  // User ID - use text for both PostgreSQL and SQLite  
+  userId: text('user_id').notNull().references(() => users.id as any, { onDelete: 'cascade' }),
+    
+  // Practice ID for context - use text for both databases
+  practiceId: text('practice_id').references(() => practices.id as any, { onDelete: 'cascade' }),
+    
   title: text('title').notNull(),
   message: text('message').notNull(),
-  type: text('type', { enum: notificationTypeEnum }).default('info'),
+  type: text('type').notNull().default('info'),
   read: boolean('read').default(false).notNull(),
-  link: text('link'), // Optional link to navigate to
+  
+  // Related entity information - use text for both databases
+  relatedId: text('related_id'),
+  relatedType: text('related_type'), // "appointment", "health_plan", etc.
+  
+  // Optional link to navigate to
+  link: text('link'),
 
-  // createdAt is used by the widget, so we ensure it's here and matches widget expectations
+  // Timestamps - strict snake_case
   createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
+    : timestamp('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 
   updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
+    ? timestamp('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
+    : timestamp('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
 });
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({

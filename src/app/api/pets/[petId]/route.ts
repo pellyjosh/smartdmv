@@ -12,7 +12,10 @@ export async function GET(request: Request, context: { params: Promise<{ petId: 
   try {
     // Query the database for the pet with the given ID
     const petData = await db.query.pets.findFirst({
-      where: (pets, { eq }) => eq(pets.id, petId)
+      where: (pets, { eq }) => eq(pets.id, petId),
+      with: {
+        owner: true
+      }
     });
 
     if (!petData) {

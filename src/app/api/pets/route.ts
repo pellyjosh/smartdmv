@@ -15,7 +15,10 @@ export async function GET(request: NextRequest) {
   try {
     if (clientId) {
       const petsData = await db.query.pets.findMany({
-        where: (pets, { eq }) => eq(pets.ownerId, clientId)
+        where: (pets, { eq }) => eq(pets.ownerId, clientId),
+        with: {
+          owner: true
+        }
       });
       if (petsData.length === 0) {
         console.log('No pets found for Client ID:', clientId);
@@ -24,7 +27,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(petsData, { status: 200 });
     } else if (practiceId) {
       const petsData = await db.query.pets.findMany({
-        where: (pets, { eq }) => eq(pets.practiceId, practiceId)
+        where: (pets, { eq }) => eq(pets.practiceId, practiceId),
+        with: {
+          owner: true
+        }
       });
       if (petsData.length === 0) {
         console.log('No pets found for Practice ID:', practiceId);

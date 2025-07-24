@@ -7,7 +7,7 @@ const isSqlite = process.env.DB_TYPE === 'sqlite';
 
 export const inventory = dbTable('inventory', {
   id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  practiceId: integer("practice_id").notNull(),
+  practiceId: text("practice_id").notNull(),
   name: text("name").notNull(),
   type: text("type").notNull(), // "medication", "supply", "equipment"
   description: text("description"),
