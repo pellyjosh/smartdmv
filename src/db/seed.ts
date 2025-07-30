@@ -15,6 +15,9 @@ import {
   customFieldGroups,
   customFieldValues,
   pets, // <--- Import pets schema
+  appointments,
+  healthPlans,
+  notifications,
   referrals,
   ReferralStatus,
   ReferralPriority,
@@ -22,6 +25,7 @@ import {
 } from './schema';
 import { User } from '@/context/UserContext';
 import { Phone } from 'lucide-react';
+import { seedMarketplaceData } from './seedMarketplaceData';
 
 async function seed() {
   console.log('🌱 Starting database seeding...');
@@ -166,33 +170,167 @@ async function seed() {
   ];
 
   // --- New Pets Data ---
+  const pet1Id = crypto.randomUUID();
+  const pet2Id = crypto.randomUUID();
+  const pet3Id = crypto.randomUUID();
+  
   const petsData = [
     {
-      id: crypto.randomUUID(),
+      id: pet1Id,
       name: 'Buddy',
       species: 'Dog',
       breed: 'Golden Retriever',
       dateOfBirth: new Date('2020-05-15'), // Example Date object
       ownerId: client1UserId,
       practiceId: 'practice_MAIN_HQ',
+      weight: '25 kg',
+      gender: 'Male',
+      allergies: 'None known',
+      color: 'Golden',
     },
     {
-      id: crypto.randomUUID(),
+      id: pet2Id,
       name: 'Whiskers',
       species: 'Cat',
       breed: 'Siamese',
       dateOfBirth: new Date('2021-02-28'),
       ownerId: client1UserId,
       practiceId: 'practice_MAIN_HQ',
+      weight: '4 kg',
+      gender: 'Female',
+      allergies: 'Fish',
+      color: 'Cream and brown',
     },
     {
-      id: crypto.randomUUID(),
+      id: pet3Id,
       name: 'Captain Fluff',
       species: 'Guinea Pig',
       breed: null,
       dateOfBirth: new Date('2023-01-10'),
       ownerId: client2UserId,
       practiceId: 'practice_MAIN_HQ',
+      weight: '0.8 kg',
+      gender: 'Male',
+      allergies: null,
+      color: 'White and brown',
+    },
+  ];
+
+  // --- Sample Appointments Data ---
+  const appointmentsData = [
+    {
+      id: crypto.randomUUID(),
+      title: 'Annual Checkup - Buddy',
+      description: 'Routine annual health examination',
+      date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 1 week from now
+      durationMinutes: '45',
+      status: 'approved' as const,
+      petId: pet1Id,
+      clientId: client1UserId,
+      practitionerId: vet1UserId,
+      practiceId: 'practice_MAIN_HQ',
+    },
+    {
+      id: crypto.randomUUID(),
+      title: 'Vaccination Update - Whiskers',
+      description: 'Annual vaccinations',
+      date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 2 weeks from now
+      durationMinutes: '30',
+      status: 'approved' as const,
+      petId: pet2Id,
+      clientId: client1UserId,
+      practitionerId: vet1UserId,
+      practiceId: 'practice_MAIN_HQ',
+    },
+    {
+      id: crypto.randomUUID(),
+      title: 'Health Check - Captain Fluff',
+      description: 'General health examination',
+      date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 1 month ago (completed)
+      durationMinutes: '30',
+      status: 'approved' as const,
+      petId: pet3Id,
+      clientId: client2UserId,
+      practitionerId: vet1UserId,
+      practiceId: 'practice_MAIN_HQ',
+    },
+  ];
+
+  // --- Sample Health Plans Data ---
+  const healthPlansData = [
+    {
+      id: crypto.randomUUID(),
+      name: 'Senior Dog Wellness Plan',
+      petId: pet1Id,
+      practiceId: 'practice_MAIN_HQ',
+      planType: 'Senior Care',
+      description: 'Comprehensive wellness plan for senior dogs including regular checkups, dental care, and joint health monitoring.',
+      status: 'active' as const,
+      startDate: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000), // 2 months ago
+      endDate: new Date(Date.now() + 300 * 24 * 60 * 60 * 1000), // 10 months from now
+    },
+    {
+      id: crypto.randomUUID(),
+      name: 'Cat Preventive Care',
+      petId: pet2Id,
+      practiceId: 'practice_MAIN_HQ',
+      planType: 'Preventive Care',
+      description: 'Regular preventive care including vaccinations, flea/tick prevention, and annual checkups.',
+      status: 'active' as const,
+      startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 1 month ago
+      endDate: new Date(Date.now() + 330 * 24 * 60 * 60 * 1000), // 11 months from now
+    },
+  ];
+
+  // --- Sample Notifications Data ---
+  const notificationsData = [
+    {
+      id: crypto.randomUUID(),
+      userId: client1UserId,
+      practiceId: 'practice_MAIN_HQ',
+      title: 'Appointment Reminder',
+      message: 'Buddy has an appointment scheduled for next week on Monday at 10:00 AM.',
+      type: 'appointment' as const,
+      read: false,
+      relatedId: null,
+      relatedType: 'appointment',
+      link: '/client?tab=appointments',
+    },
+    {
+      id: crypto.randomUUID(),
+      userId: client1UserId,
+      practiceId: 'practice_MAIN_HQ',
+      title: 'Vaccination Due',
+      message: 'Whiskers is due for annual vaccinations. Please schedule an appointment.',
+      type: 'health_plan' as const,
+      read: false,
+      relatedId: null,
+      relatedType: 'health_plan',
+      link: '/client?tab=health-plans',
+    },
+    {
+      id: crypto.randomUUID(),
+      userId: client1UserId,
+      practiceId: 'practice_MAIN_HQ',
+      title: 'Welcome to SmartDVM',
+      message: 'Welcome to our client portal! You can now view your pets health records, schedule appointments, and more.',
+      type: 'info' as const,
+      read: true,
+      relatedId: null,
+      relatedType: null,
+      link: '/client',
+    },
+    {
+      id: crypto.randomUUID(),
+      userId: client2UserId,
+      practiceId: 'practice_MAIN_HQ',
+      title: 'Health Plan Update',
+      message: 'Captain Fluff has been enrolled in our Small Pet Care plan.',
+      type: 'health_plan' as const,
+      read: false,
+      relatedId: null,
+      relatedType: 'health_plan',
+      link: '/client?tab=health-plans',
     },
   ];
 
@@ -204,12 +342,36 @@ async function seed() {
     // For simplicity, we are deleting pets before users/practices here,
     // assuming no direct foreign keys from pets to those yet, or cascade is handled.
     // If you add appointments later, they must be deleted BEFORE pets.
+    
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await db.delete(notifications);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await db.delete(healthPlans);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await db.delete(appointments);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     await db.delete(customFieldValues);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     await db.delete(customFieldGroups);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     await db.delete(customFieldCategories);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     await db.delete(pets); // <--- Add pets to deletion order
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     await db.delete(administratorAccessiblePractices);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     await db.delete(users);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     await db.delete(practices);
     console.log('✅ Existing data cleared.');
   } catch (error) {
@@ -225,16 +387,54 @@ async function seed() {
     throw error;
   }
 
+  console.log('Inserting practices...');
+  try {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await db.insert(practices).values(practicesData);
+    console.log(`✅ Inserted ${practicesData.length} practices.`);
+  } catch (error) {
+    console.error('❌ Error inserting practices:', error);
+    throw error;
+  }
+
+  // Generate typed users data by ensuring required fields are present
+  const typedUsersData = usersData.map(user => ({
+    ...user,
+    companyId: 'default-company-id' // Add default company ID if required
+  }));
+
   console.log('Inserting users...');
   try {
-    const typedUsersData = usersData.map(user => ({
-      ...user,
-      role: user.role,
-    }));
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     await db.insert(users).values(typedUsersData);
-    console.log(`✅ Inserted ${usersData.length} users.`);
+    console.log(`✅ Inserted ${typedUsersData.length} users.`);
   } catch (error) {
     console.error('❌ Error inserting users:', error);
+    throw error;
+  }
+
+  console.log('Inserting administrator accessible practices...');
+  try {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await db.insert(administratorAccessiblePractices).values(adminAccessData);
+    console.log(`✅ Inserted ${adminAccessData.length} admin access records.`);
+  } catch (error) {
+    console.error('❌ Error inserting admin access:', error);
+    throw error;
+  }
+
+  // --- Insert Pets (after users and practices, as pets depend on them) ---
+  console.log('Inserting pets...');
+  try {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await db.insert(pets).values(petsData);
+    console.log(`✅ Inserted ${petsData.length} pets.`);
+  } catch (error) {
+    console.error('❌ Error inserting pets:', error);
     throw error;
   }
 
@@ -313,6 +513,50 @@ async function seed() {
     }
   } else {
     console.warn('⚠️ Skipping custom field value insertion: No group ID available.');
+  }
+
+  // --- Insert Sample Appointments ---
+  console.log('Inserting sample appointments...');
+  try {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await db.insert(appointments).values(appointmentsData);
+    console.log(`✅ Inserted ${appointmentsData.length} sample appointments.`);
+  } catch (error) {
+    console.error('❌ Error inserting sample appointments:', error);
+    throw error;
+  }
+
+  // --- Insert Sample Health Plans ---
+  console.log('Inserting sample health plans...');
+  try {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await db.insert(healthPlans).values(healthPlansData);
+    console.log(`✅ Inserted ${healthPlansData.length} sample health plans.`);
+  } catch (error) {
+    console.error('❌ Error inserting sample health plans:', error);
+    throw error;
+  }
+
+  // --- Insert Sample Notifications ---
+  console.log('Inserting sample notifications...');
+  try {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await db.insert(notifications).values(notificationsData);
+    console.log(`✅ Inserted ${notificationsData.length} sample notifications.`);
+  } catch (error) {
+    console.error('❌ Error inserting sample notifications:', error);
+    throw error;
+  }
+
+  // Seed marketplace data
+  try {
+    await seedMarketplaceData();
+  } catch (error) {
+    console.error('❌ Error seeding marketplace data:', error);
+    throw error;
   }
 
   console.log('🌳 Database seeding completed successfully!');

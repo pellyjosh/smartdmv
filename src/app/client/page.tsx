@@ -15,6 +15,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "@/lib/date-utils";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { ClientHeader } from "@/components/client/ClientHeader";
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   Loader2,
   Calendar as CalendarIcon, 
@@ -44,24 +63,7 @@ import {
   Plus,
   Heart
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog";
+
 
 // Enhanced pet card component for my pets tab
 const PetCard = ({ pet }: { pet: any }) => {
@@ -509,6 +511,9 @@ export default function ClientPortalPage() {
   const tab = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState("dashboard");
   
+  // Contact modal state
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  
   // Show helpful notification if staff members navigate to client portal
   useEffect(() => {
     if (user && user.role !== "CLIENT") {
@@ -589,10 +594,10 @@ export default function ClientPortalPage() {
     isLoading: isLoadingPets,
     error: petsError
   } = useQuery<Pet[]>({ 
-    queryKey: ['/api/pets'],
-    enabled: user?.role === 'CLIENT'
-    ,queryFn: async () => {
-      const res = await fetch("/api/pets");
+    queryKey: ['/api/pets/client'],
+    enabled: user?.role === 'CLIENT',
+    queryFn: async () => {
+      const res = await fetch("/api/pets/client");
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to fetch pets");
@@ -610,14 +615,13 @@ export default function ClientPortalPage() {
   } = useQuery<Appointment[]>({ 
     queryKey: ['/api/appointments/client'],
     queryFn: async () => {
-      const res = await fetch(`/api/appointments?clientId=${user?.id}`);
+      const res = await fetch(`/api/appointments/client`);
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to fetch client appointments");
       }
       return await res.json();
     },
-
     enabled: user?.role === 'CLIENT'
   });
 
@@ -627,7 +631,7 @@ export default function ClientPortalPage() {
     isLoading: isLoadingHealthPlans,
     error: healthPlansError
   } = useQuery<HealthPlan[]>({ 
-    queryKey: ['/api/health-plans'],
+    queryKey: ['/api/health-plans/client'],
     queryFn: async () => {
       const res = await fetch(`/api/health-plans/client`);
       if (!res.ok) {
@@ -675,7 +679,7 @@ export default function ClientPortalPage() {
     },
     onSuccess: () => {
       // Invalidate notifications query to refetch
-      queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications/client'] });
     },
     onError: (error) => {
       toast({
@@ -756,7 +760,7 @@ export default function ClientPortalPage() {
             </div>
             
             <div className="text-sm text-muted-foreground">SMS Notifications:</div>
-            <div className="text-sm">{user?.smsOptOut ? "Opted out" : "Enabled"}</div>
+            <div className="text-sm">Enabled</div>
           </div>
         </div>
       </div>
@@ -770,79 +774,7 @@ export default function ClientPortalPage() {
 
   return (
     <div className="container mx-auto py-6 px-4 max-w-5xl">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Client Portal</h1>
-          <p className="text-muted-foreground mt-1">
-            Welcome back, {user?.name || "Client"}
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <Dialog>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Account
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DialogTrigger asChild>
-                  <DropdownMenuItem>
-                    <User className="mr-2 h-4 w-4" />
-                    <span>Profile</span>
-                  </DropdownMenuItem>
-                </DialogTrigger>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} disabled={isUserLoading}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign Out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Account Profile</DialogTitle>
-                <DialogDescription>
-                  Your personal information and account details
-                </DialogDescription>
-              </DialogHeader>
-              <UserProfileContent />
-              <DialogFooter className="flex flex-col sm:flex-row gap-2">
-                <Button variant="outline" className="sm:w-auto flex-1" onClick={handleLogout} disabled={isUserLoading}>
-                  {isUserLoading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <LogOut className="mr-2 h-4 w-4" />
-                  )}
-                  Sign Out
-                </Button>
-                <DialogClose asChild>
-                  <Button className="sm:w-auto flex-1">Close</Button>
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          
-          <Button variant="outline" className="flex items-center" onClick={handleLogout} disabled={isUserLoading}>
-            {isUserLoading ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <LogOut className="h-4 w-4 mr-2" />
-            )}
-            Sign Out
-          </Button>
-        </div>
-      </div>
-
+      <ClientHeader />
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid grid-cols-5 mb-8">
           <TabsTrigger value="dashboard">
@@ -885,97 +817,131 @@ export default function ClientPortalPage() {
         <TabsContent value="dashboard">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {/* Pet Stats */}
-            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <Card 
+              className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-md transition-shadow cursor-pointer group"
+              onClick={() => setActiveTab("pets")}
+            >
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-blue-900">My Pets</CardTitle>
+                <CardTitle className="text-sm font-medium text-blue-900 flex items-center justify-between">
+                  My Pets
+                  <PawPrint className="h-4 w-4 text-blue-600 group-hover:scale-110 transition-transform" />
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-blue-900">
                   {isLoadingPets ? (
                     <Skeleton className="h-8 w-16" />
                   ) : pets ? (
-                    Array.isArray(pets) ? pets.length : 0
-                  ) : 0}
+                    <span className="tabular-nums">{Array.isArray(pets) ? pets.length : 0}</span>
+                  ) : (
+                    <span className="tabular-nums">0</span>
+                  )}
                 </div>
                 <p className="text-xs text-blue-700 mt-1">Registered with SmartDVM</p>
               </CardContent>
               <CardFooter className="pt-0">
-                <Button variant="ghost" className="p-0 h-auto text-blue-700 text-xs" asChild>
+                <Button variant="ghost" className="p-0 h-auto text-blue-700 text-xs group-hover:text-blue-800 transition-colors" asChild>
                   <Link href="/client?tab=pets">
-                    View all pets <ArrowRightCircle className="h-3 w-3 ml-1" />
+                    View all pets <ArrowRightCircle className="h-3 w-3 ml-1 group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </Button>
               </CardFooter>
             </Card>
 
             {/* Appointment Stats */}
-            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <Card 
+              className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-md transition-shadow cursor-pointer group"
+              onClick={() => setActiveTab("appointments")}
+            >
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-green-900">Appointments</CardTitle>
+                <CardTitle className="text-sm font-medium text-green-900 flex items-center justify-between">
+                  Appointments
+                  <CalendarIcon className="h-4 w-4 text-green-600 group-hover:scale-110 transition-transform" />
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-green-900">
                   {isLoadingAppointments ? (
                     <Skeleton className="h-8 w-16" />
                   ) : appointments ? (
-                    Array.isArray(appointments) ? 
-                      appointments.filter((a: any) => a.status === 'scheduled').length : 0
-                  ) : 0}
+                    <span className="tabular-nums">
+                      {Array.isArray(appointments) ? 
+                        appointments.filter((a: any) => a.status === 'scheduled').length : 0}
+                    </span>
+                  ) : (
+                    <span className="tabular-nums">0</span>
+                  )}
                 </div>
                 <p className="text-xs text-green-700 mt-1">Upcoming appointments</p>
               </CardContent>
               <CardFooter className="pt-0">
-                <Button variant="ghost" className="p-0 h-auto text-green-700 text-xs" asChild>
+                <Button variant="ghost" className="p-0 h-auto text-green-700 text-xs group-hover:text-green-800 transition-colors" asChild>
                   <Link href="/client?tab=appointments">
-                    Manage appointments <ArrowRightCircle className="h-3 w-3 ml-1" />
+                    Manage appointments <ArrowRightCircle className="h-3 w-3 ml-1 group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </Button>
               </CardFooter>
             </Card>
 
             {/* Health Plans */}
-            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+            <Card 
+              className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 hover:shadow-md transition-shadow cursor-pointer group"
+              onClick={() => setActiveTab("health-plans")}
+            >
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-purple-900">Health Plans</CardTitle>
+                <CardTitle className="text-sm font-medium text-purple-900 flex items-center justify-between">
+                  Health Plans
+                  <Heart className="h-4 w-4 text-purple-600 group-hover:scale-110 transition-transform" />
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-purple-900">
                   {isLoadingHealthPlans ? (
                     <Skeleton className="h-8 w-16" />
                   ) : healthPlans ? (
-                    Array.isArray(healthPlans) ? healthPlans.length : 0
-                  ) : 0}
+                    <span className="tabular-nums">{Array.isArray(healthPlans) ? healthPlans.length : 0}</span>
+                  ) : (
+                    <span className="tabular-nums">0</span>
+                  )}
                 </div>
                 <p className="text-xs text-purple-700 mt-1">Active health plans</p>
               </CardContent>
               <CardFooter className="pt-0">
-                <Button variant="ghost" className="p-0 h-auto text-purple-700 text-xs" asChild>
+                <Button variant="ghost" className="p-0 h-auto text-purple-700 text-xs group-hover:text-purple-800 transition-colors" asChild>
                   <Link href="/client?tab=health-plans">
-                    View health plans <ArrowRightCircle className="h-3 w-3 ml-1" />
+                    View health plans <ArrowRightCircle className="h-3 w-3 ml-1 group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </Button>
               </CardFooter>
             </Card>
 
             {/* Notifications */}
-            <Card className="bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200">
+            <Card 
+              className="bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200 hover:shadow-md transition-shadow cursor-pointer group"
+              onClick={() => setActiveTab("notifications")}
+            >
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-amber-900">Notifications</CardTitle>
+                <CardTitle className="text-sm font-medium text-amber-900 flex items-center justify-between">
+                  Notifications
+                  <Bell className="h-4 w-4 text-amber-600 group-hover:scale-110 transition-transform" />
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-amber-900">
                   {isLoadingNotifications ? (
                     <Skeleton className="h-8 w-16" />
                   ) : notifications ? (
-                    Array.isArray(notifications) ? notifications.filter((n: any) => !n.read).length : 0
-                  ) : 0}
+                    <span className="tabular-nums">{Array.isArray(notifications) ? notifications.filter((n: any) => !n.read).length : 0}</span>
+                  ) : (
+                    <span className="tabular-nums">0</span>
+                  )}
                 </div>
                 <p className="text-xs text-amber-700 mt-1">Unread notifications</p>
               </CardContent>
               <CardFooter className="pt-0">
-                <Button variant="ghost" className="p-0 h-auto text-amber-700 text-xs" asChild>
+                <Button variant="ghost" className="p-0 h-auto text-amber-700 text-xs group-hover:text-amber-800 transition-colors" asChild>
                   <Link href="/client?tab=notifications">
-                    View all notifications <ArrowRightCircle className="h-3 w-3 ml-1" />
+                    View all notifications <ArrowRightCircle className="h-3 w-3 ml-1 group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </Button>
               </CardFooter>
@@ -985,10 +951,10 @@ export default function ClientPortalPage() {
           {/* Quick Actions */}
           <h3 className="font-semibold text-lg mt-8 mb-4">Quick Actions</h3>
           <div className="grid gap-4 md:grid-cols-3">
-            <Card>
+            <Card className="hover:shadow-md transition-shadow group">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <CalendarIcon className="h-5 w-5 text-blue-500" />
+                  <CalendarIcon className="h-5 w-5 text-blue-500 group-hover:scale-110 transition-transform" />
                   Book Appointment
                 </CardTitle>
               </CardHeader>
@@ -996,16 +962,22 @@ export default function ClientPortalPage() {
                 <p className="text-sm text-muted-foreground">Schedule a new appointment for your pet</p>
               </CardContent>
               <CardFooter className="pt-0">
-                <Button className="w-full" variant="outline">
-                  <Plus className="h-4 w-4 mr-2" /> New Appointment
+                <Button 
+                  className="w-full group-hover:bg-blue-50 group-hover:text-blue-700 transition-colors" 
+                  variant="outline"
+                  asChild
+                >
+                  <Link href="/client/book-appointment">
+                    <Plus className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" /> New Appointment
+                  </Link>
                 </Button>
               </CardFooter>
             </Card>
 
-            <Card>
+            <Card className="hover:shadow-md transition-shadow group">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 text-green-500" />
+                  <MessageSquare className="h-5 w-5 text-green-500 group-hover:scale-110 transition-transform" />
                   Contact Veterinarian
                 </CardTitle>
               </CardHeader>
@@ -1013,16 +985,20 @@ export default function ClientPortalPage() {
                 <p className="text-sm text-muted-foreground">Send a message to your veterinary team</p>
               </CardContent>
               <CardFooter className="pt-0">
-                <Button className="w-full" variant="outline">
-                  <Mail className="h-4 w-4 mr-2" /> Send Message
+                <Button 
+                  className="w-full group-hover:bg-green-50 group-hover:text-green-700 transition-colors" 
+                  variant="outline"
+                  onClick={() => setShowMessageModal(true)}
+                >
+                  <Mail className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" /> Send Message
                 </Button>
               </CardFooter>
             </Card>
 
-            <Card>
+            <Card className="hover:shadow-md transition-shadow group">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <CreditCard className="h-5 w-5 text-purple-500" />
+                  <CreditCard className="h-5 w-5 text-purple-500 group-hover:scale-110 transition-transform" />
                   Billing & Payments
                 </CardTitle>
               </CardHeader>
@@ -1030,8 +1006,14 @@ export default function ClientPortalPage() {
                 <p className="text-sm text-muted-foreground">View and pay invoices for veterinary services</p>
               </CardContent>
               <CardFooter className="pt-0">
-                <Button className="w-full" variant="outline">
-                  <CreditCard className="h-4 w-4 mr-2" /> View Invoices
+                <Button 
+                  className="w-full group-hover:bg-purple-50 group-hover:text-purple-700 transition-colors" 
+                  variant="outline"
+                  asChild
+                >
+                  <Link href="/client/marketplace">
+                    <CreditCard className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" /> View Marketplace
+                  </Link>
                 </Button>
               </CardFooter>
             </Card>
@@ -1431,6 +1413,68 @@ export default function ClientPortalPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Contact Veterinarian Modal */}
+      <Dialog open={showMessageModal} onOpenChange={setShowMessageModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Contact Veterinary Team</DialogTitle>
+            <DialogDescription>
+              Send a message to your veterinary team. They will respond as soon as possible.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="message-subject" className="text-right">
+                Subject
+              </label>
+              <input
+                id="message-subject"
+                placeholder="Brief subject line"
+                className="col-span-3 p-2 border rounded"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="message-priority" className="text-right">
+                Priority
+              </label>
+              <select id="message-priority" className="col-span-3 p-2 border rounded">
+                <option value="low">Low - General question</option>
+                <option value="medium">Medium - Concern about pet</option>
+                <option value="high">High - Urgent medical concern</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="message-content" className="text-right">
+                Message
+              </label>
+              <textarea
+                id="message-content"
+                placeholder="Describe your question or concern..."
+                className="col-span-3 p-2 border rounded"
+                rows={5}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setShowMessageModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              onClick={() => {
+                toast({
+                  title: "Message Sent",
+                  description: "Your message has been sent to the veterinary team.",
+                });
+                setShowMessageModal(false);
+              }}
+            >
+              Send Message
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

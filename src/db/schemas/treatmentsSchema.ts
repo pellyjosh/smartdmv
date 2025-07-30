@@ -12,16 +12,16 @@ import { createInsertSchema } from 'drizzle-zod';
 const isSqlite = process.env.DB_TYPE === 'sqlite';
 
 export const treatments = dbTable('treatments', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   soapNoteId: integer("soap_note_id").references(() => soapNotes.id),
-  petId: integer("pet_id").notNull().references(() => pets.id),
-  practitionerId: integer("practitioner_id").notNull().references(() => users.id),
-  practiceId: integer("practice_id").notNull(),
+  petId: text("pet_id").notNull().references(() => pets.id),
+  practitionerId: text("practitioner_id").notNull().references(() => users.id),
+  practiceId: text("practice_id").notNull(),
   name: text("name").notNull(), // Treatment name
   category: text("category", { enum: ["medication", "procedure", "surgery", "therapy", "diagnostic", "wellness", "other"] }).notNull(),
   description: text("description"),
   // Medication-specific fields
-  inventoryItemId: integer("inventory_item_id").references(() => inventory.id), // Link to medication in inventory
+  inventoryItemId: text("inventory_item_id").references(() => inventory.id), // Link to medication in inventory
   dosage: text("dosage"), // e.g., "10mg", "5ml", etc.
   route: text("route", { enum: ["oral", "injectable", "topical", "ophthalmic", "otic", "nasal", "rectal", "inhaled", "other"] }),
   frequency: text("frequency", { enum: ["once", "BID", "TID", "QID", "SID", "PRN", "EOD", "weekly", "biweekly", "monthly", "other"] }),
@@ -30,7 +30,7 @@ export const treatments = dbTable('treatments', {
   // Procedure-specific fields
   procedureCode: text("procedure_code"), // CPT/Billing code
   location: text("location"), // Body location or site
-  technician: integer("technician").references(() => users.id), // Assisting technician
+  technician: text("technician").references(() => users.id), // Assisting technician
   // Common fields
   status: text("status", { enum: ["planned", "in_progress", "completed", "discontinued"] }).notNull().default(sql`'planned'`),
   startDate: timestamp('start_date', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),

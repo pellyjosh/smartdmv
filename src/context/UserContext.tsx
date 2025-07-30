@@ -13,6 +13,16 @@ export interface BaseUser {
   email: string;
   name?: string;
   companyId?: string; // Add company context for multi-tenancy
+  username?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  emergencyContactRelationship?: string;
 }
 
 export interface ClientUser extends BaseUser {

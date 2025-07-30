@@ -21,11 +21,13 @@ import {
   Clipboard, Clock, Pill, Filter, FileText, Copy, ClipboardCopy, 
   Paperclip, Loader2, ChevronLeft, Save, Plus, X, Search, CalendarPlus,
   CircleIcon, HeartPulseIcon, Wind, Utensils, Activity, Brain, Fingerprint,
-  Share2, BookTemplate
+  Share2, BookTemplate, CheckCircle
 } from "lucide-react";
 import { MultiSelect, type MultiSelectOption } from "@/components/ui/multi-select";
 import { PrescriptionForm } from "@/components/prescriptions/prescription-form";
 import { PrescriptionList } from "@/components/prescriptions/prescription-list";
+import { QuickReferralForm } from "@/components/referrals/quick-referral-form";
+import { FileUpload, type UploadedFile } from "@/components/shared/file-upload";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
@@ -36,23 +38,17 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { FileUpload, type UploadedFile } from "@/components/shared/file-upload";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { FileAttachmentList } from "@/components/shared/file-attachment-list";
 import { SoapLabResultsSection } from "@/components/lab/soap-lab-results-section";
 import { HealthPlanSelector } from "@/components/health-plans/health-plan-selector";
-import { QuickReferralForm } from "@/components/referrals/quick-referral-form";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter
-} from "@/components/ui/dialog";
 
 // Extended schema with validation for form
 const soapNoteFormSchema = z.object({
-  ...insertSOAPNoteSchema.shape,
+  appointmentId: z.string().optional(),
+  petId: z.string().min(1, { message: "Please select a pet" }),
+  practitionerId: z.string().min(1, { message: "Practitioner ID is required" }),
   subjective: z.string().min(1, { message: "Subjective notes are required" }),
   objective: z.string().min(1, { message: "Objective findings are required" }),
   assessment: z.string().min(1, { message: "Assessment is required" }),
@@ -83,6 +79,19 @@ const soapNoteFormSchema = z.object({
   mucousMembranes: z.string().optional(),
   capillaryRefillTime: z.string().optional(),
   pulse: z.string().optional(),
+  pulseQuality: z.string().optional(),
+  abdomenPalpation: z.string().optional(),
+  bowelSounds: z.string().optional(),
+  gastrointestinalNotes: z.string().optional(),
+  gait: z.string().optional(),
+  jointStatus: z.string().optional(),
+  musculoskeletalNotes: z.string().optional(),
+  mentalStatus: z.string().optional(),
+  reflexes: z.string().optional(),
+  neurologicalNotes: z.string().optional(),
+  skinCondition: z.string().optional(),
+  coatCondition: z.string().optional(),
+  skinNotes: z.string().optional(),
   // Assessment tab fields
   primaryDiagnosis: z.array(z.string()).optional().default([]),
   differentialDiagnoses: z.array(z.string()).optional().default([]),
@@ -92,9 +101,9 @@ const soapNoteFormSchema = z.object({
   // Plan tab fields
   treatment: z.string().optional(),
   medications: z.array(z.any()).optional(),
-  procedures: z.string().optional(),
+  procedures: z.array(z.string()).optional().default([]),
   procedureNotes: z.string().optional(),
-  diagnostics: z.string().optional(),
+  diagnostics: z.array(z.string()).optional().default([]),
   clientEducation: z.string().optional(),
   followUpTimeframe: z.string().optional(),
   followUpReason: z.string().optional()
@@ -104,7 +113,7 @@ type SoapNoteFormValues = z.infer<typeof soapNoteFormSchema>;
 
 const SOAPNoteCreatePage: React.FC = () => {
   const { toast } = useToast();
-  const { user } = useUser();
+  const { user, userPracticeId } = useUser();
   const pathname = usePathname();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("details");
@@ -113,6 +122,7 @@ const SOAPNoteCreatePage: React.FC = () => {
   const [isPrescriptionFormOpen, setIsPrescriptionFormOpen] = useState(false);
   const [showReferralDialog, setShowReferralDialog] = useState(false);
   const [showSaveAsTemplateDialog, setShowSaveAsTemplateDialog] = useState(false);
+  const [showFollowUpDialog, setShowFollowUpDialog] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
   const [templateCategory, setTemplateCategory] = useState("general");
@@ -122,7 +132,8 @@ const SOAPNoteCreatePage: React.FC = () => {
   const [savedNoteId, setSavedNoteId] = useState<number | null>(null);
   const [soapNoteSaved, setSoapNoteSaved] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  
+  const [currentSoapTab, setCurrentSoapTab] = useState("subjective");
+
   // Initialize the form with default values
   const form = useForm<SoapNoteFormValues>({
     resolver: zodResolver(soapNoteFormSchema),
@@ -131,9 +142,9 @@ const SOAPNoteCreatePage: React.FC = () => {
       objective: "",
       assessment: "",
       plan: "",
-      appointmentId: 0,
-      petId: 0,
-      practitionerId: user?.id || 0,
+      appointmentId: "",
+      petId: "",
+      practitionerId: user?.id || "",
       // Subjective tab fields
       chiefComplaint: [],
       patientHistory: "",
@@ -160,6 +171,19 @@ const SOAPNoteCreatePage: React.FC = () => {
       mucousMembranes: "",
       capillaryRefillTime: "",
       pulse: "",
+      pulseQuality: "",
+      abdomenPalpation: "",
+      bowelSounds: "",
+      gastrointestinalNotes: "",
+      gait: "",
+      jointStatus: "",
+      musculoskeletalNotes: "",
+      mentalStatus: "",
+      reflexes: "",
+      neurologicalNotes: "",
+      skinCondition: "",
+      coatCondition: "",
+      skinNotes: "",
       // Assessment tab fields
       primaryDiagnosis: [],
       differentialDiagnoses: [],
@@ -178,6 +202,66 @@ const SOAPNoteCreatePage: React.FC = () => {
     }
   });
   
+  // Function to get validation errors for each tab
+  const getTabValidationStatus = () => {
+    const errors = form.formState.errors;
+    
+    const subjectiveErrors = [
+      errors.subjective,
+      errors.chiefComplaint,
+      errors.patientHistory,
+      errors.symptoms,
+      errors.duration
+    ].filter(Boolean);
+
+    const objectiveErrors = [
+      errors.objective,
+      errors.temperature,
+      errors.heartRate,
+      errors.respiratoryRate,
+      errors.weight,
+      errors.bloodPressure,
+      errors.oxygenSaturation,
+      errors.generalAppearance,
+      errors.hydration,
+      errors.heartSounds,
+      errors.cardiovascularNotes,
+      errors.lungSounds,
+      errors.respiratoryEffort,
+      errors.respiratoryNotes
+    ].filter(Boolean);
+
+    const assessmentErrors = [
+      errors.assessment,
+      errors.primaryDiagnosis,
+      errors.differentialDiagnoses,
+      errors.progressStatus,
+      errors.confirmationStatus,
+      errors.progressNotes
+    ].filter(Boolean);
+
+    const planErrors = [
+      errors.plan,
+      errors.treatment,
+      errors.medications,
+      errors.procedures,
+      errors.procedureNotes,
+      errors.diagnostics,
+      errors.clientEducation,
+      errors.followUpTimeframe,
+      errors.followUpReason
+    ].filter(Boolean);
+
+    return {
+      subjective: subjectiveErrors.length > 0,
+      objective: objectiveErrors.length > 0,
+      assessment: assessmentErrors.length > 0,
+      plan: planErrors.length > 0
+    };
+  };
+
+  const tabValidationStatus = getTabValidationStatus();
+  
   // Fetch appointments for dropdown (using special SOAP endpoint to bypass client-only restrictions)
   const { data: appointments, isLoading: isLoadingAppointments } = useQuery({
     queryKey: ['/api/soap/appointments'],
@@ -189,18 +273,27 @@ const SOAPNoteCreatePage: React.FC = () => {
   
   // Fetch pets for dropdown
   const { data: pets, isLoading: isLoadingPets } = useQuery({
-    queryKey: ['/api/pets'],
+    queryKey: ['/api/pets', userPracticeId],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/pets');
+      if (!userPracticeId) {
+        throw new Error('Practice ID not available');
+      }
+      const response = await apiRequest('GET', `/api/pets?practiceId=${userPracticeId}`);
       return response.json();
-    }
+    },
+    enabled: !!userPracticeId
   });
   
   // Fetch SOAP templates for template selection
   const { data: templates, isLoading: isLoadingTemplates } = useQuery({
-    queryKey: ['/api/soap-templates'],
+    queryKey: ['/api/soap-templates', userPracticeId],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/soap-templates');
+      const params = new URLSearchParams();
+      if (userPracticeId) {
+        params.append('practiceId', userPracticeId);
+      }
+      const url = `/api/soap-templates${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await apiRequest('GET', url);
       return response.json();
     }
   });
@@ -221,12 +314,24 @@ const SOAPNoteCreatePage: React.FC = () => {
   // Create SOAP note mutation
   const mutation = useMutation({
     mutationFn: async (data: SoapNoteFormValues) => {
-      const res = await apiRequest('POST', '/api/soap-notes', data);
+      // Extract only the fields needed for the API
+      const soapNoteData = {
+        appointmentId: data.appointmentId === "none" ? null : data.appointmentId,
+        petId: data.petId,
+        practitionerId: data.practitionerId,
+        subjective: data.subjective,
+        objective: data.objective,
+        assessment: data.assessment,
+        plan: data.plan
+      };
+      
+      const res = await apiRequest('POST', '/api/soap-notes', soapNoteData);
       return await res.json();
     },
     onSuccess: (data) => {
       // Save the SOAP note ID for template conversion
       setSavedNoteId(data.id);
+      setSoapNoteSaved(true);
       
       queryClient.invalidateQueries({ queryKey: ['/api/soap-notes'] });
       toast({
@@ -235,7 +340,13 @@ const SOAPNoteCreatePage: React.FC = () => {
         action: (
           <ToastAction 
             altText="Save as Template" 
-            onClick={handleSaveAsTemplate}
+            onClick={() => {
+              // Use the fresh data.id and add a small delay to ensure state is updated
+              setTimeout(() => {
+                setSavedNoteId(data.id);
+                setShowSaveAsTemplateDialog(true);
+              }, 100);
+            }}
           >
             Save as Template
           </ToastAction>
@@ -269,16 +380,24 @@ const SOAPNoteCreatePage: React.FC = () => {
       category: string | null,
       speciesApplicability: string[] | null
     }) => {
-      const res = await apiRequest(
-        'POST', 
-        `/api/soap-notes/${templateData.soapNoteId}/convert-to-template`,
-        {
-          name: templateData.name,
-          description: templateData.description,
-          category: templateData.category,
-          speciesApplicability: templateData.speciesApplicability
-        }
-      );
+      // Get current form values to include in template
+      const formValues = form.getValues();
+      
+      const requestData = {
+        name: templateData.name,
+        description: templateData.description,
+        category: templateData.category,
+        speciesApplicability: templateData.speciesApplicability,
+        practiceId: userPracticeId || "",
+        createdById: user?.id || "",
+        // Include template content from current form
+        subjective_template: formValues.subjective || "",
+        objective_template: formValues.objective || "",
+        assessment_template: formValues.assessment || "",
+        plan_template: formValues.plan || ""
+      };
+      
+      const res = await apiRequest('POST', '/api/soap-templates', requestData);
       return await res.json();
     },
     onSuccess: (data) => {
@@ -338,24 +457,18 @@ const SOAPNoteCreatePage: React.FC = () => {
     });
   };
   
-  // Handle file attachments upload
+  // Handle file attachments upload - files are already uploaded by FileUpload component
   const attachmentsMutation = useMutation({
     mutationFn: async ({ noteId, files }: { noteId: number, files: UploadedFile[] }) => {
-      // Create promises for each file upload
-      const uploadPromises = files.map(file => {
-        const formData = new FormData();
-        formData.append('file', file.file);
-        formData.append('fileName', file.name);
-        formData.append('fileType', file.type);
-        formData.append('soapNoteId', noteId.toString());
-        
-        return apiRequest('POST', `/api/soap-notes/${noteId}/attachments`, formData, {
-          skipContentType: true // Let the browser set content-type with boundary
+      // Files are already uploaded, just need to associate them with the SOAP note
+      const associationPromises = files.map(file => {
+        return apiRequest('PATCH', `/api/soap-notes/${noteId}/attachments/${file.id}`, {
+          soapNoteId: noteId
         });
       });
       
-      // Wait for all uploads to complete
-      return Promise.all(uploadPromises);
+      // Wait for all associations to complete
+      return Promise.all(associationPromises);
     },
     onSuccess: () => {
       toast({
@@ -387,6 +500,7 @@ const SOAPNoteCreatePage: React.FC = () => {
   
   // Handle saving the SOAP note as a template
   const handleSaveAsTemplate = () => {
+    console.log("handleSaveAsTemplate called, savedNoteId:", savedNoteId);
     if (!savedNoteId) {
       toast({
         title: "Save Required",
@@ -453,7 +567,7 @@ const SOAPNoteCreatePage: React.FC = () => {
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => router.push("/soap-notes")}
+            onClick={() => router.push("/admin/soap-notes")}
           >
             <ChevronLeft className="h-4 w-4 mr-1" /> Back to SOAP Notes
           </Button>
@@ -489,6 +603,17 @@ const SOAPNoteCreatePage: React.FC = () => {
         </Popover>
       </div>
       
+      {/* Success Alert */}
+      {soapNoteSaved && (
+        <Alert className="mb-6 border-green-200 bg-green-50 dark:bg-green-950">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <AlertTitle className="text-green-800 dark:text-green-200">SOAP Note Saved Successfully!</AlertTitle>
+          <AlertDescription className="text-green-700 dark:text-green-300">
+            Your SOAP note has been created and saved. You can now save it as a template or continue editing.
+          </AlertDescription>
+        </Alert>
+      )}
+      
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <Card>
@@ -510,8 +635,8 @@ const SOAPNoteCreatePage: React.FC = () => {
                         <FormItem>
                           <FormLabel>Pet</FormLabel>
                           <Select
-                            value={field.value ? field.value.toString() : ""}
-                            onValueChange={(value) => field.onChange(Number(value))}
+                            value={field.value || ""}
+                            onValueChange={(value) => field.onChange(value)}
                             disabled={isLoading}
                           >
                             <FormControl>
@@ -520,8 +645,8 @@ const SOAPNoteCreatePage: React.FC = () => {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {pets?.map((pet: { id: number; name: string; species: string }) => (
-                                <SelectItem key={pet.id} value={pet.id.toString()}>
+                              {pets?.map((pet: { id: string; name: string; species: string }) => (
+                                <SelectItem key={pet.id} value={pet.id}>
                                   {pet.name} ({pet.species})
                                 </SelectItem>
                               ))}
@@ -539,8 +664,8 @@ const SOAPNoteCreatePage: React.FC = () => {
                         <FormItem>
                           <FormLabel>Appointment</FormLabel>
                           <Select
-                            value={field.value ? field.value.toString() : ""}
-                            onValueChange={(value) => field.onChange(Number(value))}
+                            value={field.value || ""}
+                            onValueChange={(value) => field.onChange(value)}
                             disabled={isLoading}
                           >
                             <FormControl>
@@ -549,9 +674,9 @@ const SOAPNoteCreatePage: React.FC = () => {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="0">No appointment (ad hoc note)</SelectItem>
-                              {appointments?.map((appointment: { id: number; title: string; date: string }) => (
-                                <SelectItem key={appointment.id} value={appointment.id.toString()}>
+                              <SelectItem value="none">No appointment (ad hoc note)</SelectItem>
+                              {appointments?.map((appointment: { id: string; title: string; date: string }) => (
+                                <SelectItem key={appointment.id} value={appointment.id}>
                                   {appointment.title} ({format(new Date(appointment.date), 'MMM d, yyyy')})
                                 </SelectItem>
                               ))}
@@ -567,31 +692,43 @@ const SOAPNoteCreatePage: React.FC = () => {
                     <TabsList className="grid w-full grid-cols-4">
                       <TabsTrigger 
                         value="subjective" 
-                        className="data-[state=active]:bg-blue-100 data-[state=active]:text-blue-600 dark:data-[state=active]:bg-blue-900 dark:data-[state=active]:text-blue-200"
+                        className="relative data-[state=active]:bg-blue-100 data-[state=active]:text-blue-600 dark:data-[state=active]:bg-blue-900 dark:data-[state=active]:text-blue-200"
                       >
                         Subjective
+                        {tabValidationStatus.subjective && (
+                          <span className="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full" />
+                        )}
                       </TabsTrigger>
                       <TabsTrigger 
                         value="objective" 
-                        className="data-[state=active]:bg-green-100 data-[state=active]:text-green-600 dark:data-[state=active]:bg-green-900 dark:data-[state=active]:text-green-200"
+                        className="relative data-[state=active]:bg-green-100 data-[state=active]:text-green-600 dark:data-[state=active]:bg-green-900 dark:data-[state=active]:text-green-200"
                         onClick={() => {
                           // Debug log to check all form values before switching tabs
                           console.log("Current form values:", form.getValues());
                         }}
                       >
                         Objective
+                        {tabValidationStatus.objective && (
+                          <span className="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full" />
+                        )}
                       </TabsTrigger>
                       <TabsTrigger 
                         value="assessment" 
-                        className="data-[state=active]:bg-amber-100 data-[state=active]:text-amber-600 dark:data-[state=active]:bg-amber-900 dark:data-[state=active]:text-amber-200"
+                        className="relative data-[state=active]:bg-amber-100 data-[state=active]:text-amber-600 dark:data-[state=active]:bg-amber-900 dark:data-[state=active]:text-amber-200"
                       >
                         Assessment
+                        {tabValidationStatus.assessment && (
+                          <span className="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full" />
+                        )}
                       </TabsTrigger>
                       <TabsTrigger 
                         value="plan" 
-                        className="data-[state=active]:bg-purple-100 data-[state=active]:text-purple-600 dark:data-[state=active]:bg-purple-900 dark:data-[state=active]:text-purple-200"
+                        className="relative data-[state=active]:bg-purple-100 data-[state=active]:text-purple-600 dark:data-[state=active]:bg-purple-900 dark:data-[state=active]:text-purple-200"
                       >
                         Plan
+                        {tabValidationStatus.plan && (
+                          <span className="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full" />
+                        )}
                       </TabsTrigger>
                     </TabsList>
                     
@@ -1580,7 +1717,11 @@ const SOAPNoteCreatePage: React.FC = () => {
                           <div>
                             <h3 className="text-green-600 dark:text-green-300 font-medium mb-3">Lab Results</h3>
                             <div className="bg-white dark:bg-slate-900 rounded-md p-4 border border-green-200 dark:border-green-800">
-                              <SoapLabResultsSection soapNoteId={0} petId={form.watch("petId")} />
+                              <SoapLabResultsSection 
+                                soapNoteId={0} 
+                                petId={parseInt(form.watch("petId")) || 0} 
+                                section="objective"
+                              />
                             </div>
                           </div>
                           
@@ -1829,7 +1970,7 @@ const SOAPNoteCreatePage: React.FC = () => {
                                         <Button 
                                           variant="ghost" 
                                           size="sm" 
-                                          onClick={() => removePrescription(index)}
+                                          onClick={() => handleRemovePrescription(index)}
                                         >
                                           <X className="h-4 w-4" />
                                         </Button>
@@ -1886,7 +2027,7 @@ const SOAPNoteCreatePage: React.FC = () => {
                                           { value: "Physical therapy", label: "Physical therapy" },
                                           { value: "Acupuncture", label: "Acupuncture" }
                                         ]}
-                                        selected={field.value || []}
+                                        selected={Array.isArray(field.value) ? field.value : []}
                                         onChange={field.onChange}
                                         placeholder="Select procedures & treatments..."
                                         searchPlaceholder="Search procedures..."
@@ -1951,7 +2092,7 @@ const SOAPNoteCreatePage: React.FC = () => {
                                           { value: "CT scan", label: "CT scan" },
                                           { value: "Electrocardiogram", label: "Electrocardiogram" }
                                         ]}
-                                        selected={field.value || []}
+                                        selected={Array.isArray(field.value) ? field.value : []}
                                         onChange={field.onChange}
                                         placeholder="Select recommended diagnostic tests..."
                                         searchPlaceholder="Search diagnostics..."
@@ -2194,8 +2335,11 @@ const SOAPNoteCreatePage: React.FC = () => {
                     </DialogDescription>
                   </DialogHeader>
                   <PrescriptionForm
-                    petId={form.getValues("petId")}
-                    onSave={handleAddPrescription}
+                    soapNoteId={savedNoteId || 0}
+                    practiceId={parseInt(userPracticeId || "0") || 0}
+                    onPrescriptionCreated={() => {
+                      handleAddPrescription(null); // Handle the prescription created event
+                    }}
                     onCancel={() => setShowPrescriptionDialog(false)}
                   />
                 </DialogContent>
@@ -2215,9 +2359,13 @@ const SOAPNoteCreatePage: React.FC = () => {
             </CardHeader>
             <CardContent>
               <FileUpload 
-                onUpload={handleFileUpload} 
+                onFilesUploaded={handleFileUpload}
+                endpoint="/api/soap-notes/attachments"
                 maxFiles={5}
-                acceptedFileTypes="image/*,application/pdf"
+                maxSizeMB={10}
+                allowedFileTypes={["image/jpeg", "image/png", "image/gif", "application/pdf"]}
+                recordType="soap-note"
+                recordId={savedNoteId || undefined}
               />
               
               {uploadedFiles.length > 0 && (
@@ -2228,7 +2376,7 @@ const SOAPNoteCreatePage: React.FC = () => {
                       <li key={index} className="flex items-center justify-between p-2 border rounded">
                         <div className="flex items-center">
                           <Paperclip className="h-4 w-4 mr-2 text-muted-foreground" />
-                          <span className="text-sm truncate max-w-[200px]">{file.name}</span>
+                          <span className="text-sm truncate max-w-[200px]">{file.fileName}</span>
                         </div>
                         <Button 
                           variant="ghost" 
@@ -2318,6 +2466,58 @@ const SOAPNoteCreatePage: React.FC = () => {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Follow-up Appointments Section */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-md">Follow-up</CardTitle>
+              <CardDescription>
+                Schedule follow-up appointments
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button 
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowFollowUpDialog(true)}
+                disabled={!form.watch("petId")}
+              >
+                <CalendarPlus className="h-4 w-4 mr-2" />
+                Schedule Follow-up
+              </Button>
+              {!form.watch("petId") && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Select a pet first
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Referrals Section */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-md">Referrals</CardTitle>
+              <CardDescription>
+                Refer to specialists
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button 
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowReferralDialog(true)}
+                disabled={!form.watch("petId")}
+              >
+                <Share2 className="h-4 w-4 mr-2" />
+                Add Referral
+              </Button>
+              {!form.watch("petId") && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Select a pet first
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
       
@@ -2334,7 +2534,7 @@ const SOAPNoteCreatePage: React.FC = () => {
           {form.watch('petId') ? (
             <PrescriptionForm 
               soapNoteId={0} // Will be updated when the SOAP note is saved
-              practiceId={user?.practiceId || 0} 
+              practiceId={parseInt(userPracticeId || "0") || 0} 
               onPrescriptionCreated={() => {
                 setIsPrescriptionFormOpen(false);
                 toast({
@@ -2382,6 +2582,50 @@ const SOAPNoteCreatePage: React.FC = () => {
               </AlertDescription>
             </Alert>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Follow-up Appointment Dialog */}
+      <Dialog open={showFollowUpDialog} onOpenChange={setShowFollowUpDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Schedule Follow-up</DialogTitle>
+            <DialogDescription>
+              Schedule a follow-up appointment for this patient
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="text-center">
+              <CalendarPlus className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-sm text-muted-foreground mb-4">
+                You will be redirected to the appointment booking system for this pet.
+              </p>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowFollowUpDialog(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={() => {
+                    const petId = form.watch("petId");
+                    if (petId) {
+                      // Navigate to appointment booking with pre-filled pet ID
+                      router.push(`/appointments/create?petId=${petId}&type=follow-up&soapNoteId=${savedNoteId || ''}`);
+                    }
+                    setShowFollowUpDialog(false);
+                  }}
+                  className="flex-1"
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Book Appointment
+                </Button>
+              </div>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

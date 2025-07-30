@@ -6,13 +6,15 @@ import { z } from "zod";
 
 // Define the schema for SOAP note validation using Zod
 const soapNoteSchema = z.object({
+  appointmentId: z.string().optional().nullable(),
   petId: z.string({
     required_error: "Pet ID is required",
     invalid_type_error: "Pet ID must be a string"
   }),
   practitionerId: z.string({
-    invalid_type_error: "Practitioner ID must be a number"
-  }).optional(),
+    required_error: "Practitioner ID is required",
+    invalid_type_error: "Practitioner ID must be a string"
+  }),
   subjective: z.string({
     required_error: "Subjective field is required"
   }).min(1, "Subjective field cannot be empty"),
@@ -29,6 +31,7 @@ const soapNoteSchema = z.object({
 
 // Schema for partial updates (PATCH)
 const soapNotePartialSchema = soapNoteSchema.partial({
+  appointmentId: true,
   petId: true,
   subjective: true,
   objective: true,
@@ -37,23 +40,72 @@ const soapNotePartialSchema = soapNoteSchema.partial({
   practitionerId: true
 });
 
-// GET /api/soap-notes - Fetch all SOAP notes or filter by petId if provided
-import { eq } from "drizzle-orm";
+// GET /api/soap-notes - Fetch all SOAP notes with filtering options
+import { eq, desc, and, or, like, gte } from "drizzle-orm";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const petId = searchParams.get("petId");
+    const practitionerId = searchParams.get("practitionerId"); // For "My Notes" filter
+    const recent = searchParams.get("recent"); // For "Recent" filter (last 30 days)
+    const search = searchParams.get("search"); // For search functionality
+    const limit = searchParams.get("limit"); // Optional limit
 
-    let notes;
+    // Build where conditions
+    const conditions = [];
+    
     if (petId) {
-      const petIdNum = parseInt(petId);
-      notes = await db.query.soapNotes.findMany({
-        where: (notes, { eq }) => eq(notes.petId, petIdNum)
-      });
-    } else {
-      notes = await db.query.soapNotes.findMany();
+      conditions.push(eq(soapNotes.petId, petId));
     }
+    
+    if (practitionerId) {
+      conditions.push(eq(soapNotes.practitionerId, practitionerId));
+    }
+    
+    if (recent === "true") {
+      // Get notes from last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      // Convert to milliseconds timestamp for SQLite compatibility
+      const thirtyDaysAgoTimestamp = thirtyDaysAgo.getTime();
+      conditions.push(gte(soapNotes.createdAt, thirtyDaysAgoTimestamp));
+    }
+    
+    if (search) {
+      // Search in subjective, objective, assessment, and plan fields
+      const searchCondition = or(
+        like(soapNotes.subjective, `%${search}%`),
+        like(soapNotes.objective, `%${search}%`),
+        like(soapNotes.assessment, `%${search}%`),
+        like(soapNotes.plan, `%${search}%`)
+      );
+      conditions.push(searchCondition);
+    }
+
+    // Combine all conditions
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Query with conditions
+    const queryOptions: any = {
+      with: {
+        appointment: true,
+        practitioner: true,
+        pet: true,
+        updatedBy: true,
+      },
+      orderBy: [desc(soapNotes.createdAt)] // Always order by newest first
+    };
+
+    if (whereClause) {
+      queryOptions.where = whereClause;
+    }
+
+    if (limit) {
+      queryOptions.limit = parseInt(limit);
+    }
+
+    const notes = await db.query.soapNotes.findMany(queryOptions);
     
     return NextResponse.json(notes);
   } catch (error) {
@@ -86,14 +138,13 @@ export async function POST(request: Request) {
     // Insert into database, disregarding TypeScript errors as per project pattern
     // @ts-ignore
     const [newSoapNote] = await db.insert(soapNotes).values({
+      appointmentId: validatedData.appointmentId || null,
       petId: validatedData.petId,
-      practitionerId: validatedData.practitionerId || null,
+      practitionerId: validatedData.practitionerId,
       subjective: validatedData.subjective,
       objective: validatedData.objective,
       assessment: validatedData.assessment,
       plan: validatedData.plan,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
     }).returning();
     
     return NextResponse.json(
@@ -107,70 +158,6 @@ export async function POST(request: Request) {
     console.error("Error creating SOAP note:", error);
     return NextResponse.json(
       { error: "Failed to create SOAP note" },
-      { status: 500 }
-    );
-  }
-}
-
-// PATCH /api/soap-notes/:id - Update an existing SOAP note
-export async function PATCH(
-  request: Request,
-  { params }: { params: { soapNoteId: string } }
-) {
-  try {
-    const data = await request.json();
-    const soapNoteId = parseInt(params.soapNoteId);
-    
-    if (isNaN(soapNoteId)) {
-      return NextResponse.json(
-        { error: "Invalid SOAP note ID" },
-        { status: 400 }
-      );
-    }
-    
-    // Validate data using Zod partial schema
-    const validationResult = soapNotePartialSchema.safeParse(data);
-    if (!validationResult.success) {
-      return NextResponse.json(
-        { error: "Validation failed", details: validationResult.error.issues },
-        { status: 400 }
-      );
-    }
-    
-    // Data is valid, use it
-    const validatedData = validationResult.data;
-    console.log(`Updating SOAP note ${soapNoteId} with data:`, validatedData);
-    
-    // Update in database, disregarding TypeScript errors as per project pattern
-    const updateData = {
-      ...validatedData,
-      updatedAt: new Date().toISOString(),
-      practitionerId: validatedData.practitionerId || null
-    };
-    // @ts-ignore
-    const [updatedSoapNote] = await db.update(soapNotes)
-      .set(updateData)
-      .where(eq(soapNotes.id, soapNoteId))
-      .returning();
-    
-    if (!updatedSoapNote) {
-      return NextResponse.json(
-        { error: "SOAP note not found" },
-        { status: 404 }
-      );
-    }
-    
-    return NextResponse.json(
-      { 
-        ...updatedSoapNote,
-        message: "SOAP note updated successfully" 
-      }, 
-      { status: 200 }
-    );
-  } catch (error) {
-    console.error("Error updating SOAP note:", error);
-    return NextResponse.json(
-      { error: "Failed to update SOAP note" },
       { status: 500 }
     );
   }

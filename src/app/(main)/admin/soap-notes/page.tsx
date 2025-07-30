@@ -64,9 +64,18 @@ interface SOAPNotesListProps {
   forcePetName?: string;
   forcePetSpecies?: string;
   forcePetBreed?: string;
+  filter?: 'all' | 'my-notes' | 'recent'; // Add filter prop
+  searchQuery?: string; // Add search query prop
 }
 
-function SOAPNotesList({ petIdOverride, forcePetName, forcePetSpecies, forcePetBreed }: SOAPNotesListProps) {
+function SOAPNotesList({ 
+  petIdOverride, 
+  forcePetName, 
+  forcePetSpecies, 
+  forcePetBreed,
+  filter = 'all',
+  searchQuery = ''
+}: SOAPNotesListProps) {
   const { toast } = useToast();
   const { user } = useUser();
   const router = useRouter();
@@ -129,11 +138,29 @@ function SOAPNotesList({ petIdOverride, forcePetName, forcePetSpecies, forcePetB
     enabled: !!petId
   });
   
-  // Fetch SOAP notes, with optional petId filter
-  const { data: notes, isLoading, error } = useQuery({
-    queryKey: ['/api/soap-notes', petId],
+  // Fetch SOAP notes, with optional petId filter and additional filtering
+  const { data: notes, isLoading, error, refetch: refetchSoap } = useQuery({
+    queryKey: ['/api/soap-notes', petId, filter, searchQuery],
     queryFn: async () => {
-      const url = petId ? `/api/soap-notes?petId=${petId}` : '/api/soap-notes';
+      const params = new URLSearchParams();
+      
+      if (petId) {
+        params.append('petId', petId);
+      }
+      
+      if (filter === 'my-notes' && user?.id) {
+        params.append('practitionerId', user.id);
+      }
+      
+      if (filter === 'recent') {
+        params.append('recent', 'true');
+      }
+      
+      if (searchQuery.trim()) {
+        params.append('search', searchQuery.trim());
+      }
+      
+      const url = `/api/soap-notes${params.toString() ? '?' + params.toString() : ''}`;
       console.log('SOAPNotesList - Fetching from URL:', url);
       const response = await fetch(url);
       if (!response.ok) {
@@ -150,6 +177,7 @@ function SOAPNotesList({ petIdOverride, forcePetName, forcePetSpecies, forcePetB
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/soap-notes'] });
+      refetchSoap();
       toast({
         title: "SOAP note deleted",
         description: "The SOAP note has been deleted successfully",
@@ -242,17 +270,7 @@ function SOAPNotesList({ petIdOverride, forcePetName, forcePetSpecies, forcePetB
   
   return (
     <div>
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-2">
-          <Input 
-            placeholder="Search notes..." 
-            className="w-[300px]" 
-          />
-          <Button variant="outline" size="icon">
-            <Filter className="h-4 w-4" />
-          </Button>
-        </div>
-        
+      <div className="flex justify-between items-center mb-4">        
         <div className="flex gap-2">
           <Button onClick={openCreateDialog}>
             <PlusCircle className="mr-2 h-4 w-4" /> Quick Create
@@ -969,18 +987,30 @@ function SOAPNoteForm({
 }
 
 // Component to display and manage SOAP templates
-function SOAPTemplatesList() {
+function SOAPTemplatesList({ searchQuery = '' }: { searchQuery?: string }) {
   const { toast } = useToast();
+  const { user, userPracticeId } = useUser();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<SOAPTemplate | null>(null);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState<number | null>(null);
   
   // Fetch templates
-  const { data: templates, isLoading, error } = useQuery({
-    queryKey: ['/api/soap-templates'],
+  const { data: templates, isLoading, error, refetch: refetchTemplates } = useQuery({
+    queryKey: ['/api/soap-templates', userPracticeId, searchQuery],
     queryFn: async () => {
-      const response = await fetch('/api/soap-templates');
+      const params = new URLSearchParams();
+      
+      if (userPracticeId) {
+        params.append('practiceId', userPracticeId);
+      }
+      
+      if (searchQuery.trim()) {
+        params.append('search', searchQuery.trim());
+      }
+      
+      const url = `/api/soap-templates${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error('Failed to fetch templates');
       }
@@ -991,13 +1021,28 @@ function SOAPTemplatesList() {
   // Create or update mutation
   const templateMutation = useMutation({
     mutationFn: async (data: SoapTemplateFormValues) => {
+      const payload = {
+        name: data.name,
+        category: data.category,
+        subjective_template: data.subjective,
+        objective_template: data.objective,
+        assessment_template: data.assessment,
+        plan_template: data.plan,
+        practiceId: userPracticeId || '1',
+        createdById: user?.id || '1'
+      };
+      
       const url = editingTemplate ? `/api/soap-templates/${editingTemplate.id}` : '/api/soap-templates';
       const method = editingTemplate ? 'PATCH' : 'POST';
-      const res = await apiRequest(method, url, data);
+      const res = await apiRequest(method, url, payload);
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/soap-templates'] });
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/soap-templates'],
+        exact: false 
+      });
+      refetchTemplates();
       toast({
         title: editingTemplate ? "Template updated" : "Template created",
         description: editingTemplate ? "Your changes have been saved" : "New template has been created",
@@ -1020,7 +1065,10 @@ function SOAPTemplatesList() {
       await apiRequest('DELETE', `/api/soap-templates/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/soap-templates'] });
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/soap-templates'],
+        exact: false 
+      });
       toast({
         title: "Template deleted",
         description: "The template has been deleted successfully",
@@ -1136,28 +1184,28 @@ function SOAPTemplatesList() {
                 </div>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-4">
-                {template.subjective && (
+                {template.subjective_template && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Subjective</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{template.subjective}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{template.subjective_template}</p>
                   </div>
                 )}
-                {template.objective && (
+                {template.objective_template && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Objective</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{template.objective}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{template.objective_template}</p>
                   </div>
                 )}
-                {template.assessment && (
+                {template.assessment_template && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Assessment</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{template.assessment}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{template.assessment_template}</p>
                   </div>
                 )}
-                {template.plan && (
+                {template.plan_template && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Plan</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{template.plan}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{template.plan_template}</p>
                   </div>
                 )}
               </CardContent>
@@ -1280,7 +1328,14 @@ function SOAPTemplateForm({
   // Form setup
   const form = useForm<SoapTemplateFormValues>({
     resolver: zodResolver(soapTemplateFormSchema),
-    defaultValues: initialData || {
+    defaultValues: initialData ? {
+      name: initialData.name || '',
+      category: initialData.category || '',
+      subjective: initialData.subjective_template || '',
+      objective: initialData.objective_template || '',
+      assessment: initialData.assessment_template || '',
+      plan: initialData.plan_template || ''
+    } : {
       name: '',
       category: '',
       subjective: '',
@@ -1534,6 +1589,10 @@ function PetSOAPNotesView() {
 export default function SOAPNotesPage() {
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const petId = searchParams.get('petId');
+  
+  // State for search and filtering
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('all');
 
   
   // For the pet specific view, hardcoding values for Maxy (pet ID 4)
@@ -1568,30 +1627,56 @@ export default function SOAPNotesPage() {
       {petId ? (
         <PetSOAPNotesView />
       ) : (
-        <Tabs defaultValue="all">
-          <TabsList className="mb-6">
-            <TabsTrigger value="all">All Notes</TabsTrigger>
-            <TabsTrigger value="created">My Notes</TabsTrigger>
-            <TabsTrigger value="recent">Recent</TabsTrigger>
-            <TabsTrigger value="templates">Templates</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="all" className="space-y-4">
-            <SOAPNotesList />
-          </TabsContent>
-          
-          <TabsContent value="created" className="space-y-4">
-            <SOAPNotesList />
-          </TabsContent>
-          
-          <TabsContent value="recent" className="space-y-4">
-            <SOAPNotesList />
-          </TabsContent>
-          
-          <TabsContent value="templates" className="space-y-4">
-            <SOAPTemplatesList />
-          </TabsContent>
-        </Tabs>
+        <div className="space-y-6">
+          {/* Search and Filter Controls */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <Input 
+                placeholder="Search notes..." 
+                className="w-[300px]" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <Button variant="outline" size="icon">
+                <Filter className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="mb-6">
+              <TabsTrigger value="all">All Notes</TabsTrigger>
+              <TabsTrigger value="my-notes">My Notes</TabsTrigger>
+              <TabsTrigger value="recent">Recent</TabsTrigger>
+              <TabsTrigger value="templates">Templates</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="all" className="space-y-4">
+              <SOAPNotesList 
+                filter="all" 
+                searchQuery={searchQuery}
+              />
+            </TabsContent>
+            
+            <TabsContent value="my-notes" className="space-y-4">
+              <SOAPNotesList 
+                filter="my-notes" 
+                searchQuery={searchQuery}
+              />
+            </TabsContent>
+            
+            <TabsContent value="recent" className="space-y-4">
+              <SOAPNotesList 
+                filter="recent" 
+                searchQuery={searchQuery}
+              />
+            </TabsContent>
+            
+            <TabsContent value="templates" className="space-y-4">
+              <SOAPTemplatesList searchQuery={searchQuery} />
+            </TabsContent>
+          </Tabs>
+        </div>
       )}
     </div>
   );

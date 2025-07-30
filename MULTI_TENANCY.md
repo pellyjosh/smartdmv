@@ -9,12 +9,14 @@ The system now supports multiple veterinary practice companies, each with their 
 ### Key Components
 
 1. **Owner Management System** (`/src/owner/`)
+
    - Centralized company management
    - Subscription and billing management
    - Platform-wide analytics
    - Owner/admin dashboard
 
 2. **Tenant System** (`/src/tenant/`)
+
    - Company-specific database management
    - Multi-tenant routing and isolation
    - Backwards compatibility with existing code
@@ -48,10 +50,12 @@ src/
 ## User Roles
 
 ### Platform Roles (Owner Database)
+
 - **OWNER**: Platform owner with full access to all companies
 - **COMPANY_ADMIN**: Manages a specific company's subscription and settings
 
 ### Tenant Roles (Company Database)
+
 - **CLIENT**: Pet owners/clients
 - **PRACTICE_ADMINISTRATOR**: Practice managers
 - **ADMINISTRATOR**: Practice administrators with broader access
@@ -119,10 +123,10 @@ After setting up the owner database, create your first company:
 
 ```typescript
 // Before (single tenant)
-import { db } from '@/db';
+import { db } from "@/db";
 
 // After (multi-tenant)
-import { getContextualDb } from '@/lib/database-context';
+import { getContextualDb } from "@/lib/database-context";
 
 export async function GET() {
   const db = await getContextualDb(); // Gets the right DB based on context
@@ -133,7 +137,7 @@ export async function GET() {
 ### Accessing Owner Functions
 
 ```typescript
-import { ownerDb, companies } from '@/owner/db/config';
+import { ownerDb, companies } from "@/owner/db/config";
 
 // Manage companies, subscriptions, etc.
 const allCompanies = await ownerDb.select().from(companies);
@@ -150,13 +154,14 @@ const allCompanies = await ownerDb.select().from(companies);
 
 - `/owner/*` - Owner management interface
 - `/client/*` - Client (pet owner) interface
-- `/administrator/*` - Practice administrator interface  
+- `/administrator/*` - Practice administrator interface
 - `/practice-administrator/*` - Practice admin interface
 - All existing routes continue to work for backwards compatibility
 
 ## API Endpoints
 
 ### Owner Management
+
 - `GET /api/owner/companies` - List all companies
 - `POST /api/owner/companies` - Create new company
 - `GET /api/owner/companies/[id]` - Get company details
@@ -164,11 +169,13 @@ const allCompanies = await ownerDb.select().from(companies);
 - `DELETE /api/owner/companies/[id]` - Delete company
 
 ### Tenant APIs
+
 All existing APIs continue to work and automatically use the correct tenant database based on the user's company context.
 
 ## Backwards Compatibility
 
 The implementation maintains full backwards compatibility:
+
 - Existing database schema unchanged
 - Existing API routes continue to work
 - Existing components and pages unchanged

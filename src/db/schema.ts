@@ -4,10 +4,12 @@ import { practices } from './schemas/practicesSchema';
 import { sessions } from './schemas/sessionsSchema';
 import { appointments } from './schemas/appointmentsSchema';
 import { pets } from './schemas/petsSchema';
+import { healthPlans } from './schemas/healthPlansSchema';
 import { admissions } from './schemas/admissionsSchema';
 import { rooms } from './schemas/roomsSchema';
 import { customFieldCategories, customFieldGroups, customFieldValues } from './schemas/customFieldsSchema';
-import { soapNotes } from './schemas/soapNoteSchema';
+import { soapNotes, soapNotesRelations } from './schemas/soapNoteSchema';
+import { soapTemplates } from './schemas/soapNoteTemplateSchema';
 import { treatmentTemplates } from './schemas/treatmentTemplatesSchema';
 import { referrals, referralAttachments, referralNotes, referralsRelations, referralAttachmentsRelations, referralNotesRelations, ReferralStatus, ReferralPriority, VetSpecialty } from './schemas/referralsSchema';
 import { addons, practiceAddons, addonReviews, AddonCategory } from './schemas/marketplaceSchema';
@@ -49,6 +51,7 @@ import {
 export const schema = {
   users,
   pets,
+  healthPlans,
   practices,
   sessions,
   appointments,
@@ -59,6 +62,7 @@ export const schema = {
   customFieldGroups,
   customFieldValues,
   soapNotes,
+  soapTemplates,
   treatmentTemplates,
   referrals,
   referralAttachments,
@@ -100,6 +104,7 @@ export * from './schemas/sessionsSchema';
 export * from './schemas/usersSchema';
 export * from './schemas/appointmentsSchema';
 export * from './schemas/petsSchema';
+export * from './schemas/healthPlansSchema';
 export * from './schemas/admissionsSchema';
 export * from './schemas/roomsSchema';
 export * from './schemas/customFieldsSchema';
