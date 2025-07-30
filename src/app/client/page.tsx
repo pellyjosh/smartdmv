@@ -1011,8 +1011,8 @@ export default function ClientPortalPage() {
                   variant="outline"
                   asChild
                 >
-                  <Link href="/client/marketplace">
-                    <CreditCard className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" /> View Marketplace
+                  <Link href="/client/billing">
+                    <CreditCard className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" /> View Bills & Pay
                   </Link>
                 </Button>
               </CardFooter>
