@@ -23,6 +23,8 @@ import { PrescriptionForm } from "@/components/prescriptions/prescription-form";
 import { PrescriptionList } from "@/components/prescriptions/prescription-list";
 import { TreatmentList } from "@/components/treatments/treatment-list";
 import { TreatmentForm } from "@/components/treatments/treatment-form";
+import { FileUpload, type UploadedFile } from "@/components/shared/file-upload";
+import { FileAttachmentList } from "@/components/shared/file-attachment-list";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -77,7 +79,7 @@ function SOAPNotesList({
   searchQuery = ''
 }: SOAPNotesListProps) {
   const { toast } = useToast();
-  const { user } = useUser();
+  const { user, userPracticeId } = useUser();
   const router = useRouter();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
@@ -108,8 +110,11 @@ function SOAPNotesList({
   
   // Fetch pet details if petId is provided
   const { data: pet } = useQuery({
-    queryKey: ['/api/pets', petId],
+    queryKey: ['/api/pets', 'single', petId],
     queryFn: async () => {
+      if (!petId) {
+        throw new Error('Pet ID is required');
+      }
       try {
         console.log(`Fetching pet with ID ${petId}`);
         const response = await fetch(`/api/pets/${petId}`);
@@ -137,10 +142,37 @@ function SOAPNotesList({
     },
     enabled: !!petId
   });
+
+  // Fetch all pets for name mapping
+  const { data: allPets } = useQuery({
+    queryKey: ['/api/pets/all', userPracticeId],
+    queryFn: async () => {
+      if (!userPracticeId) {
+        throw new Error('Practice ID is required');
+      }
+      const response = await fetch(`/api/pets?practiceId=${userPracticeId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch pets');
+      }
+      return response.json();
+    },
+    enabled: !!userPracticeId
+    // Always fetch pets so we can map names in SOAP note cards
+  });
+
+  // Create a lookup map for pet names
+  const petNameMap = React.useMemo(() => {
+    if (!allPets) return {};
+    const map: Record<string, string> = {};
+    allPets.forEach((pet: any) => {
+      map[pet.id.toString()] = pet.name;
+    });
+    return map;
+  }, [allPets]);
   
   // Fetch SOAP notes, with optional petId filter and additional filtering
   const { data: notes, isLoading, error, refetch: refetchSoap } = useQuery({
-    queryKey: ['/api/soap-notes', petId, filter, searchQuery],
+    queryKey: ['/api/soap-notes'],
     queryFn: async () => {
       const params = new URLSearchParams();
       
@@ -205,6 +237,7 @@ function SOAPNotesList({
         title: "SOAP note locked",
         description: "The SOAP note has been locked and can no longer be edited",
       });
+      refetchSoap();
       setIsLockConfirmOpen(false);
     },
     onError: (error: Error) => {
@@ -285,20 +318,20 @@ function SOAPNotesList({
         <Card>
           <CardContent className="pt-6">
             <div className="text-center py-12">
-              <Clipboard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <Clipboard className="h-12 w-12 mx-auto text-gray-500 mb-4" />
               {petId ? (
                 <>
                   <h3 className="text-lg font-medium mb-2">
                     No Medical Records for {forcePetName || "Maxy"}
                   </h3>
-                  <p className="text-muted-foreground mb-4">
+                  <p className="text-gray-500 mb-4">
                     {forcePetName || "Maxy"} doesn't have any SOAP notes or medical records yet
                   </p>
                 </>
               ) : (
                 <>
                   <h3 className="text-lg font-medium mb-2">No SOAP Notes Yet</h3>
-                  <p className="text-muted-foreground mb-4">
+                  <p className="text-gray-500 mb-4">
                     Start documenting patient visits by creating your first SOAP note
                   </p>
                 </>
@@ -322,7 +355,10 @@ function SOAPNotesList({
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="flex items-center text-lg">
-                      SOAP Note #{note.id}
+                      {petId ? 
+                        `${forcePetName || pet?.name || 'Unknown Pet'} - Medical Record #${note.id}` :
+                        `${petNameMap[note.petId] || 'Unknown Pet'} - SOAP Note #${note.id}`
+                      }
                       {note.locked && (
                         <Badge variant="outline" className="ml-2 bg-amber-50 text-amber-600 border-amber-200">
                           <Lock className="mr-1 h-3 w-3" /> Locked
@@ -335,44 +371,49 @@ function SOAPNotesList({
                       )}
                     </CardTitle>
                     <CardDescription className="flex flex-wrap gap-3 mt-1">
-                      <span className="flex items-center text-xs">
-                        <Calendar className="mr-1 h-3 w-3" />
-                        {format(new Date(note.createdAt || new Date()), 'MMM d, yyyy')}
+                      <span className="flex items-center text-xs text-gray-500">
+                        📅 {format(new Date(note.createdAt || new Date()), 'MMM d, yyyy')}
                       </span>
-                      <span className="flex items-center text-xs">
-                        <User className="mr-1 h-3 w-3" />
-                        Dr. {note.practitionerId}
+                      <span className="flex items-center text-xs text-gray-500">
+                        👨‍⚕️ Dr. {note.practitionerId}
                       </span>
-                      <span className="flex items-center text-xs">
-                        <Clipboard className="mr-1 h-3 w-3" />
-                        Pet #{note.petId}
-                      </span>
+                      {!petId && (
+                        <span className="flex items-center text-xs text-gray-500">
+                          🐕 Pet #{note.petId}
+                        </span>
+                      )}
                     </CardDescription>
                   </div>
                   <div className="flex gap-1">
                     <Button 
-                      variant="ghost" 
-                      size="icon" 
+                      variant="outline" 
+                      size="sm" 
                       onClick={() => openDetailsDialog(note.id)}
+                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
                     >
-                      <Edit className="h-4 w-4" />
+                      <Edit className="h-4 w-4 mr-1" />
+                      Edit
                     </Button>
-                    {!note.locked && [UserRoleEnum.VETERINARIAN, UserRoleEnum.PRACTICE_ADMIN].includes(user?.role as UserRoleEnum) && (
+                    {!note.locked && [UserRoleEnum.VETERINARIAN, UserRoleEnum.PRACTICE_ADMIN, UserRoleEnum.ADMINISTRATOR, UserRoleEnum.SUPER_ADMIN].includes(user?.role as UserRoleEnum) && (
                       <Button 
-                        variant="ghost" 
-                        size="icon"
+                        variant="outline" 
+                        size="sm"
                         onClick={() => handleLock(note.id)}
+                        className="bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200"
                       >
-                        <Lock className="h-4 w-4" />
+                        <Lock className="h-4 w-4 mr-1" />
+                        Lock
                       </Button>
                     )}
                     {!note.locked && (
                       <Button 
-                        variant="ghost" 
-                        size="icon"
+                        variant="outline" 
+                        size="sm"
                         onClick={() => handleDelete(note.id)}
+                        className="bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete
                       </Button>
                     )}
                   </div>
@@ -382,29 +423,27 @@ function SOAPNotesList({
                 <div className="grid grid-cols-2 gap-4 mb-3">
                   <div>
                     <h4 className="text-sm font-medium mb-1">Subjective</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{note.subjective || 'N/A'}</p>
+                    <p className="text-sm line-clamp-2 text-gray-500 dark:text-gray-400">{note.subjective || 'N/A'}</p>
                   </div>
                   <div>
                     <h4 className="text-sm font-medium mb-1">Objective</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{note.objective || 'N/A'}</p>
+                    <p className="text-sm line-clamp-2 text-gray-500 dark:text-gray-400">{note.objective || 'N/A'}</p>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <h4 className="text-sm font-medium mb-1">Assessment</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{note.assessment || 'N/A'}</p>
+                    <p className="text-sm line-clamp-2 text-gray-500 dark:text-gray-400">{note.assessment || 'No assessment provided.'}</p>
                   </div>
                   <div>
                     <h4 className="text-sm font-medium mb-1">Plan</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{note.plan || 'N/A'}</p>
+                    <p className="text-sm line-clamp-2 text-gray-500 dark:text-gray-400">{note.plan || 'No plan provided.'}</p>
                   </div>
                 </div>
               </CardContent>
-              <div className="px-6 py-2 bg-muted/30 flex justify-end">
+              <div className="px-6 py-2 flex justify-end">
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  className="text-xs h-8"
+                  className="bg-green-600 hover:bg-green-700 text-white border-green-600 hover:border-green-700 text-xs h-8 font-medium"
                   onClick={() => openDetailsDialog(note.id)}
                 >
                   View Details
@@ -498,6 +537,8 @@ function SOAPNoteDetailsDialog({
   const [showTreatmentForm, setShowTreatmentForm] = useState(false);
   const [selectedTreatment, setSelectedTreatment] = useState<Treatment | undefined>(undefined);
   const [activeTab, setActiveTab] = useState("details");
+  const [showFileUpload, setShowFileUpload] = useState(false);
+  const [attachments, setAttachments] = useState<UploadedFile[]>([]);
   
   
   // Fetch the SOAP note with its ID
@@ -528,7 +569,7 @@ function SOAPNoteDetailsDialog({
   
   // Fetch pet details
   const { data: pet } = useQuery({
-    queryKey: ['/api/pets', note?.petId],
+    queryKey: ['/api/pets', 'single', note?.petId],
     queryFn: async () => {
       const response = await fetch(`/api/pets/${note?.petId}`);
       if (!response.ok) {
@@ -551,6 +592,22 @@ function SOAPNoteDetailsDialog({
     },
     enabled: !!note?.practitionerId
   });
+
+  // Fetch attachments for this SOAP note
+  const { data: soapAttachments, isLoading: attachmentsLoading } = useQuery({
+    queryKey: ['/api/medical-record-attachments/soap-note', note?.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/medical-record-attachments/soap-note/${note?.id}`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          return []; // No attachments found
+        }
+        throw new Error('Failed to fetch attachments');
+      }
+      return response.json();
+    },
+    enabled: !!note?.id
+  });
   
   // Attachments feature temporarily disabled
   
@@ -559,6 +616,23 @@ function SOAPNoteDetailsDialog({
     setIsPrescriptionFormOpen(false);
     // Refresh the prescription list
     queryClient.invalidateQueries({ queryKey: ['/api/prescriptions', note?.id] });
+  };
+
+  // File upload handlers
+  const handleFilesUploaded = (uploadedFiles: UploadedFile[]) => {
+    setAttachments(prev => [...prev, ...uploadedFiles]);
+    setShowFileUpload(false);
+    // Refresh attachments list
+    queryClient.invalidateQueries({ queryKey: ['/api/medical-record-attachments/soap-note', note?.id] });
+    toast({
+      title: "Files uploaded successfully",
+      description: `${uploadedFiles.length} file(s) have been attached to this SOAP note`,
+    });
+  };
+
+  const handleAttachmentDelete = (fileId: number) => {
+    setAttachments(prev => prev.filter(file => file.id !== fileId));
+    // The FileAttachmentList component will handle the API call and query invalidation
   };
 
   return (
@@ -600,7 +674,7 @@ function SOAPNoteDetailsDialog({
                 <div className="flex justify-between items-start">
                   <div>
                     <DialogTitle className="flex items-center text-xl">
-                      SOAP Note #{note.id}
+                      {pet ? `${pet.name} - Medical Record #${note.id}` : `Medical Record #${note.id}`}
                       {note.locked && (
                         <Badge variant="outline" className="ml-2 bg-amber-50 text-amber-600 border-amber-200">
                           <Lock className="mr-1 h-3 w-3" /> Locked
@@ -636,9 +710,28 @@ function SOAPNoteDetailsDialog({
               <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
                 <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="details">SOAP Details</TabsTrigger>
-                  <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
-                  <TabsTrigger value="attachments">Attachments</TabsTrigger>
-                  <TabsTrigger value="treatments">Treatments</TabsTrigger>
+                  <TabsTrigger value="prescriptions" className="relative">
+                    Prescriptions
+                    {note.hasPrescriptions && (
+                      <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs">
+                        •
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="attachments" className="relative">
+                    Attachments
+                    {soapAttachments && soapAttachments.length > 0 && (
+                      <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs">
+                        {soapAttachments.length}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="treatments" className="relative">
+                    Treatments
+                    <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs">
+                      •
+                    </Badge>
+                  </TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="details" className="mt-4 space-y-4">
@@ -700,30 +793,100 @@ function SOAPNoteDetailsDialog({
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-medium">Attachments</h3>
                     {!note.locked && (
-                      <Button size="sm" variant="outline">
-                        <Paperclip className="h-4 w-4 mr-2" /> Attach Files
+                      <Button 
+                        size="sm" 
+                        onClick={() => setShowFileUpload(true)}
+                      >
+                        <Paperclip className="h-4 w-4 mr-2" /> 
+                        Attach Files
                       </Button>
                     )}
                   </div>
-                  
-                  <Card>
-                    <CardContent className="p-6 text-center">
-                      <Paperclip className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                      <p className="text-muted-foreground">No attachments yet</p>
-                    </CardContent>
-                  </Card>
+
+                  {showFileUpload && (
+                    <Card className="mb-4">
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="font-medium">Upload Files</h4>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => setShowFileUpload(false)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                        <FileUpload
+                          onFilesUploaded={handleFilesUploaded}
+                          endpoint="/api/medical-record-attachments"
+                          recordType="soap-note"
+                          recordId={note.id}
+                          maxFiles={10}
+                          maxSizeMB={25}
+                          allowedFileTypes={[
+                            "image/jpeg", "image/png", "image/gif", "image/webp",
+                            "application/pdf", 
+                            "text/plain",
+                            "application/msword", 
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "application/vnd.ms-excel",
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                          ]}
+                        />
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {attachmentsLoading ? (
+                    <div className="space-y-3">
+                      <Skeleton className="h-16 w-full" />
+                      <Skeleton className="h-16 w-full" />
+                    </div>
+                  ) : soapAttachments && soapAttachments.length > 0 ? (
+                    <FileAttachmentList
+                      files={soapAttachments}
+                      recordType="soap-note"
+                      recordId={note.id}
+                      canDelete={!note.locked}
+                      onDelete={handleAttachmentDelete}
+                    />
+                  ) : (
+                    <Card>
+                      <CardContent className="p-6 text-center">
+                        <Paperclip className="h-12 w-12 mx-auto text-gray-400 mb-3" />
+                        <h4 className="text-lg font-medium text-gray-600 mb-2">No attachments yet</h4>
+                        <p className="text-gray-500 mb-4">
+                          Attach images, documents, lab results, or other files related to this medical record
+                        </p>
+                        {!note.locked && (
+                          <Button 
+                            variant="outline" 
+                            onClick={() => setShowFileUpload(true)}
+                          >
+                            <Paperclip className="h-4 w-4 mr-2" /> 
+                            Attach Files
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
                 </TabsContent>
                 
                 <TabsContent value="treatments" className="mt-4">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium">Treatments</h3>
+                    <div>
+                      <h3 className="text-lg font-medium">Treatments & Procedures</h3>
+                      <p className="text-sm text-gray-500">
+                        Record medications, procedures, and treatments administered
+                      </p>
+                    </div>
                     {!note.locked && (
                       <Button 
                         size="sm"
-                        variant="outline"
                         onClick={() => setShowTreatmentForm(true)}
                       >
-                        <PlusCircle className="h-4 w-4 mr-2" /> Add Treatment
+                        <PlusCircle className="h-4 w-4 mr-2" /> 
+                        Add Treatment
                       </Button>
                     )}
                   </div>
@@ -788,14 +951,18 @@ function SOAPNoteForm({
   
   // Fetch pets for selection
   const { data: pets, isLoading: petsLoading } = useQuery({
-    queryKey: ['/api/pets'],
+    queryKey: ['/api/pets', 'list', userPracticeId],
     queryFn: async () => {
+      if (!userPracticeId) {
+        throw new Error('Practice ID is required');
+      }
       const response = await fetch(`/api/pets?practiceId=${userPracticeId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch pets');
       }
       return response.json();
-    }
+    },
+    enabled: !!userPracticeId
   });
   
   // Create or update mutation
@@ -811,7 +978,9 @@ function SOAPNoteForm({
         title: initialData ? "SOAP note updated" : "SOAP note created",
         description: initialData ? "Your changes have been saved" : "New SOAP note has been created",
       });
+      // Invalidate and immediately refetch SOAP notes
       queryClient.invalidateQueries({ queryKey: ['/api/soap-notes'] });
+      queryClient.refetchQueries({ queryKey: ['/api/soap-notes'] });
       if (onSuccess) onSuccess();
     },
     onError: (error: Error) => {
@@ -987,9 +1156,9 @@ function SOAPNoteForm({
 }
 
 // Component to display and manage SOAP templates
-function SOAPTemplatesList({ searchQuery = '' }: { searchQuery?: string }) {
+function SOAPTemplatesList() {
   const { toast } = useToast();
-  const { user, userPracticeId } = useUser();
+  const { user, userPracticeId } = useUser(); // Move useUser hook here
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<SOAPTemplate | null>(null);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
@@ -997,20 +1166,9 @@ function SOAPTemplatesList({ searchQuery = '' }: { searchQuery?: string }) {
   
   // Fetch templates
   const { data: templates, isLoading, error, refetch: refetchTemplates } = useQuery({
-    queryKey: ['/api/soap-templates', userPracticeId, searchQuery],
+    queryKey: ['/api/soap-templates'],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      
-      if (userPracticeId) {
-        params.append('practiceId', userPracticeId);
-      }
-      
-      if (searchQuery.trim()) {
-        params.append('search', searchQuery.trim());
-      }
-      
-      const url = `/api/soap-templates${params.toString() ? '?' + params.toString() : ''}`;
-      const response = await fetch(url);
+      const response = await fetch('/api/soap-templates');
       if (!response.ok) {
         throw new Error('Failed to fetch templates');
       }
@@ -1021,27 +1179,32 @@ function SOAPTemplatesList({ searchQuery = '' }: { searchQuery?: string }) {
   // Create or update mutation
   const templateMutation = useMutation({
     mutationFn: async (data: SoapTemplateFormValues) => {
-      const payload = {
+      // Transform form data to match API schema
+      const apiData = {
         name: data.name,
-        category: data.category,
-        subjective_template: data.subjective,
-        objective_template: data.objective,
-        assessment_template: data.assessment,
-        plan_template: data.plan,
-        practiceId: userPracticeId || '1',
-        createdById: user?.id || '1'
+        category: data.category || '',
+        subjective_template: data.subjective || '',
+        objective_template: data.objective || '',
+        assessment_template: data.assessment || '',
+        plan_template: data.plan || '',
+        practiceId: userPracticeId || 'practice_MAIN_HQ', // Use user's practice or fallback
+        createdById: user?.id || 'unknown', // Use current user ID
+        isDefault: false
       };
+      
+      console.log('Template mutation - Form data:', data);
+      console.log('Template mutation - API data:', apiData);
+      console.log('Template mutation - User:', user);
+      console.log('Template mutation - Practice ID:', userPracticeId);
       
       const url = editingTemplate ? `/api/soap-templates/${editingTemplate.id}` : '/api/soap-templates';
       const method = editingTemplate ? 'PATCH' : 'POST';
-      const res = await apiRequest(method, url, payload);
+      const res = await apiRequest(method, url, apiData);
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: ['/api/soap-templates'],
-        exact: false 
-      });
+      // Invalidate and immediately refetch templates
+      queryClient.invalidateQueries({ queryKey: ['/api/soap-templates'] });
       refetchTemplates();
       toast({
         title: editingTemplate ? "Template updated" : "Template created",
@@ -1065,10 +1228,9 @@ function SOAPTemplatesList({ searchQuery = '' }: { searchQuery?: string }) {
       await apiRequest('DELETE', `/api/soap-templates/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: ['/api/soap-templates'],
-        exact: false 
-      });
+      // Invalidate and immediately refetch templates
+      queryClient.invalidateQueries({ queryKey: ['/api/soap-templates'] });
+      refetchTemplates();
       toast({
         title: "Template deleted",
         description: "The template has been deleted successfully",
@@ -1167,45 +1329,49 @@ function SOAPTemplatesList({ searchQuery = '' }: { searchQuery?: string }) {
                   </div>
                   <div className="flex gap-1">
                     <Button 
-                      variant="ghost" 
-                      size="icon"
+                      variant="outline" 
+                      size="sm"
                       onClick={() => handleEdit(template)}
+                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
                     >
-                      <Edit className="h-4 w-4" />
+                      <Edit className="h-4 w-4 mr-1" />
+                      Edit
                     </Button>
                     <Button 
-                      variant="ghost" 
-                      size="icon"
+                      variant="outline" 
+                      size="sm"
                       onClick={() => handleDelete(template.id)}
+                      className="bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
                     </Button>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-4">
-                {template.subjective_template && (
+                {template.subjective && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Subjective</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{template.subjective_template}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{template.subjective}</p>
                   </div>
                 )}
-                {template.objective_template && (
+                {template.objective && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Objective</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{template.objective_template}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{template.objective}</p>
                   </div>
                 )}
-                {template.assessment_template && (
+                {template.assessment && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Assessment</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{template.assessment_template}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{template.assessment}</p>
                   </div>
                 )}
-                {template.plan_template && (
+                {template.plan && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Plan</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{template.plan_template}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{template.plan}</p>
                   </div>
                 )}
               </CardContent>
@@ -1532,11 +1698,11 @@ function PetSOAPNotesView() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center py-12">
-              <Clipboard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <Clipboard className="h-12 w-12 mx-auto text-gray-500 mb-4" />
               <h3 className="text-lg font-medium mb-2">
                 No Medical Records for Maxy
               </h3>
-              <p className="text-muted-foreground mb-4">
+              <p className="text-gray-500 mb-4">
                 Maxy doesn't have any SOAP notes or medical records yet
               </p>
               <div className="flex gap-2 justify-center">
@@ -1552,7 +1718,7 @@ function PetSOAPNotesView() {
           {notes.map((note: SOAPNote) => (
             <Card key={note.id} className="overflow-hidden">
               <CardHeader>
-                <CardTitle>SOAP Note #{note.id}</CardTitle>
+                <CardTitle>Maxy - Medical Record #{note.id}</CardTitle>
                 <CardDescription>
                   Created on {format(new Date(note.createdAt || new Date()), 'MMM d, yyyy')}
                 </CardDescription>
@@ -1609,7 +1775,7 @@ export default function SOAPNotesPage() {
             {petId ? `Medical Records: ${petName}` : 'SOAP Notes'}
           </h1>
           {petId && (
-            <p className="text-muted-foreground mt-1">
+            <p className="text-gray-500 mt-1">
               {petSpecies} • {petBreed} • {petWeight}
             </p>
           )}
@@ -1673,7 +1839,7 @@ export default function SOAPNotesPage() {
             </TabsContent>
             
             <TabsContent value="templates" className="space-y-4">
-              <SOAPTemplatesList searchQuery={searchQuery} />
+              <SOAPTemplatesList />
             </TabsContent>
           </Tabs>
         </div>

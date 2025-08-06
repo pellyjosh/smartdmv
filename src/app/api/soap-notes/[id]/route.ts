@@ -5,6 +5,11 @@ import { soapNotes } from "@/db/schemas/soapNoteSchema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
+const isSqlite = process.env.DB_TYPE === 'sqlite';
+
+// Utility function for database-agnostic timestamp handling
+const getTimestamp = () => isSqlite ? new Date().getTime() : new Date();
+
 // Schema for partial updates (PATCH)
 const soapNotePartialSchema = z.object({
   appointmentId: z.string().optional().nullable(),
@@ -23,10 +28,11 @@ const soapNotePartialSchema = z.object({
 // GET /api/soap-notes/[id] - Get a specific SOAP note
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const soapNoteId = parseInt(params.id);
+    const resolvedParams = await params;
+    const soapNoteId = parseInt(resolvedParams.id);
     
     if (isNaN(soapNoteId)) {
       return NextResponse.json(
@@ -65,11 +71,12 @@ export async function GET(
 // PATCH /api/soap-notes/[id] - Update an existing SOAP note
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const data = await request.json();
-    const soapNoteId = parseInt(params.id);
+    const resolvedParams = await params;
+    const soapNoteId = parseInt(resolvedParams.id);
     
     if (isNaN(soapNoteId)) {
       return NextResponse.json(
@@ -91,11 +98,13 @@ export async function PATCH(
     const validatedData = validationResult.data;
     console.log(`Updating SOAP note ${soapNoteId} with data:`, validatedData);
     
-    // Update in database
-    const updateData = {
+    // Prepare update data with database-appropriate timestamp
+    const updateData: any = {
       ...validatedData,
-      updatedAt: new Date(),
+      updatedAt: getTimestamp(), // Database-agnostic timestamp
     };
+    
+    // Let Drizzle handle boolean conversions automatically for each database type
     
     // @ts-ignore
     const [updatedSoapNote] = await db.update(soapNotes)
@@ -129,10 +138,11 @@ export async function PATCH(
 // DELETE /api/soap-notes/[id] - Delete a SOAP note
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const soapNoteId = parseInt(params.id);
+    const resolvedParams = await params;
+    const soapNoteId = parseInt(resolvedParams.id);
     
     if (isNaN(soapNoteId)) {
       return NextResponse.json(

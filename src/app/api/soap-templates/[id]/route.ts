@@ -21,10 +21,11 @@ const soapTemplatePartialSchema = z.object({
 // GET /api/soap-templates/[id] - Fetch a specific SOAP template
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = parseInt(params.id);
+    const { id: idString } = await params;
+    const id = parseInt(idString);
     
     if (isNaN(id)) {
       return NextResponse.json(
@@ -57,10 +58,11 @@ export async function GET(
 // PATCH /api/soap-templates/[id] - Update a SOAP template
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = parseInt(params.id);
+    const { id: idString } = await params;
+    const id = parseInt(idString);
     
     if (isNaN(id)) {
       return NextResponse.json(
@@ -114,10 +116,11 @@ export async function PATCH(
 // DELETE /api/soap-templates/[id] - Delete a SOAP template
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = parseInt(params.id);
+    const { id: idString } = await params;
+    const id = parseInt(idString);
     
     if (isNaN(id)) {
       return NextResponse.json(

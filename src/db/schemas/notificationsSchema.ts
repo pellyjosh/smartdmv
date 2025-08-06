@@ -31,11 +31,11 @@ export const notifications = dbTable('notifications', {
   link: text('link'),
 
   // Timestamps - strict snake_case
-  createdAt: isSqlite
+  created_at: isSqlite
     ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
     : timestamp('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 
-  updatedAt: isSqlite
+  updated_at: isSqlite
     ? timestamp('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
     : timestamp('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
 });

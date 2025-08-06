@@ -16,8 +16,8 @@ export const healthPlans = dbTable('health_plans', {
   planType: text('plan_type'), // e.g., 'Wellness', 'Dental', 'Senior Care'
   description: text('description'),
   status: text('status', { enum: healthPlanStatusEnum }).notNull().default('pending'),
-  startDate: timestamp('start_date', { mode: 'date' }),
-  endDate: timestamp('end_date', { mode: 'date' }),
+  startDate: timestamp('startDate', { mode: 'date' }),
+  endDate: timestamp('endDate', { mode: 'date' }),
 
   createdAt: isSqlite
     ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)

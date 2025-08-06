@@ -1,5 +1,5 @@
 import { db } from './index';
-import { sql } from 'drizzle-orm';
+import { addons } from './schema';
 
 export async function seedMarketplaceData() {
   console.log('🛍️ Seeding marketplace data...');
@@ -49,11 +49,11 @@ export async function seedMarketplaceData() {
       price: '59.99',
       icon: 'Smartphone',
       features: JSON.stringify([
-        'Custom branded app',
-        'Appointment booking',
+        'Branded mobile app',
+        'Appointment scheduling',
         'Medical record access',
-        'Push notifications',
-        'In-app messaging'
+        'Photo sharing',
+        'Push notifications'
       ]),
       isPopular: false
     },
@@ -94,13 +94,9 @@ export async function seedMarketplaceData() {
   ];
 
   try {
-    // Insert marketplace addons using raw SQL to avoid schema conflicts
-    for (const addon of addonsData) {
-      await db.execute(sql`
-        INSERT INTO addons (name, slug, description, short_description, category, price, icon, features, is_popular)
-        VALUES (${addon.name}, ${addon.slug}, ${addon.description}, ${addon.shortDescription}, ${addon.category}, ${addon.price}, ${addon.icon}, ${addon.features}, ${addon.isPopular})
-      `);
-    }
+    // Insert marketplace addons using Drizzle ORM (timestamps will use defaults)
+    // @ts-expect-error - Union type issue with db.insert
+    await db.insert(addons).values(addonsData);
     
     console.log(`✅ Seeded ${addonsData.length} marketplace addons`);
     console.log('   Available addons:');

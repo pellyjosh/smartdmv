@@ -6,7 +6,7 @@ import { db } from '@/db';
 
 export async function GET(
   req: Request,
-  { params }: { params: { practiceId: string } }
+  { params }: { params: Promise<{ practiceId: string }> }
 ) {
   try {
     const resolvedParams = await params;

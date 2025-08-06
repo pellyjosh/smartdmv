@@ -37,7 +37,7 @@ export function FileAttachmentList({
   
   const deleteMutation = useMutation({
     mutationFn: async (fileId: number) => {
-      await apiRequest("DELETE", `/api/medical-record-attachments/${fileId}`);
+      await apiRequest("DELETE", `/api/medical-record-attachments/delete/${fileId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/medical-record-attachments/${recordType}/${recordId}`] });

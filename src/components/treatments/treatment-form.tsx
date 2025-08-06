@@ -41,13 +41,35 @@ interface TreatmentFormProps {
   treatmentToEdit?: Treatment;
 }
 
-// Extend the treatment schema with validation
-const treatmentFormSchema = insertTreatmentSchema.extend({
+// Form schema with proper validation
+const treatmentFormSchema = z.object({
+  soapNoteId: z.number(),
+  petId: z.number(),
+  practiceId: z.string(),
+  practitionerId: z.string(),
   name: z.string().min(1, "Name is required"),
   category: z.enum(["medication", "procedure", "surgery", "therapy", "diagnostic", "wellness", "other"], {
     required_error: "Please select a category",
   }),
+  description: z.string().optional(),
+  inventoryItemId: z.string().optional().nullable(),
+  dosage: z.string().optional().nullable(),
+  route: z.enum(["oral", "injectable", "topical", "ophthalmic", "otic", "nasal", "rectal", "inhaled", "other"]).optional().nullable(),
+  frequency: z.enum(["once", "BID", "TID", "QID", "SID", "PRN", "EOD", "weekly", "biweekly", "monthly", "other"]).optional().nullable(),
+  duration: z.string().optional().nullable(),
+  instructions: z.string().optional().nullable(),
+  procedureCode: z.string().optional().nullable(),
+  location: z.string().optional().nullable(),
+  technician: z.string().optional().nullable(),
+  status: z.enum(["planned", "in_progress", "completed", "discontinued"]).default("planned"),
+  administeredDate: z.date().optional(),
+  cost: z.string().optional().nullable(),
+  billable: z.boolean().default(false),
+  notes: z.string().optional().nullable(),
+  startDate: z.date().optional(),
+  followUpNeeded: z.boolean().default(false),
   followUpDate: z.date().optional().nullable(),
+  followUpNotes: z.string().optional().nullable(),
 });
 
 type TreatmentFormValues = z.infer<typeof treatmentFormSchema>;
@@ -68,16 +90,29 @@ export function TreatmentForm({
     defaultValues: {
       soapNoteId,
       petId,
-      practiceId: userPracticeId || 0,
-      practitionerId: user?.id || 0,
+      practiceId: userPracticeId || "practice_MAIN_HQ",
+      practitionerId: user?.id || "unknown",
       name: "",
       category: "medication",
       description: "",
+      inventoryItemId: null,
+      dosage: null,
+      route: null,
+      frequency: null,
+      duration: null,
+      instructions: null,
+      procedureCode: null,
+      location: null,
+      technician: null,
       status: "planned",
-      startDate: new Date(),
+      administeredDate: new Date(),
+      cost: null,
+      billable: false,
+      notes: null,
+      startDate: undefined,
       followUpNeeded: false,
       followUpDate: null,
-      followUpNotes: "",
+      followUpNotes: null,
     }
   });
 
@@ -153,7 +188,7 @@ export function TreatmentForm({
       // Convert dates to Date objects
       const formValues = {
         ...treatmentToEdit,
-        startDate: treatmentToEdit.startDate ? new Date(treatmentToEdit.startDate) : new Date(),
+        administeredDate: treatmentToEdit.administeredDate ? new Date(treatmentToEdit.administeredDate) : new Date(),
         followUpDate: treatmentToEdit.followUpDate ? new Date(treatmentToEdit.followUpDate) : null,
       };
       form.reset(formValues);
@@ -162,19 +197,32 @@ export function TreatmentForm({
       form.reset({
         soapNoteId,
         petId,
-        practiceId: userPracticeId || 0,
-        practitionerId: user?.id || 0,
+        practiceId: userPracticeId || "practice_MAIN_HQ",
+        practitionerId: user?.id || "unknown",
         name: "",
         category: "medication",
         description: "",
+        inventoryItemId: null,
+        dosage: null,
+        route: null,
+        frequency: null,
+        duration: null,
+        instructions: null,
+        procedureCode: null,
+        location: null,
+        technician: null,
         status: "planned",
-        startDate: new Date(),
+        administeredDate: new Date(),
+        cost: null,
+        billable: false,
+        notes: null,
+        startDate: undefined,
         followUpNeeded: false,
         followUpDate: null,
-        followUpNotes: "",
+        followUpNotes: null,
       });
     }
-  }, [treatmentToEdit, soapNoteId, petId, user, form]);
+  }, [treatmentToEdit, soapNoteId, petId, user, form, userPracticeId]);
 
   const onSubmit = (data: TreatmentFormValues) => {
     if (isEditing && treatmentToEdit) {
@@ -303,7 +351,7 @@ export function TreatmentForm({
                       <FormItem className="col-span-2">
                         <FormLabel>Medication</FormLabel>
                         <Select 
-                          onValueChange={(value) => field.onChange(parseInt(value))} 
+                          onValueChange={(value) => field.onChange(value)} 
                           value={field.value?.toString() || ""}
                         >
                           <FormControl>
@@ -440,6 +488,24 @@ export function TreatmentForm({
                   
                   <FormField
                     control={form.control}
+                    name="instructions"
+                    render={({ field }) => (
+                      <FormItem className="col-span-2">
+                        <FormLabel>Instructions</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            placeholder="Administration instructions for medication" 
+                            {...field} 
+                            value={field.value || ""} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={form.control}
                     name="quantity"
                     render={({ field }) => (
                       <FormItem>
@@ -489,6 +555,21 @@ export function TreatmentForm({
                         <FormControl>
                           <Input placeholder="e.g., Left forelimb" {...field} value={field.value || ""} />
                         </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={form.control}
+                    name="technician"
+                    render={({ field }) => (
+                      <FormItem className="col-span-2">
+                        <FormLabel>Technician</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., Tech Smith" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormDescription>Technician who assisted with the procedure</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -569,6 +650,46 @@ export function TreatmentForm({
                         />
                       </PopoverContent>
                     </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="administeredDate"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Administered Date</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormDescription>Date when treatment was administered</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -704,7 +825,7 @@ export function TreatmentForm({
                         step="0.01" 
                         placeholder="0.00" 
                         {...field}
-                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)}
+                        onChange={(e) => field.onChange(e.target.value || null)}
                         value={field.value || ""} 
                       />
                     </FormControl>
@@ -716,7 +837,7 @@ export function TreatmentForm({
               
               <FormField
                 control={form.control}
-                name="billed"
+                name="billable"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                     <FormControl>
@@ -726,9 +847,9 @@ export function TreatmentForm({
                       />
                     </FormControl>
                     <div className="space-y-1 leading-none">
-                      <FormLabel>Billed to Client</FormLabel>
+                      <FormLabel>Billable to Client</FormLabel>
                       <FormDescription>
-                        Mark if this treatment has been billed
+                        Mark if this treatment should be billed
                       </FormDescription>
                     </div>
                   </FormItem>
@@ -740,7 +861,10 @@ export function TreatmentForm({
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isPending}>
+              <Button 
+                type="submit" 
+                disabled={isPending}
+              >
                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isEditing ? "Update Treatment" : "Add Treatment"}
               </Button>

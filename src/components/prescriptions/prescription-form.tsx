@@ -16,10 +16,11 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { MedicationRoute, DosageFrequency } from "@/db/schema";
 import { AlertCircle, CheckCircle, Info, Loader2, Pill } from "lucide-react";
+import { useUser } from "@/context/UserContext";
 
 // Form schema for prescription
 const prescriptionFormSchema = z.object({
-  inventoryItemId: z.coerce.number(),
+  inventoryItemId: z.string(),
   dosage: z.string().min(1, "Dosage is required"),
   route: z.string().min(1, "Route is required"),
   frequency: z.string().min(1, "Frequency is required"),
@@ -40,11 +41,25 @@ interface PrescriptionFormProps {
 
 export function PrescriptionForm({ soapNoteId, practiceId, onPrescriptionCreated, onCancel }: PrescriptionFormProps) {
   const { toast } = useToast();
+  const { user, userPracticeId } = useUser();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [drugInteractions, setDrugInteractions] = useState<any[]>([]);
   const [aiDrugInteractions, setAiDrugInteractions] = useState<any[]>([]);
   const [isCheckingInteractions, setIsCheckingInteractions] = useState(false);
   const [isCheckingAiInteractions, setIsCheckingAiInteractions] = useState(false);
+
+  // Fetch the SOAP note to get pet information
+  const { data: soapNote, refetch: refetchSoap } = useQuery({
+    queryKey: ['/api/soap-notes', soapNoteId],
+    queryFn: async () => {
+      const response = await fetch(`/api/soap-notes/${soapNoteId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch SOAP note');
+      }
+      return response.json();
+    },
+    enabled: !!soapNoteId
+  });
 
   // Fetch inventory items that can be prescribed
   const { data: inventoryItems, isLoading: isLoadingInventory } = useQuery({
@@ -59,7 +74,7 @@ export function PrescriptionForm({ soapNoteId, practiceId, onPrescriptionCreated
   });
   
   // Fetch existing prescriptions for the current SOAP note (patient)
-  const { data: existingPrescriptions } = useQuery({
+  const { data: existingPrescriptions, refetch: refetchExistingPrescriptions } = useQuery({
     queryKey: ['/api/prescriptions', { soapNoteId }],
     queryFn: async () => {
       const response = await fetch(`/api/prescriptions?soapNoteId=${soapNoteId}`);
@@ -91,21 +106,43 @@ export function PrescriptionForm({ soapNoteId, practiceId, onPrescriptionCreated
     mutationFn: async (data: PrescriptionFormValues) => {
       setIsSubmitting(true);
       try {
+        // Get the selected medication details
+        const selectedMedication = inventoryItems?.find((item: any) => 
+          item.id.toString() === data.inventoryItemId.toString()
+        );
+        
+        // Transform form data to match API schema
+        const apiData = {
+          soapNoteId: soapNoteId,
+          petId: soapNote?.petId?.toString() || '', // Convert to string
+          practiceId: (userPracticeId || practiceId?.toString() || 'practice_MAIN_HQ'), // Use string
+          prescribedBy: user?.id || 'unknown',
+          inventoryItemId: data.inventoryItemId?.toString(),
+          medicationName: selectedMedication?.name || 'Unknown Medication',
+          dosage: data.dosage,
+          route: data.route,
+          frequency: data.frequency,
+          duration: data.duration,
+          instructions: data.instructions || '',
+          quantityPrescribed: data.quantityPrescribed, // Keep as string
+          refills: data.refills || 0,
+        };
+        
+        console.log('Prescription Form - Sending data:', apiData);
+        console.log('Prescription Form - User context:', { user, userPracticeId });
+        console.log('Prescription Form - SOAP note:', soapNote);
+        
         const response = await fetch('/api/prescriptions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            ...data,
-            soapNoteId,
-            practiceId,
-            status: "active"
-          }),
+          body: JSON.stringify(apiData),
         });
 
         if (!response.ok) {
           const errorData = await response.json();
+          console.error('Prescription creation failed:', errorData);
           throw new Error(errorData.error || "Failed to create prescription");
         }
 
@@ -122,6 +159,8 @@ export function PrescriptionForm({ soapNoteId, practiceId, onPrescriptionCreated
       // Invalidate SOAP note and prescriptions cache
       queryClient.invalidateQueries({ queryKey: ['/api/soap-notes', soapNoteId] });
       queryClient.invalidateQueries({ queryKey: ['/api/prescriptions'] });
+      refetchSoap();
+      refetchExistingPrescriptions();
       
       form.reset();
       

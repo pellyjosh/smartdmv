@@ -52,19 +52,23 @@ export function PrescriptionList({ soapNoteId, readOnly = false }: PrescriptionL
     enabled: !!soapNoteId
   });
 
-  // Fetch inventory data for each prescription's medication
-  const getInventoryItem = (inventoryItemId: number) => {
-    return useQuery({
-      queryKey: ['/api/inventory', inventoryItemId],
-      queryFn: async () => {
-        const response = await fetch(`/api/inventory/${inventoryItemId}`);
-        if (!response.ok) {
-          throw new Error("Failed to fetch inventory item");
-        }
-        return response.json();
-      },
-      enabled: !!inventoryItemId
-    });
+  // Fetch inventory items for medication details
+  const { data: inventoryItems } = useQuery({
+    queryKey: ['/api/inventory', { type: 'medication' }],
+    queryFn: async () => {
+      const response = await fetch(`/api/inventory?type=medication`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch medications");
+      }
+      return response.json();
+    }
+  });
+
+  // Helper function to get inventory item details
+  const getInventoryItem = (inventoryItemId: string | number) => {
+    return inventoryItems?.find((item: any) => 
+      item.id.toString() === inventoryItemId?.toString()
+    );
   };
 
   // Dispensing mutation
@@ -153,10 +157,10 @@ export function PrescriptionList({ soapNoteId, readOnly = false }: PrescriptionL
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 bg-card p-4 rounded-lg shadow-sm">
       <Accordion type="single" collapsible className="w-full">
         {prescriptions.map((prescription: any) => {
-          const { data: medicationItem, isLoading: isMedicationLoading } = getInventoryItem(prescription.inventoryItemId);
+          const medicationItem = getInventoryItem(prescription.inventoryItemId);
           
           return (
             <AccordionItem key={prescription.id} value={`prescription-${prescription.id}`}>
@@ -164,11 +168,7 @@ export function PrescriptionList({ soapNoteId, readOnly = false }: PrescriptionL
                 <div className="flex items-center gap-2 text-left">
                   <Pill className="h-4 w-4" />
                   <span>
-                    {isMedicationLoading ? (
-                      <Skeleton className="h-4 w-32 inline-block" />
-                    ) : (
-                      medicationItem?.name || `Medication #${prescription.inventoryItemId}`
-                    )}
+                    {medicationItem?.name || `Medication #${prescription.inventoryItemId}`}
                     {" - "}
                     {prescription.dosage}, {prescription.route}, {prescription.frequency}
                   </span>
@@ -187,17 +187,11 @@ export function PrescriptionList({ soapNoteId, readOnly = false }: PrescriptionL
                             <Package2 className="h-3.5 w-3.5 mr-1" /> Medication:
                           </span>
                           <span className="font-medium">
-                            {isMedicationLoading ? (
-                              <Skeleton className="h-4 w-32" />
-                            ) : (
-                              <>
-                                {medicationItem?.name || `Medication #${prescription.inventoryItemId}`}
-                                {medicationItem?.quantity !== undefined && (
-                                  <span className="text-xs ml-2 text-muted-foreground">
-                                    ({medicationItem.quantity} {medicationItem.unit || 'units'} in stock)
-                                  </span>
-                                )}
-                              </>
+                            {medicationItem?.name || `Medication #${prescription.inventoryItemId}`}
+                            {medicationItem?.quantity !== undefined && (
+                              <span className="text-xs ml-2 text-muted-foreground">
+                                ({medicationItem.quantity} {medicationItem.unit || 'units'} in stock)
+                              </span>
                             )}
                           </span>
 
@@ -269,7 +263,7 @@ export function PrescriptionList({ soapNoteId, readOnly = false }: PrescriptionL
                         <Button 
                           size="sm" 
                           onClick={() => handleOpenDispenseDialog(prescription.id)}
-                          disabled={prescription.status !== "active" || isMedicationLoading || !medicationItem?.quantity || medicationItem?.quantity <= 0}
+                          disabled={prescription.status !== "active" || !medicationItem?.quantity || medicationItem?.quantity <= 0}
                         >
                           <CheckCircle2 className="h-4 w-4 mr-1" />
                           Dispense

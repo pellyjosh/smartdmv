@@ -10,6 +10,7 @@ import { rooms } from './schemas/roomsSchema';
 import { customFieldCategories, customFieldGroups, customFieldValues } from './schemas/customFieldsSchema';
 import { soapNotes, soapNotesRelations } from './schemas/soapNoteSchema';
 import { soapTemplates } from './schemas/soapNoteTemplateSchema';
+import { prescriptions, prescriptionHistory } from './schemas/prescriptionsSchema';
 import { treatmentTemplates } from './schemas/treatmentTemplatesSchema';
 import { referrals, referralAttachments, referralNotes, referralsRelations, referralAttachmentsRelations, referralNotesRelations, ReferralStatus, ReferralPriority, VetSpecialty } from './schemas/referralsSchema';
 import { addons, practiceAddons, addonReviews, AddonCategory } from './schemas/marketplaceSchema';
@@ -63,6 +64,8 @@ export const schema = {
   customFieldValues,
   soapNotes,
   soapTemplates,
+  prescriptions,
+  prescriptionHistory,
   treatmentTemplates,
   referrals,
   referralAttachments,
@@ -110,6 +113,7 @@ export * from './schemas/roomsSchema';
 export * from './schemas/customFieldsSchema';
 export * from './schemas/soapNoteSchema';
 export * from './schemas/soapNoteTemplateSchema';
+export * from './schemas/prescriptionsSchema';
 export * from './schemas/treatmentsSchema';
 export * from './schemas/whiteboardItemsSchema';
 export * from './schemas/inventorySchema';
