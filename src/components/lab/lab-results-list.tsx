@@ -72,7 +72,7 @@ interface LabResult {
 
 // Props for the component
 interface LabResultsListProps {
-  petId: number;
+  petId: string;
   soapNoteId?: number;
   onSelectResults?: (results: LabResult[]) => void;
   displayMode?: "full" | "compact" | "linked";

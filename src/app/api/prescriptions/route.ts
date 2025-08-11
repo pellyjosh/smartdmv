@@ -28,7 +28,7 @@ const prescriptionSchema = z.object({
     required_error: "Prescriber ID is required",
     invalid_type_error: "Prescriber ID must be a string"
   }),
-  inventoryItemId: z.string().optional(),
+  inventoryItemId: z.string().optional().transform((val) => val ? parseInt(val) : null),
   medicationName: z.string({
     required_error: "Medication name is required"
   }).min(1, "Medication name cannot be empty"),
@@ -98,6 +98,8 @@ export async function GET(request: Request) {
 
 // POST /api/prescriptions - Create a new prescription
 export async function POST(request: Request) {
+  let validatedData: any = null;
+  
   try {
     const data = await request.json();
     
@@ -111,11 +113,11 @@ export async function POST(request: Request) {
     }
     
     // Data is valid, use it
-    const validatedData = validationResult.data;
+    validatedData = validationResult.data;
     console.log("Creating new prescription with data:", validatedData);
     
     // Insert into database
-    // @ts-ignore
+    // @ts-ignore - Drizzle ORM type issue with multi-database support
     const [newPrescription] = await db.insert(prescriptions).values({
       soapNoteId: validatedData.soapNoteId,
       petId: validatedData.petId,
@@ -141,8 +143,20 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error("Error creating prescription:", error);
+    console.error("Validated data was:", validatedData);
+    
+    // More detailed error information
+    if (error instanceof Error) {
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+    }
+    
     return NextResponse.json(
-      { error: "Failed to create prescription" },
+      { 
+        error: "Failed to create prescription",
+        details: error instanceof Error ? error.message : "Unknown error",
+        validatedData: validatedData // Include for debugging
+      },
       { status: 500 }
     );
   }

@@ -1,7 +1,8 @@
 
 "use client";
 
-import type { AdministratorUser } from "@/context/UserContext";
+import { useEffect, useState } from "react";
+import type { AdministratorUser, ClientUser, PracticeAdminUser } from "@/context/UserContext";
 import { useUser } from "@/context/UserContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -18,12 +19,25 @@ import Link from "next/link";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
+interface Practice {
+  id: number;
+  name: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  phone?: string;
+}
+
 interface AppHeaderProps {
   // title?: string; // Title prop not currently used based on provided design
 }
 
 export function AppHeader({}: AppHeaderProps) {
   const { user, logout, switchPractice, isLoading } = useUser();
+  const [practices, setPractices] = useState<Practice[]>([]);
+  const [practicesLoading, setPracticesLoading] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -38,6 +52,36 @@ export function AppHeader({}: AppHeaderProps) {
     return nameOrEmail.substring(0, 2).toUpperCase();
   };
 
+  // Fetch practices when component mounts
+  useEffect(() => {
+    const fetchPractices = async () => {
+      if (!user) return;
+      
+      setPracticesLoading(true);
+      try {
+        const response = await fetch('/api/practices');
+        if (response.ok) {
+          const practicesData = await response.json();
+          setPractices(practicesData);
+        } else {
+          console.error('Failed to fetch practices:', response.statusText);
+        }
+      } catch (error) {
+        console.error('Error fetching practices:', error);
+      } finally {
+        setPracticesLoading(false);
+      }
+    };
+
+    fetchPractices();
+  }, [user]);
+
+  // Helper function to get practice name by ID
+  const getPracticeName = (practiceId: string): string => {
+    const practice = practices.find(p => p.id.toString() === practiceId);
+    return practice?.name || practiceId;
+  };
+
   const adminUser = user?.role === 'ADMINISTRATOR' ? user as AdministratorUser : null;
   const isMultiLocationEnabled = adminUser && adminUser.accessiblePracticeIds && adminUser.accessiblePracticeIds.length > 1;
 
@@ -49,9 +93,9 @@ export function AppHeader({}: AppHeaderProps) {
   };
 
   const currentPracticeName =
-    adminUser?.currentPracticeId?.replace('practice_', '') ||
-    (user?.role === 'PRACTICE_ADMINISTRATOR' && user.practiceId?.replace('practice_', '')) ||
-    (user?.role === 'CLIENT' && user.practiceId?.replace('practice_', '')) ||
+    (adminUser?.currentPracticeId && typeof adminUser.currentPracticeId === 'string' ? adminUser.currentPracticeId.replace('practice_', '') : adminUser?.currentPracticeId) ||
+    (user?.role === 'PRACTICE_ADMINISTRATOR' && (user as PracticeAdminUser).practiceId && typeof (user as PracticeAdminUser).practiceId === 'string' ? (user as PracticeAdminUser).practiceId.replace('practice_', '') : (user as PracticeAdminUser)?.practiceId) ||
+    (user?.role === 'CLIENT' && (user as ClientUser).practiceId && typeof (user as ClientUser).practiceId === 'string' ? (user as ClientUser).practiceId.replace('practice_', '') : (user as ClientUser)?.practiceId) ||
     'N/A';
 
   // Log currentPracticeId for debugging
@@ -78,15 +122,17 @@ export function AppHeader({}: AppHeaderProps) {
                     key={`desktop-practice-select-${adminUser.currentPracticeId}`} // Key to force re-render
                     value={adminUser.currentPracticeId}
                     onValueChange={handlePracticeChange}
-                    disabled={isLoading}
+                    disabled={isLoading || practicesLoading}
                   >
                   <SelectTrigger className="w-auto min-w-[180px] h-9 text-sm">
-                    <SelectValue placeholder="Select practice" />
+                    <SelectValue placeholder="Select practice">
+                      {adminUser.currentPracticeId ? getPracticeName(adminUser.currentPracticeId) : 'Select practice'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {adminUser.accessiblePracticeIds.map(practiceId => (
                       <SelectItem key={practiceId} value={practiceId} className="text-sm">
-                        {practiceId.replace('practice_', '')}
+                        {getPracticeName(practiceId)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -118,7 +164,7 @@ export function AppHeader({}: AppHeaderProps) {
                       <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
                       <div className="text-xs text-muted-foreground mt-1 flex items-center pt-1">
                         <Building2 className="h-3 w-3 mr-1.5" />
-                        Practice: {currentPracticeName}
+                        Practice: {getPracticeName(currentPracticeName)}
                       </div>
                     </div>
                   </DropdownMenuLabel>
@@ -131,15 +177,17 @@ export function AppHeader({}: AppHeaderProps) {
                           key={`mobile-practice-select-${adminUser.currentPracticeId}`} // Key to force re-render
                           value={adminUser.currentPracticeId}
                           onValueChange={handlePracticeChange}
-                          disabled={isLoading}
+                          disabled={isLoading || practicesLoading}
                         >
                         <SelectTrigger className="w-full h-9 text-xs">
-                          <SelectValue placeholder="Select practice" />
+                          <SelectValue placeholder="Select practice">
+                            {adminUser.currentPracticeId ? getPracticeName(adminUser.currentPracticeId) : 'Select practice'}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {adminUser.accessiblePracticeIds.map(practiceId => (
                             <SelectItem key={practiceId} value={practiceId} className="text-xs">
-                              {practiceId.replace('practice_', '')}
+                              {getPracticeName(practiceId)}
                             </SelectItem>
                           ))}
                         </SelectContent>

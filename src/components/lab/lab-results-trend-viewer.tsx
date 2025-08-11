@@ -54,7 +54,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface LabResultsTrendViewerProps {
-  petId: number;
+  petId: string;
   testCatalogId?: number;
 }
 

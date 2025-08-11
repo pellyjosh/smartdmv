@@ -21,7 +21,7 @@ import {
   Clipboard, Clock, Pill, Filter, FileText, Copy, ClipboardCopy, 
   Paperclip, Loader2, ChevronLeft, Save, Plus, X, Search, CalendarPlus,
   CircleIcon, HeartPulseIcon, Wind, Utensils, Activity, Brain, Fingerprint,
-  Share2, BookTemplate, CheckCircle
+  Share2, BookTemplate, CheckCircle, NotebookPen
 } from "lucide-react";
 import { MultiSelect, type MultiSelectOption } from "@/components/ui/multi-select";
 import { PrescriptionForm } from "@/components/prescriptions/prescription-form";
@@ -118,7 +118,6 @@ const SOAPNoteCreatePage: React.FC = () => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("details");
   const [selectedTemplate, setSelectedTemplate] = useState<SOAPTemplate | null>(null);
-  const [showPrescriptionDialog, setShowPrescriptionDialog] = useState(false);
   const [isPrescriptionFormOpen, setIsPrescriptionFormOpen] = useState(false);
   const [showReferralDialog, setShowReferralDialog] = useState(false);
   const [showSaveAsTemplateDialog, setShowSaveAsTemplateDialog] = useState(false);
@@ -127,7 +126,6 @@ const SOAPNoteCreatePage: React.FC = () => {
   const [templateDescription, setTemplateDescription] = useState("");
   const [templateCategory, setTemplateCategory] = useState("general");
   const [speciesApplicability, setSpeciesApplicability] = useState<string[]>([]);
-  const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [referrals, setReferrals] = useState<any[]>([]);
   const [savedNoteId, setSavedNoteId] = useState<number | null>(null);
   const [soapNoteSaved, setSoapNoteSaved] = useState(false);
@@ -525,24 +523,6 @@ const SOAPNoteCreatePage: React.FC = () => {
   
   const isLoading = isLoadingAppointments || isLoadingPets || isLoadingTemplates || mutation.isPending || attachmentsMutation.isPending;
   
-  // Add a prescription to the list
-  const handleAddPrescription = (prescription: any) => {
-    setPrescriptions([...prescriptions, prescription]);
-    setShowPrescriptionDialog(false);
-    // No need for a toast here since we already show one in the prescription form callback
-  };
-  
-  // Remove a prescription from the list
-  const handleRemovePrescription = (index: number) => {
-    setPrescriptions(prevPrescriptions => 
-      prevPrescriptions.filter((_, i) => i !== index)
-    );
-    toast({
-      title: "Prescription Removed",
-      description: "The prescription has been removed from the SOAP note"
-    });
-  };
-  
   // Add a referral to the list
   const handleAddReferral = (referral: any) => {
     setReferrals([...referrals, referral]);
@@ -574,33 +554,44 @@ const SOAPNoteCreatePage: React.FC = () => {
           <h1 className="text-2xl font-bold">Create New SOAP Note</h1>
         </div>
         
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline">
-              <FileText className="h-4 w-4 mr-2" /> 
-              Apply Template
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 p-0" align="end">
-            <Command>
-              <CommandInput placeholder="Search templates..." />
-              <CommandList>
-                <CommandEmpty>No templates found.</CommandEmpty>
-                <CommandGroup heading="Templates">
-                  {templates?.map((template: SOAPTemplate) => (
-                    <CommandItem 
-                      key={template.id}
-                      onSelect={() => applyTemplate(template)}
-                    >
-                      <FileText className="h-4 w-4 mr-2" />
-                      {template.name}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+        <div className="flex gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline">
+                <FileText className="h-4 w-4 mr-2" /> 
+                Apply Template
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end">
+              <Command>
+                <CommandInput placeholder="Search templates..." />
+                <CommandList>
+                  <CommandEmpty>No templates found.</CommandEmpty>
+                  <CommandGroup heading="Templates">
+                    {templates?.map((template: SOAPTemplate) => (
+                      <CommandItem 
+                        key={template.id}
+                        onSelect={() => applyTemplate(template)}
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        {template.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          
+          <Button 
+            variant="outline"
+            onClick={() => setShowSaveAsTemplateDialog(true)}
+            disabled={!savedNoteId}
+          >
+            <Save className="h-4 w-4 mr-2" />
+            Save as Template
+          </Button>
+        </div>
       </div>
       
       {/* Success Alert */}
@@ -1719,7 +1710,7 @@ const SOAPNoteCreatePage: React.FC = () => {
                             <div className="bg-white dark:bg-slate-900 rounded-md p-4 border border-green-200 dark:border-green-800">
                               <SoapLabResultsSection 
                                 soapNoteId={0} 
-                                petId={parseInt(form.watch("petId")) || 0} 
+                                petId={form.watch("petId") || ""} 
                                 section="objective"
                               />
                             </div>
@@ -1945,59 +1936,6 @@ const SOAPNoteCreatePage: React.FC = () => {
                     <TabsContent value="plan" className="py-6 mt-2">
                       <div className="p-4 rounded-md bg-purple-50 dark:bg-purple-950 border border-purple-100 dark:border-purple-900">
                         <div className="space-y-6">
-                          {/* Prescriptions Section */}
-                          <div>
-                            <div className="flex items-center justify-between mb-3">
-                              <h3 className="text-purple-600 dark:text-purple-300 font-medium">Prescriptions</h3>
-                              <Button 
-                                type="button"
-                                size="sm"
-                                onClick={() => {
-                                  setShowPrescriptionDialog(true);
-                                }}
-                              >
-                                <Plus className="h-4 w-4 mr-1" />
-                                Add Prescription
-                              </Button>
-                            </div>
-                            
-                            <div className="bg-white dark:bg-slate-900 rounded-md p-4 border border-purple-200 dark:border-purple-800">
-                              {prescriptions.length > 0 ? (
-                                <div className="space-y-2">
-                                  {prescriptions.map((prescription, index) => (
-                                    <div key={index} className="p-3 border rounded-md relative">
-                                      <div className="absolute top-2 right-2">
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm" 
-                                          onClick={() => handleRemovePrescription(index)}
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                      <div className="pr-8">
-                                        <div className="font-medium">{prescription.medication}</div>
-                                        <div className="text-sm text-muted-foreground">
-                                          {prescription.dosage}, {prescription.frequency}, {prescription.duration}
-                                        </div>
-                                        {prescription.instructions && (
-                                          <div className="mt-1 text-sm">{prescription.instructions}</div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="text-center py-6 text-muted-foreground">
-                                  <Pill className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                                  <p>No prescriptions added</p>
-                                  <p className="text-sm">Click "Add Prescription" to create one</p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          
-
                           {/* Procedures and Treatments Section */}
                           <div>
                             <h3 className="text-purple-600 dark:text-purple-300 font-medium mb-3">Procedures & Treatments</h3>
@@ -2121,7 +2059,7 @@ const SOAPNoteCreatePage: React.FC = () => {
                                       // Append the health plan to the current value
                                       const currentValue = field.value || '';
                                       const separator = currentValue ? '\n\n' : '';
-                                      const planText = `## Health Plan: ${plan.name}\n${plan.notes || 'No additional details available.'}`;
+                                      const planText = `## Health Plan: ${plan.name}\n${plan.description || 'No additional details available.'}`;
                                       field.onChange(currentValue + separator + planText);
                                     }} />
                                   </div>
@@ -2235,60 +2173,6 @@ const SOAPNoteCreatePage: React.FC = () => {
                             </div>
                           </div>
                           
-                          {/* Referrals Section */}
-                          <div>
-                            <div className="flex items-center justify-between mb-3">
-                              <h3 className="text-purple-600 dark:text-purple-300 font-medium">Referrals</h3>
-                              <Button 
-                                type="button"
-                                size="sm"
-                                onClick={() => {
-                                  setShowReferralDialog(true);
-                                }}
-                              >
-                                <Plus className="h-4 w-4 mr-1" />
-                                Add Referral
-                              </Button>
-                            </div>
-                            
-                            <div className="bg-white dark:bg-slate-900 rounded-md p-4 border border-purple-200 dark:border-purple-800">
-                              {referrals.length > 0 ? (
-                                <div className="space-y-2">
-                                  {referrals.map((referral, index) => (
-                                    <div key={index} className="p-3 border rounded-md relative">
-                                      <div className="absolute top-2 right-2">
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm" 
-                                          onClick={() => handleRemoveReferral(index)}
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                      <div className="pr-8">
-                                        <div className="font-medium">
-                                          Referral to: {referral.specialty} {referral.priority && <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">{referral.priority}</span>}
-                                        </div>
-                                        <div className="text-sm text-muted-foreground">
-                                          Reason: {referral.reason}
-                                        </div>
-                                        {referral.clinicalHistory && (
-                                          <div className="mt-1 text-sm">Clinical History: {referral.clinicalHistory}</div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="text-center py-6 text-muted-foreground">
-                                  <Share2 className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                                  <p>No referrals added</p>
-                                  <p className="text-sm">Click "Add Referral" to create one</p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          
 
                         </div>
                       </div>
@@ -2299,7 +2183,7 @@ const SOAPNoteCreatePage: React.FC = () => {
                     <Button 
                       type="button" 
                       variant="outline" 
-                      onClick={() => router.push("/soap-notes")}
+                      onClick={() => router.push("/admin/soap-notes")}
                     >
                       Cancel
                     </Button>
@@ -2324,26 +2208,6 @@ const SOAPNoteCreatePage: React.FC = () => {
                   </div>
                 </form>
               </FormProvider>
-              
-              {/* Prescription Dialog */}
-              <Dialog open={showPrescriptionDialog} onOpenChange={setShowPrescriptionDialog}>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Add Prescription</DialogTitle>
-                    <DialogDescription>
-                      Enter prescription details to add to this SOAP note.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <PrescriptionForm
-                    soapNoteId={savedNoteId || 0}
-                    practiceId={parseInt(userPracticeId || "0") || 0}
-                    onPrescriptionCreated={() => {
-                      handleAddPrescription(null); // Handle the prescription created event
-                    }}
-                    onCancel={() => setShowPrescriptionDialog(false)}
-                  />
-                </DialogContent>
-              </Dialog>
             </CardContent>
           </Card>
         </div>
@@ -2363,20 +2227,29 @@ const SOAPNoteCreatePage: React.FC = () => {
                 endpoint="/api/soap-notes/attachments"
                 maxFiles={5}
                 maxSizeMB={10}
-                allowedFileTypes={["image/jpeg", "image/png", "image/gif", "application/pdf"]}
+                allowedFileTypes={["image/jpeg", "image/png", "image/gif", "application/pdf", "text/plain"]}
                 recordType="soap-note"
                 recordId={savedNoteId || undefined}
               />
               
               {uploadedFiles.length > 0 && (
                 <div className="mt-4">
-                  <h4 className="text-sm font-medium mb-2">Uploaded Files</h4>
-                  <ul className="space-y-2">
+                  <h4 className="text-sm font-medium mb-2">Uploaded Files ({uploadedFiles.length})</h4>
+                  <div className="space-y-2">
                     {uploadedFiles.map((file, index) => (
-                      <li key={index} className="flex items-center justify-between p-2 border rounded">
+                      <div key={index} className="flex items-center justify-between p-3 border rounded-md bg-muted/50">
                         <div className="flex items-center">
                           <Paperclip className="h-4 w-4 mr-2 text-muted-foreground" />
-                          <span className="text-sm truncate max-w-[200px]">{file.fileName}</span>
+                          <div>
+                            <span className="text-sm font-medium truncate max-w-[200px] block">
+                              {file.fileName || `File ${index + 1}`}
+                            </span>
+                            {file.fileSize && (
+                              <span className="text-xs text-muted-foreground">
+                                {(file.fileSize / 1024 / 1024).toFixed(2)} MB
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <Button 
                           variant="ghost" 
@@ -2385,9 +2258,9 @@ const SOAPNoteCreatePage: React.FC = () => {
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
-                      </li>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -2400,7 +2273,7 @@ const SOAPNoteCreatePage: React.FC = () => {
               <CardDescription>
                 {selectedTemplate 
                   ? `Using template: ${selectedTemplate.name}` 
-                  : "No template applied"}
+                  : "Save this SOAP note as a template"}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -2417,11 +2290,23 @@ const SOAPNoteCreatePage: React.FC = () => {
                   </Button>
                 </div>
               ) : (
-                <div className="text-center py-4">
-                  <FileText className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Apply a template to quickly fill in common SOAP note patterns
-                  </p>
+                <div className="space-y-3">
+                  <div className="text-center py-2">
+                    <NotebookPen className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Create a reusable template from this SOAP note
+                    </p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setShowSaveAsTemplateDialog(true)}
+                    disabled={!savedNoteId}
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    Save as Template
+                  </Button>
                 </div>
               )}
             </CardContent>
@@ -2436,14 +2321,21 @@ const SOAPNoteCreatePage: React.FC = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
-                variant="outline"
-                className="w-full"
-                onClick={() => setActiveTab("lab")}
-              >
-                <PlusCircle className="h-4 w-4 mr-2" />
-                Link Lab Results
-              </Button>
+              {form.watch("petId") ? (
+                <SoapLabResultsSection 
+                  petId={form.watch("petId") || ""}
+                  soapNoteId={savedNoteId || 0}
+                  section="objective"
+                  isEditable={true}
+                />
+              ) : (
+                <div className="text-center py-4">
+                  <AlertCircle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Select a pet first
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
           
@@ -2456,14 +2348,28 @@ const SOAPNoteCreatePage: React.FC = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
-                variant="outline"
-                className="w-full"
-                onClick={() => setIsPrescriptionFormOpen(true)}
-              >
-                <PlusCircle className="h-4 w-4 mr-2" />
-                Add Prescription
-              </Button>
+              {form.watch("petId") ? (
+                <div className="space-y-4">
+                  <Button 
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setIsPrescriptionFormOpen(true)}
+                  >
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    Add Prescription
+                  </Button>
+                  
+                  {/* Always show PrescriptionList to display existing prescriptions */}
+                  <PrescriptionList soapNoteId={savedNoteId || 0} readOnly={false} />
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <AlertCircle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Select a pet first
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -2502,19 +2408,47 @@ const SOAPNoteCreatePage: React.FC = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
-                variant="outline"
-                className="w-full"
-                onClick={() => setShowReferralDialog(true)}
-                disabled={!form.watch("petId")}
-              >
-                <Share2 className="h-4 w-4 mr-2" />
-                Add Referral
-              </Button>
-              {!form.watch("petId") && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Select a pet first
-                </p>
+              {form.watch("petId") ? (
+                <div className="space-y-4">
+                  <Button 
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setShowReferralDialog(true)}
+                  >
+                    <Share2 className="h-4 w-4 mr-2" />
+                    Add Referral
+                  </Button>
+                  
+                  {/* Display added referrals */}
+                  {referrals.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Added Referrals:</h4>
+                      {referrals.map((referral, index) => (
+                        <div key={index} className="p-2 border rounded-md text-sm">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{referral.specialty || referral.type}</span>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleRemoveReferral(index)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <p className="text-muted-foreground">{referral.referralReason || referral.reason}</p>
+                          <p className="text-xs text-muted-foreground">Priority: {referral.priority}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <AlertCircle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Select a pet first
+                  </p>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -2533,7 +2467,8 @@ const SOAPNoteCreatePage: React.FC = () => {
           
           {form.watch('petId') ? (
             <PrescriptionForm 
-              soapNoteId={0} // Will be updated when the SOAP note is saved
+              petId={parseInt(form.watch('petId'))}
+              soapNoteId={savedNoteId || 0}
               practiceId={parseInt(userPracticeId || "0") || 0} 
               onPrescriptionCreated={() => {
                 setIsPrescriptionFormOpen(false);
@@ -2613,8 +2548,8 @@ const SOAPNoteCreatePage: React.FC = () => {
                   onClick={() => {
                     const petId = form.watch("petId");
                     if (petId) {
-                      // Navigate to appointment booking with pre-filled pet ID
-                      router.push(`/appointments/create?petId=${petId}&type=follow-up&soapNoteId=${savedNoteId || ''}`);
+                      // Navigate to admin appointment booking with pre-filled pet ID
+                      router.push(`/admin/appointments?petId=${petId}&type=follow-up&soapNoteId=${savedNoteId || ''}`);
                     }
                     setShowFollowUpDialog(false);
                   }}

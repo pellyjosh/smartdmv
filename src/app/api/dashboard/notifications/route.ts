@@ -18,12 +18,12 @@ export async function GET(request: NextRequest) {
 
     // Build where conditions
     const whereConditions = [
-      eq(notifications.userId, userPractice.userId),
+      eq(notifications.userId, parseInt(userPractice.userId, 10)),
     ];
 
     // If practice-specific notifications are supported
     if (userPractice.practiceId) {
-      whereConditions.push(eq(notifications.practiceId, userPractice.practiceId));
+      whereConditions.push(eq(notifications.practiceId, parseInt(userPractice.practiceId, 10)));
     }
 
     // Optionally filter out read notifications
@@ -34,22 +34,8 @@ export async function GET(request: NextRequest) {
     // Fetch notifications for the user
     const userNotifications = await db.query.notifications.findMany({
       where: and(...whereConditions),
-      orderBy: [desc(notifications.createdAt)], // Most recent first
+      orderBy: (notifications, { desc }) => [desc(notifications.created_at)],
       limit: limit,
-      with: {
-        user: {
-          columns: {
-            id: true,
-            name: true,
-          }
-        },
-        practice: {
-          columns: {
-            id: true,
-            name: true,
-          }
-        }
-      }
     });
 
     // Transform the data to a more frontend-friendly format
@@ -62,20 +48,16 @@ export async function GET(request: NextRequest) {
       link: notification.link,
       relatedId: notification.relatedId,
       relatedType: notification.relatedType,
-      createdAt: typeof notification.createdAt === 'object' && notification.createdAt instanceof Date 
-        ? notification.createdAt.getTime() 
-        : notification.createdAt,
-      updatedAt: typeof notification.updatedAt === 'object' && notification.updatedAt instanceof Date 
-        ? notification.updatedAt.getTime() 
-        : notification.updatedAt,
-      user: notification.user ? {
-        id: notification.user.id,
-        name: notification.user.name,
-      } : null,
-      practice: notification.practice ? {
-        id: notification.practice.id,
-        name: notification.practice.name,
-      } : null,
+      createdAt: typeof notification.created_at === 'object' && notification.created_at instanceof Date 
+        ? notification.created_at.getTime() 
+        : notification.created_at,
+      updatedAt: typeof notification.updated_at === 'object' && notification.updated_at instanceof Date 
+        ? notification.updated_at.getTime() 
+        : notification.updated_at,
+      // Note: Without joins, we don't have user/practice data
+      // We could add separate queries if needed
+      user: null,
+      practice: null,
     }));
 
     return NextResponse.json(formattedNotifications);
@@ -109,11 +91,11 @@ export async function PATCH(request: NextRequest) {
     await db.update(notifications)
       .set({ 
         read: markAsRead,
-        updatedAt: new Date().toISOString(), // Convert to ISO string for SQLite compatibility
+        updated_at: new Date(), // Use proper column name and Date object for PostgreSQL
       })
       .where(
         and(
-          eq(notifications.userId, userPractice.userId),
+          eq(notifications.userId, parseInt(userPractice.userId, 10)),
           // Note: You might want to add an IN clause for specific notification IDs
         )
       );

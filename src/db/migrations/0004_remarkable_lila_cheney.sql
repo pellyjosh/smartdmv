@@ -1,0 +1,2 @@
+ALTER TABLE "soap_notes" ALTER COLUMN "updated_by_id" SET DATA TYPE integer;--> statement-breakpoint
+ALTER TABLE "soap_notes" ADD CONSTRAINT "soap_notes_updated_by_id_users_id_fk" FOREIGN KEY ("updated_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;

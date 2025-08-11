@@ -16,7 +16,8 @@
     "db:generate": "npx drizzle-kit generate",
     "db:studio": "npx drizzle-kit studio",
     "db:migrate": "npx drizzle-kit migrate",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "db:connection": "npx drizzle-kit introspect"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.8.0",

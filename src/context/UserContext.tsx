@@ -192,6 +192,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
       case 'PRACTICE_ADMINISTRATOR':
         targetPath = '/practice-administrator';
         break;
+      case 'SUPER_ADMIN':
+        targetPath = '/administrator'; // Super admins use the administrator dashboard
+        break;
       default:
         console.warn(`[UserContext Nav] Unknown role for navigation: ${role}. Redirecting to login.`);
         targetPath = AUTH_PAGE;

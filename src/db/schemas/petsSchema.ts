@@ -1,5 +1,5 @@
 // src/db/schemas/petsSchema.ts
-import { dbTable, text, timestamp } from '@/db/db.config';
+import { dbTable, text, timestamp, primaryKeyId, foreignKeyInt } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { users } from './usersSchema';
 import { practices } from './practicesSchema';
@@ -7,16 +7,14 @@ import { appointments } from './appointmentsSchema';
 import { healthPlans } from './healthPlansSchema';
 import { whiteboardItems } from './whiteboardItemsSchema';
 
-const isSqlite = process.env.DB_TYPE === 'sqlite';
-
 export const pets = dbTable('pets', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: primaryKeyId(),
   name: text('name').notNull(),
   species: text('species'),
   breed: text('breed'),
   dateOfBirth: timestamp('dateOfBirth', { mode: 'date' }),
-  ownerId: text('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
+  ownerId: foreignKeyInt('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
 
   weight: text('weight'),
   allergies: text('allergies'),
@@ -26,13 +24,8 @@ export const pets = dbTable('pets', {
   pet_type: text('pet_type'),
   photoPath: text('photo_path'),
 
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
 });
 
 export const petsRelations = relations(pets, ({ one, many }) => ({

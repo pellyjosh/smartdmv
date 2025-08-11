@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 interface LabResultsSelectorProps {
-  petId: number;
+  petId: string;
   soapNoteId: number;
   section: "subjective" | "objective" | "assessment" | "plan";
   onResultsAdded?: () => void;

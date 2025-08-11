@@ -46,10 +46,10 @@ export async function POST(
 
     // Lock the SOAP note - let Drizzle handle database-specific conversions
     // @ts-ignore
-    const [updatedSoapNote] = await db.update(soapNotes)
+    const [updatedSoapNote] = await (db as any).update(soapNotes)
       .set({ 
         locked: true, // Drizzle will convert to appropriate type for each database
-        updatedAt: getTimestamp() // Database-agnostic timestamp
+        updatedAt: new Date() // Use Date object for timestamp with mode: 'date'
       })
       .where(eq(soapNotes.id, soapNoteId))
       .returning();

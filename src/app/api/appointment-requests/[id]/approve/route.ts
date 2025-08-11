@@ -6,14 +6,15 @@ import { eq } from 'drizzle-orm';
 import { format } from 'date-fns'; // Used for potential logging/return data if needed
 
 type Context = {
-  params: {
+  params: Promise<{
     id: string; // The ID of the appointment to approve
-  };
+  }>;
 };
 
 export async function POST(req: Request, context: Context) {
   try {
-    const appointmentId = context.params.id;
+    const params = await context.params;
+    const appointmentId = params.id;
 
     // Find the appointment
     const appointmentToApprove = await db.query.appointments.findFirst({
@@ -37,7 +38,7 @@ export async function POST(req: Request, context: Context) {
     // @ts-ignore
     await db.update(appointments)
       .set({
-        status: 'scheduled', // Or 'confirmed', based on your desired workflow
+        status: 'approved', // Or 'confirmed', based on your desired workflow
         updatedAt: new Date().toISOString(), // Convert Date to ISO string for SQLite compatibility
       })
       .where(eq(appointments.id, appointmentId as any));

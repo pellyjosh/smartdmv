@@ -117,14 +117,14 @@ export function PrescriptionForm({ soapNoteId, practiceId, onPrescriptionCreated
           petId: soapNote?.petId?.toString() || '', // Convert to string
           practiceId: (userPracticeId || practiceId?.toString() || 'practice_MAIN_HQ'), // Use string
           prescribedBy: user?.id || 'unknown',
-          inventoryItemId: data.inventoryItemId?.toString(),
+          inventoryItemId: data.inventoryItemId, // Keep as string, API will convert
           medicationName: selectedMedication?.name || 'Unknown Medication',
           dosage: data.dosage,
           route: data.route,
           frequency: data.frequency,
           duration: data.duration,
           instructions: data.instructions || '',
-          quantityPrescribed: data.quantityPrescribed, // Keep as string
+          quantityPrescribed: parseInt(data.quantityPrescribed) || 1, // Convert to number
           refills: data.refills || 0,
         };
         

@@ -31,19 +31,24 @@ export async function POST(request: Request) {
 
     // If loginUserAction is successful, userData is populated.
     // Session management
-    const sessionTokenValue = crypto.randomUUID(); // This is the session ID for DB
+    const sessionTokenValue = crypto.randomUUID(); // This will be stored in session data
     const sessionExpiresAtDate = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000);
     const isSqlite = process.env.DB_TYPE === 'sqlite';
 
-    await db.insert(sessionsTable).values({
-      id: sessionTokenValue,
+    // Insert session and get the auto-generated ID
+    const insertResult = await (db as any).insert(sessionsTable).values({
+      // Don't set id - let database auto-generate it
       userId: userData.id,
       expiresAt: isSqlite ? sessionExpiresAtDate.getTime() : sessionExpiresAtDate,
-      // data: null, // 'data' column can be used to store additional session info if needed
+      data: JSON.stringify({ originalToken: sessionTokenValue }), // Store original UUID as backup
       // createdAt will be handled by DB default
-    });
+    }).returning({ sessionId: sessionsTable.id });
 
-    cookies().set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, sessionTokenValue, {
+    const sessionId = insertResult[0].sessionId;
+    console.log('Session created successfully for user:', userData.id, 'with session ID:', sessionId);
+
+    const cookieStore = await cookies();
+    cookieStore.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, sessionId.toString(), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: SESSION_MAX_AGE_SECONDS,

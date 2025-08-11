@@ -1,9 +1,7 @@
-import { dbTable, text, timestamp, boolean, integer } from '@/db/db.config';
+import { dbTable, text, timestamp, boolean, primaryKeyId, integer, foreignKeyInt } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { practices } from './practicesSchema';
 import { users } from './usersSchema';
-
-const isSqlite = process.env.DB_TYPE === 'sqlite';
 
 // Enum for add-on categories
 export enum AddonCategory {
@@ -35,7 +33,7 @@ export const paymentStatusValues = Object.values(PaymentStatus) as [string, ...s
 
 // Addons table
 export const addons = dbTable('addons', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
+  id: primaryKeyId(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   description: text('description').notNull(),
@@ -50,66 +48,42 @@ export const addons = dbTable('addons', {
   isPopular: boolean('is_popular').default(false),
   isFeatured: boolean('is_featured').default(false),
   sortOrder: integer('sort_order').default(0),
-  createdAt: isSqlite
-    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-  updatedAt: isSqlite
-    ? timestamp('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updated_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-  deletedAt: isSqlite
-    ? timestamp('deleted_at', { mode: 'timestamp_ms' })
-    : timestamp('deleted_at', { mode: 'date' }),
+  createdAt: timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  deletedAt: timestamp('deleted_at', { mode: 'date' }),
 });
 
 // Practice add-ons (subscriptions) table
 export const practiceAddons = dbTable('practice_addons', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  practiceId: text('practice_id').notNull().references(() => practices.id as any, { onDelete: 'cascade' }),
-  addonId: text('addon_id').notNull().references(() => addons.id as any, { onDelete: 'cascade' }),
+  id: primaryKeyId(),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
+  addonId: foreignKeyInt('addon_id').notNull().references(() => addons.id as any, { onDelete: 'cascade' }),
   subscriptionTier: text('subscription_tier', { enum: subscriptionTierValues }).notNull(),
   billingCycle: text('billing_cycle', { enum: ['monthly', 'yearly'] as [string, ...string[]] }).notNull().default(sql`'monthly'`),
-  startDate: isSqlite
-    ? timestamp('start_date', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('start_date', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-  endDate: isSqlite
-    ? timestamp('end_date', { mode: 'timestamp_ms' })
-    : timestamp('end_date', { mode: 'date' }),
+  startDate: timestamp('start_date', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  endDate: timestamp('end_date', { mode: 'date' }),
   paymentStatus: text('payment_status', { enum: paymentStatusValues }).notNull(),
   isActive: boolean('is_active').default(true),
-  lastActivatedAt: isSqlite
-    ? timestamp('last_activated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('last_activated_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-  createdAt: isSqlite
-    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-  updatedAt: isSqlite
-    ? timestamp('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updated_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-  deletedAt: isSqlite
-    ? timestamp('deleted_at', { mode: 'timestamp_ms' })
-    : timestamp('deleted_at', { mode: 'date' }),
+  lastActivatedAt: timestamp('last_activated_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  createdAt: timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  deletedAt: timestamp('deleted_at', { mode: 'date' }),
 });
 
 // Add-on reviews table
 export const addonReviews = dbTable('addon_reviews', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  addonId: text('addon_id').notNull().references(() => addons.id as any, { onDelete: 'cascade' }),
-  practiceId: text('practice_id').notNull().references(() => practices.id as any, { onDelete: 'cascade' }),
-  userId: text('user_id').notNull().references(() => users.id as any, { onDelete: 'cascade' }),
+  id: primaryKeyId(),
+  addonId: foreignKeyInt('addon_id').notNull().references(() => addons.id as any, { onDelete: 'cascade' }),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
+  userId: foreignKeyInt('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   rating: integer('rating').notNull(),
   title: text('title', { length: 100 }),
   comment: text('comment'),
   isVerifiedPurchase: boolean('is_verified_purchase').default(false),
   isPublished: boolean('is_published').default(true),
-  createdAt: isSqlite
-    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-  updatedAt: isSqlite
-    ? timestamp('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updated_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-  deletedAt: isSqlite
-    ? timestamp('deleted_at', { mode: 'timestamp_ms' })
-    : timestamp('deleted_at', { mode: 'date' }),
+  createdAt: timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  deletedAt: timestamp('deleted_at', { mode: 'date' }),
 });
 
 // Relationships for addons

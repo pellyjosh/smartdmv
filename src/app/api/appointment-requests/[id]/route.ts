@@ -6,15 +6,16 @@ import { appointments } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 type Context = {
-  params: {
+  params: Promise<{
     id: string; // The ID of the appointment to delete
-  };
+  }>;
 };
 
 // DELETE /api/appointment-requests/[id]
 export async function DELETE(req: Request, context: Context) {
   try {
-    const appointmentId = context.params.id; // ID will be a string (UUID)
+    const params = await context.params;
+    const appointmentId = params.id; // ID will be a string (UUID)
 
     const [deletedAppointment] = await db.delete(appointments).where(eq(appointments.id, appointmentId)).returning();
 

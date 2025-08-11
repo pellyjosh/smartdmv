@@ -1,0 +1,1 @@
+ALTER TABLE "kennels" ALTER COLUMN "practice_id" SET DATA TYPE integer;

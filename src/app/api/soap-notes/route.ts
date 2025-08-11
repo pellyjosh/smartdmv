@@ -6,15 +6,50 @@ import { z } from "zod";
 
 // Define the schema for SOAP note validation using Zod
 const soapNoteSchema = z.object({
-  appointmentId: z.string().optional().nullable(),
-  petId: z.string({
-    required_error: "Pet ID is required",
-    invalid_type_error: "Pet ID must be a string"
-  }),
-  practitionerId: z.string({
-    required_error: "Practitioner ID is required",
-    invalid_type_error: "Practitioner ID must be a string"
-  }),
+  appointmentId: z.union([z.string(), z.number(), z.null(), z.undefined()])
+    .transform((val) => {
+      if (val === null || val === undefined || val === '') {
+        return null;
+      }
+      if (typeof val === 'string') {
+        const parsed = parseInt(val, 10);
+        if (isNaN(parsed)) {
+          throw new Error('Appointment ID must be a valid number');
+        }
+        return parsed;
+      }
+      return val;
+    })
+    .optional()
+    .nullable(),
+  petId: z.union([z.string(), z.number()])
+    .transform((val) => {
+      if (typeof val === 'string') {
+        if (val.trim() === '') {
+          throw new Error('Pet ID cannot be empty');
+        }
+        const parsed = parseInt(val, 10);
+        if (isNaN(parsed)) {
+          throw new Error('Pet ID must be a valid number');
+        }
+        return parsed;
+      }
+      return val;
+    }),
+  practitionerId: z.union([z.string(), z.number()])
+    .transform((val) => {
+      if (typeof val === 'string') {
+        if (val.trim() === '') {
+          throw new Error('Practitioner ID cannot be empty');
+        }
+        const parsed = parseInt(val, 10);
+        if (isNaN(parsed)) {
+          throw new Error('Practitioner ID must be a valid number');
+        }
+        return parsed;
+      }
+      return val;
+    }),
   subjective: z.string({
     required_error: "Subjective field is required"
   }).min(1, "Subjective field cannot be empty"),
@@ -56,20 +91,25 @@ export async function GET(request: Request) {
     const conditions = [];
     
     if (petId) {
-      conditions.push(eq(soapNotes.petId, petId));
+      const petIdInt = parseInt(petId, 10);
+      if (!isNaN(petIdInt)) {
+        conditions.push(eq(soapNotes.petId, petIdInt));
+      }
     }
     
     if (practitionerId) {
-      conditions.push(eq(soapNotes.practitionerId, practitionerId));
+      const practitionerIdInt = parseInt(practitionerId, 10);
+      if (!isNaN(practitionerIdInt)) {
+        conditions.push(eq(soapNotes.practitionerId, practitionerIdInt));
+      }
     }
     
     if (recent === "true") {
       // Get notes from last 30 days
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      // Convert to milliseconds timestamp for SQLite compatibility
-      const thirtyDaysAgoTimestamp = thirtyDaysAgo.getTime();
-      conditions.push(gte(soapNotes.createdAt, thirtyDaysAgoTimestamp));
+      // Use Date object for timestamp comparison since createdAt has mode: 'date'
+      conditions.push(gte(soapNotes.createdAt, thirtyDaysAgo));
     }
     
     if (search) {
@@ -137,7 +177,7 @@ export async function POST(request: Request) {
     
     // Insert into database, disregarding TypeScript errors as per project pattern
     // @ts-ignore
-    const [newSoapNote] = await db.insert(soapNotes).values({
+    const [newSoapNote] = await (db as any).insert(soapNotes).values({
       appointmentId: validatedData.appointmentId || null,
       petId: validatedData.petId,
       practitionerId: validatedData.practitionerId,

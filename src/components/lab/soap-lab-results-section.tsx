@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
 interface SoapLabResultsSectionProps {
-  petId: number;
+  petId: string;
   soapNoteId: number;
   section: "subjective" | "objective" | "assessment" | "plan";
   isEditable?: boolean;

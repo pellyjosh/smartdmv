@@ -1,35 +1,28 @@
 // src/db/schemas/admissionsSchema.ts
-import { dbTable, text, timestamp, integer, primaryKey } from '@/db/db.config';
+import { dbTable, text, timestamp, integer, primaryKeyId, foreignKeyInt } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { users } from './usersSchema';
 import { pets } from './petsSchema';
 import { practices } from './practicesSchema';
 import { rooms } from './roomsSchema';
 
-const isSqlite = process.env.DB_TYPE === 'sqlite';
-
 export const admissionStatusEnum = ['pending', 'admitted', 'hold', 'isolation', 'discharged'] as const;
 
 export const admissions = dbTable('admissions', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  petId: text('pet_id').notNull().references(() => pets.id, { onDelete: 'cascade' }),
-  clientId: text('client_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  attendingVetId: text('attending_vet_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
+  id: primaryKeyId(),
+  petId: foreignKeyInt('pet_id').notNull().references(() => pets.id as any, { onDelete: 'cascade' }),
+  clientId: foreignKeyInt('client_id').notNull().references(() => users.id as any, { onDelete: 'cascade' }),
+  attendingVetId: foreignKeyInt('attending_vet_id').notNull().references(() => users.id as any, { onDelete: 'cascade' }),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id as any, { onDelete: 'cascade' }),
   reason: text('reason').notNull(),
   notes: text('notes'),
-  roomId: integer('room_id').references(() => rooms.id, { onDelete: 'set null' }),
+  roomId: integer('room_id').references(() => rooms.id as any, { onDelete: 'set null' }),
   admissionDate: timestamp('admission_date', { mode: 'date' }).notNull(),
   dischargeDate: timestamp('discharge_date', { mode: 'date' }),
-  status: text('status', { enum: admissionStatusEnum }).notNull().default('pending'),
+  status: text('status', { enum: admissionStatusEnum }).notNull().default(sql`'pending'`),
 
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
-
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
 });
 
 export const admissionsRelations = relations(admissions, ({ one }) => ({

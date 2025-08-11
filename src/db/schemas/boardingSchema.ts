@@ -1,10 +1,8 @@
 // src/db/schemas/boardingSchema.ts
-import { dbTable, text, boolean, timestamp, integer } from '@/db/db.config';
+import { dbTable, text, boolean, timestamp, integer, primaryKeyId } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { pets } from './petsSchema';
 import { users } from './usersSchema';
-
-const isSqlite = process.env.DB_TYPE === 'sqlite';
 
 // Boarding - Kennel sizes
 export enum KennelSize {
@@ -71,29 +69,25 @@ export const boardingActivityTypeEnum = ["feeding", "medication", "exercise", "g
 
 // Boarding - Kennels table
 export const kennels = dbTable("kennels", {
-  id: text('id').primaryKey(),
+  id: primaryKeyId(),
   name: text("name").notNull(),
   type: text("type", { enum: kennelTypeEnum }).notNull(),
   size: text("size", { enum: kennelSizeEnum }).notNull(),
   location: text("location"), // E.g. "Wing A", "Building 2", etc.
   description: text("description"),
   isActive: boolean("is_active").default(true),
-  practiceId: text("practice_id").notNull(),
+  practiceId: integer("practice_id").notNull(),
   
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 // Boarding - Boarding stays table
 export const boardingStays = dbTable("boarding_stays", {
-  id: text('id').primaryKey(),
-  petId: text("pet_id").notNull(),
-  kennelId: text("kennel_id").notNull(),
+  id: primaryKeyId(),
+  petId: integer("pet_id").notNull(),
+  kennelId: integer("kennel_id").notNull(),
   checkInDate: timestamp("check_in_date", { mode: 'date' }).notNull(),
   plannedCheckOutDate: timestamp("planned_check_out_date", { mode: 'date' }).notNull(),
   actualCheckOutDate: timestamp("actual_check_out_date", { mode: 'date' }),
@@ -104,64 +98,52 @@ export const boardingStays = dbTable("boarding_stays", {
   reservationNotes: text("reservation_notes"),
   belongingsDescription: text("belongings_description"),
   dailyRate: text("daily_rate"), // Store as text for SQLite compatibility
-  practiceId: text("practice_id").notNull(),
-  createdById: text("created_by_id").notNull(),
+  practiceId: integer("practice_id").notNull(),
+  createdById: integer("created_by_id").notNull(),
   
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 // Boarding - Requirements table
 export const boardingRequirements = dbTable("boarding_requirements", {
-  id: text('id').primaryKey(),
-  stayId: text("stay_id").notNull(),
+  id: primaryKeyId(),
+  stayId: integer("stay_id").notNull(),
   requirementType: text("requirement_type").notNull(), // E.g. "vaccination", "documentation", "deposit", etc.
   requirementDescription: text("requirement_description").notNull(),
   isMandatory: boolean("is_mandatory").default(true),
   isCompleted: boolean("is_completed").default(false),
   completedDate: timestamp("completed_date", { mode: 'date' }),
-  completedById: text("completed_by_id"),
+  completedById: integer("completed_by_id"),
   notes: text("notes"),
-  practiceId: text("practice_id").notNull(),
+  practiceId: integer("practice_id").notNull(),
   
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 // Boarding - Feeding schedules
 export const feedingSchedules = dbTable("feeding_schedules", {
-  id: text('id').primaryKey(),
-  stayId: text("stay_id").notNull(),
+  id: primaryKeyId(),
+  stayId: integer("stay_id").notNull(),
   feedingType: text("feeding_type", { enum: feedingTypeEnum }).notNull(),
   foodDescription: text("food_description"), // Description of food type, brand, etc.
   frequency: text("frequency", { enum: feedingFrequencyEnum }).notNull(),
   amount: text("amount").notNull(), // Amount per feeding
   specialInstructions: text("special_instructions"),
-  practiceId: text("practice_id").notNull(),
+  practiceId: integer("practice_id").notNull(),
   
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 // Boarding - Medication schedules
 export const medicationSchedules = dbTable("medication_schedules", {
-  id: text('id').primaryKey(),
-  stayId: text("stay_id").notNull(),
+  id: primaryKeyId(),
+  stayId: integer("stay_id").notNull(),
   medicationName: text("medication_name").notNull(),
   dosage: text("dosage").notNull(),
   frequency: text("frequency").notNull(), // E.g. "twice daily", "every 8 hours"
@@ -170,31 +152,25 @@ export const medicationSchedules = dbTable("medication_schedules", {
   endDate: timestamp("end_date", { mode: 'date' }),
   specialInstructions: text("special_instructions"),
   lastAdministered: timestamp("last_administered", { mode: 'date' }),
-  practiceId: text("practice_id").notNull(),
+  practiceId: integer("practice_id").notNull(),
   
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 // Boarding - Activity logs
 export const boardingActivities = dbTable("boarding_activities", {
-  id: text('id').primaryKey(),
-  stayId: text("stay_id").notNull(),
+  id: primaryKeyId(),
+  stayId: integer("stay_id").notNull(),
   activityType: text("activity_type", { enum: boardingActivityTypeEnum }).notNull(),
   activityDate: timestamp("activity_date", { mode: 'date' }).notNull(),
-  performedById: text("performed_by_id").notNull(),
+  performedById: integer("performed_by_id").notNull(),
   notes: text("notes"),
   success: boolean("success").default(true),
-  practiceId: text("practice_id").notNull(),
+  practiceId: integer("practice_id").notNull(),
   
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
 // Boarding relations

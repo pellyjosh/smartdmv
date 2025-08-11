@@ -7,10 +7,64 @@ import { eq, and } from 'drizzle-orm';
 
 // Create referral schema for validation
 const createReferralSchema = z.object({
-  petId: z.string(),
-  referringVetId: z.string(),
-  specialistId: z.string().optional(),
-  specialistPracticeId: z.string().optional(),
+  petId: z.union([z.string(), z.number()])
+    .transform((val) => {
+      if (typeof val === 'string') {
+        if (val.trim() === '') {
+          throw new Error('Pet ID cannot be empty');
+        }
+        const parsed = parseInt(val, 10);
+        if (isNaN(parsed)) {
+          throw new Error('Pet ID must be a valid number');
+        }
+        return parsed;
+      }
+      return val;
+    }),
+  referringVetId: z.union([z.string(), z.number()])
+    .transform((val) => {
+      if (typeof val === 'string') {
+        if (val.trim() === '') {
+          throw new Error('Referring Vet ID cannot be empty');
+        }
+        const parsed = parseInt(val, 10);
+        if (isNaN(parsed)) {
+          throw new Error('Referring Vet ID must be a valid number');
+        }
+        return parsed;
+      }
+      return val;
+    }),
+  specialistId: z.union([z.string(), z.number(), z.null(), z.undefined()])
+    .transform((val) => {
+      if (val === null || val === undefined || val === '') {
+        return undefined;
+      }
+      if (typeof val === 'string') {
+        const parsed = parseInt(val, 10);
+        if (isNaN(parsed)) {
+          throw new Error('Specialist ID must be a valid number');
+        }
+        return parsed;
+      }
+      return val;
+    })
+    .optional(),
+  specialistPracticeId: z.union([z.string(), z.number(), z.null(), z.undefined()])
+    .transform((val) => {
+      if (val === null || val === undefined || val === '') {
+        return undefined;
+      }
+      if (typeof val === 'string') {
+        const parsed = parseInt(val, 10);
+        if (isNaN(parsed)) {
+          throw new Error('Specialist Practice ID must be a valid number');
+        }
+        return parsed;
+      }
+      return val;
+    })
+    .optional(),
   referralReason: z.string().min(3, "Please provide a reason for the referral"),
   specialty: z.enum(Object.values(VetSpecialty) as [string, ...string[]]),
   clinicalHistory: z.string().optional(),
@@ -34,9 +88,9 @@ export async function POST(request: NextRequest) {
     const validatedData = createReferralSchema.parse(body);
 
     // Create the referral
-    const [newReferral] = await db.insert(referrals).values({
+    const [newReferral] = await (db as any).insert(referrals).values({
       petId: validatedData.petId,
-      referringPracticeId: userPractice.practiceId,
+      referringPracticeId: parseInt(userPractice.practiceId.toString(), 10),
       referringVetId: validatedData.referringVetId,
       specialistId: validatedData.specialistId,
       specialistPracticeId: validatedData.specialistPracticeId,
@@ -79,7 +133,7 @@ export async function GET(request: NextRequest) {
     }
 
     const practiceReferrals = await db.query.referrals.findMany({
-      where: eq(referrals.referringPracticeId, userPractice.practiceId),
+      where: eq(referrals.referringPracticeId, parseInt(userPractice.practiceId.toString(), 10)),
       with: {
         pet: true,
         referringVet: true,

@@ -1,16 +1,14 @@
-import { dbTable, text, integer, boolean, timestamp } from '../db.config';
+import { dbTable, text, integer, boolean, timestamp, primaryKeyId, foreignKeyInt } from '../db.config';
 import { practices } from './practicesSchema';
 import { pets } from './petsSchema';
 import { users } from './usersSchema';
 import { soapNotes } from './soapNoteSchema';
 import { relations, sql } from 'drizzle-orm';
 
-const isSqlite = process.env.DB_TYPE === 'sqlite';
-
 // Lab Provider Settings
 export const labProviderSettings = dbTable('lab_provider_settings', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
+  id: primaryKeyId(),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id as any, { onDelete: 'cascade' }),
   provider: text('provider', { 
     enum: ['idexx', 'antech', 'zoetis', 'heska', 'in_house', 'other'] 
   }).notNull(),
@@ -23,19 +21,15 @@ export const labProviderSettings = dbTable('lab_provider_settings', {
   inHouseLocation: text('in_house_location'),
   isActive: boolean('is_active').notNull().default(true),
   settings: text('settings'), // JSON as text for compatibility
-  createdAt: isSqlite
-    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-  updatedAt: isSqlite
-    ? timestamp('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updated_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
 });
 
 // Lab Test Catalog
 export const labTestCatalog = dbTable('lab_test_catalog', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
+  id: primaryKeyId(),
   testCode: text('test_code').notNull(), // Provider's code for the test
-  testName: text('test_name').notNull(), // Reverted back to testName to match existing schema
+  testName: text('test_name').notNull(),
   category: text('category', { 
     enum: ['blood_chemistry', 'hematology', 'urinalysis', 'pathology', 'microbiology', 
            'parasitology', 'endocrinology', 'serology', 'cytology', 'imaging', 'rapid_test', 'panel', 'other'] 
@@ -46,101 +40,79 @@ export const labTestCatalog = dbTable('lab_test_catalog', {
   }).notNull(),
   price: text('price'), // Store as text for decimal precision
   turnAroundTime: text('turn_around_time'), // e.g., "24 hours", "3-5 days"
-  practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id as any, { onDelete: 'cascade' }),
   isActive: boolean('is_active').notNull().default(true),
   // New fields for reference ranges and test instructions
   referenceRanges: text('reference_ranges'), // JSON as text - Min/max normal values by species
   instructions: text('instructions'), // Preparation or collection instructions
   isPanel: boolean('is_panel').notNull().default(false), // Whether this is a panel (bundle of tests)
   panelTestIds: text('panel_test_ids'), // JSON array as text - test IDs included in this panel
-  createdAt: isSqlite
-    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-  updatedAt: isSqlite
-    ? timestamp('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updated_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
 });
 
 // Lab Orders
 export const labOrders = dbTable('lab_orders', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  petId: text('pet_id').notNull().references(() => pets.id, { onDelete: 'cascade' }),
-  practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
-  orderedById: text('ordered_by_id').notNull().references(() => users.id),
-  soapNoteId: text('soap_note_id').references(() => soapNotes.id), // Link to SOAP note if applicable
-  orderDate: isSqlite
-    ? timestamp('order_date', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('order_date', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  id: primaryKeyId(),
+  petId: foreignKeyInt('pet_id').notNull().references(() => pets.id as any, { onDelete: 'cascade' }),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id as any, { onDelete: 'cascade' }),
+  orderedById: foreignKeyInt('ordered_by_id').notNull().references(() => users.id as any),
+  soapNoteId: integer('soap_note_id').references(() => soapNotes.id as any), // Link to SOAP note if applicable
+  orderDate: timestamp('order_date', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
   status: text('status', { 
     enum: ['draft', 'ordered', 'submitted', 'in_progress', 'completed', 'cancelled'] 
-  }).notNull().default('draft'), 
+  }).notNull().default(sql`'draft'`), 
   provider: text('provider', { 
     enum: ['idexx', 'antech', 'zoetis', 'heska', 'in_house', 'other'] 
   }).notNull(),
   externalOrderId: text('external_order_id'),
   externalReference: text('external_reference'), // Additional reference number
-  sampleCollectionDate: isSqlite
-    ? timestamp('sample_collection_date', { mode: 'timestamp_ms' })
-    : timestamp('sample_collection_date', { mode: 'date' }),
+  sampleCollectionDate: timestamp('sample_collection_date', { mode: 'date' }),
   sampleType: text('sample_type'), // e.g., "blood", "urine", "tissue"
-  priority: text('priority', { enum: ['routine', 'urgent', 'stat'] }).notNull().default('routine'),
+  priority: text('priority', { enum: ['routine', 'urgent', 'stat'] }).notNull().default(sql`'routine'`),
   notes: text('notes'),
   isManualEntry: boolean('is_manual_entry').notNull().default(false), // Whether order was manually entered
   totalPrice: text('total_price'), // Store as text for decimal precision
-  createdAt: isSqlite
-    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-  updatedAt: isSqlite
-    ? timestamp('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updated_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
 });
 
 // Lab Order Tests (Many-to-Many between Orders and Tests)
 export const labOrderTests = dbTable('lab_order_tests', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  labOrderId: integer('lab_order_id').notNull().references(() => labOrders.id, { onDelete: 'cascade' }),
-  testCatalogId: integer('test_catalog_id').notNull().references(() => labTestCatalog.id, { onDelete: 'cascade' }),
+  id: primaryKeyId(),
+  labOrderId: integer('lab_order_id').notNull().references(() => labOrders.id as any, { onDelete: 'cascade' }),
+  testCatalogId: integer('test_catalog_id').notNull().references(() => labTestCatalog.id as any, { onDelete: 'cascade' }),
   status: text('status', { 
     enum: ['ordered', 'in_progress', 'completed', 'cancelled'] 
-  }).notNull().default('ordered'),
+  }).notNull().default(sql`'ordered'`),
   price: text('price'), // Store as text for decimal precision
-  createdAt: isSqlite
-    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 // Lab Results
 export const labResults = dbTable('lab_results', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  labOrderId: integer('lab_order_id').notNull().references(() => labOrders.id, { onDelete: 'cascade' }),
-  testCatalogId: integer('test_catalog_id').references(() => labTestCatalog.id), // Which test this result is for
-  resultDate: isSqlite
-    ? timestamp('result_date', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('result_date', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  id: primaryKeyId(),
+  labOrderId: integer('lab_order_id').notNull().references(() => labOrders.id as any, { onDelete: 'cascade' }),
+  testCatalogId: integer('test_catalog_id').references(() => labTestCatalog.id as any), // Which test this result is for
+  resultDate: timestamp('result_date', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
   results: text('results').notNull(), // Structured JSON with detailed results as text
   interpretation: text('interpretation'),
   status: text('status', { 
     enum: ['normal', 'abnormal', 'critical', 'pending', 'inconclusive'] 
-  }).notNull().default('pending'),
+  }).notNull().default(sql`'pending'`), // Status of the result
   // Enhanced result fields for more detailed result data
   referenceRange: text('reference_range'), // Reference range used for this specific test as JSON text
   previousValue: text('previous_value'), // Value of the previous test for comparison as JSON text
-  previousDate: isSqlite
-    ? timestamp('previous_date', { mode: 'timestamp_ms' })
-    : timestamp('previous_date', { mode: 'date' }), // Date of the previous test
+  previousDate: timestamp('previous_date', { mode: 'date' }), // Date of the previous test
   trendDirection: text('trend_direction', { 
     enum: ['increasing', 'decreasing', 'stable', 'fluctuating', 'none'] 
   }), // Trend compared to previous results
   abnormalFlags: text('abnormal_flags'), // JSON array as text - flags to help identify abnormal values
-  reviewedBy: text('reviewed_by_id').references(() => users.id),
-  reviewedAt: isSqlite
-    ? timestamp('reviewed_at', { mode: 'timestamp_ms' })
-    : timestamp('reviewed_at', { mode: 'date' }),
+  reviewedBy: foreignKeyInt('reviewed_by_id').references(() => users.id as any),
+  reviewedAt: timestamp('reviewed_at', { mode: 'date' }),
   notes: text('notes'),
   filePath: text('file_path'), // For attached result documents
-  createdAt: isSqlite
-    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 // Relations

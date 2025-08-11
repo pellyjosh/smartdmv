@@ -6,9 +6,9 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 type Context = {
-  params: {
+  params: Promise<{
     id: string; // The ID of the appointment to reject
-  };
+  }>;
 };
 
 const rejectRequestSchema = z.object({
@@ -17,7 +17,8 @@ const rejectRequestSchema = z.object({
 
 export async function POST(req: Request, context: Context) {
   try {
-    const appointmentId = context.params.id;
+    const params = await context.params;
+    const appointmentId = params.id;
     const body = await req.json();
 
     const validationResult = rejectRequestSchema.safeParse(body);
@@ -53,7 +54,7 @@ export async function POST(req: Request, context: Context) {
     // @ts-ignore
     const [updatedAppointment] = await db.update(appointments)
       .set({
-        status: 'cancelled',
+        status: 'rejected',
         description: `REJECTED: ${rejectionReason}`, // Store reason in description
         updatedAt: new Date().toISOString(), // Convert Date to ISO string for SQLite compatibility
       })

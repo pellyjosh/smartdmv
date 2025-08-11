@@ -32,6 +32,17 @@ export default function AdministratorDashboardPage() {
     // setIsSetupCompleted(user?.isSetupComplete || false); 
   }, [user]); 
 
+  // Handle navigation in a single useEffect to avoid conditional hooks
+  useEffect(() => {
+    if (initialAuthChecked) {
+      if (!user) {
+        router.push('/login');
+      } else if (user.role !== 'ADMINISTRATOR') {
+        router.push('/access-denied');
+      }
+    }
+  }, [user, initialAuthChecked, router]);
+
   if (isLoading || !initialAuthChecked) {
     return (
       <div className="flex flex-col justify-center items-center h-screen">
@@ -42,11 +53,6 @@ export default function AdministratorDashboardPage() {
   }
 
   if (!user) {
-    // Redirect to login if not authenticated, router.push should be called in useEffect or event handler
-    // For now, just show a message or a loader.
-    useEffect(() => {
-      router.push('/login');
-    }, [router]);
     return (
       <div className="flex flex-col justify-center items-center h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -56,9 +62,6 @@ export default function AdministratorDashboardPage() {
   }
 
   if (user.role !== 'ADMINISTRATOR') {
-     useEffect(() => {
-      router.push('/access-denied');
-    }, [router]);
      return (
       <div className="flex flex-col justify-center items-center h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />

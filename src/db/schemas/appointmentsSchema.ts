@@ -1,35 +1,28 @@
 // src/db/schemas/appointmentsSchema.ts
-import { dbTable, text, timestamp } from '@/db/db.config';
+import { dbTable, text, timestamp, primaryKeyId, foreignKeyInt } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { users } from './usersSchema';
 import { pets } from './petsSchema';
 import { practices } from './practicesSchema';
 
-const isSqlite = process.env.DB_TYPE === 'sqlite';
-
 export const appointmentStatusEnum = ['approved', 'rejected', 'pending'] as const;
 
 export const appointments = dbTable('appointments', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: primaryKeyId(),
   title: text('title').notNull(),
   description: text('description'),
-  date: timestamp('date', { mode: 'timestamp_ms' }).notNull(), // Using timestamp_ms for date with time
-  durationMinutes: text('duration_minutes').default('30'), // Store as text, parse to int in app
-  status: text('status', { enum: appointmentStatusEnum }).notNull().default('pending'),
-  petId: text('pet_id').references(() => pets.id, { onDelete: 'cascade' }), // Can be nullable if appointment is not for a pet
-  clientId: text('client_id').references(() => users.id, { onDelete: 'set null' }), // User who booked, if applicable
-  staffId: text('staff_id').references(() => users.id, { onDelete: 'set null' }), // Vet/Technician assigned
-  // New practitionerId column, linked to the users table
-  practitionerId: text('practitioner_id').references(() => users.id, { onDelete: 'set null' }), // Practitioner assigned to the appointment
-  practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
+  date: timestamp('date', { mode: 'date' }).notNull(),
+  durationMinutes: text('duration_minutes').default(sql`'30'`),
+  status: text('status', { enum: appointmentStatusEnum }).notNull().default(sql`'pending'`),
+  petId: foreignKeyInt('pet_id').references(() => pets.id, { onDelete: 'cascade' }),
+  clientId: foreignKeyInt('client_id').references(() => users.id, { onDelete: 'set null' }),
+  staffId: foreignKeyInt('staff_id').references(() => users.id, { onDelete: 'set null' }),
+  type: text('type'),
+  practitionerId: foreignKeyInt('practitioner_id').references(() => users.id, { onDelete: 'set null' }),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
 
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
 });
 
 export const appointmentsRelations = relations(appointments, ({ one }) => ({

@@ -1,31 +1,24 @@
 // src/db/schemas/healthPlansSchema.ts
-import { dbTable, text, timestamp } from '@/db/db.config';
+import { dbTable, text, timestamp, primaryKeyId, foreignKeyInt } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { pets } from './petsSchema';
 import { practices } from './practicesSchema';
 
-const isSqlite = process.env.DB_TYPE === 'sqlite';
-
 export const healthPlanStatusEnum = ['active', 'inactive', 'completed', 'pending'] as const;
 
 export const healthPlans = dbTable('health_plans', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  id: primaryKeyId(),
   name: text('name').notNull(),
-  petId: text('pet_id').notNull().references(() => pets.id, { onDelete: 'cascade' }),
-  practiceId: text('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
+  petId: foreignKeyInt('pet_id').notNull().references(() => pets.id, { onDelete: 'cascade' }),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
   planType: text('plan_type'), // e.g., 'Wellness', 'Dental', 'Senior Care'
   description: text('description'),
-  status: text('status', { enum: healthPlanStatusEnum }).notNull().default('pending'),
+  status: text('status', { enum: healthPlanStatusEnum }).notNull().default(sql`'pending'`),
   startDate: timestamp('startDate', { mode: 'date' }),
   endDate: timestamp('endDate', { mode: 'date' }),
 
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
 });
 
 export const healthPlansRelations = relations(healthPlans, ({ one }) => ({

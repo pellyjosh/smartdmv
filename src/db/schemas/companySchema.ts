@@ -1,5 +1,6 @@
 // src/db/schemas/companySchema.ts
-import { pgTable, varchar, timestamp, boolean, text, decimal, pgEnum, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, decimal, pgEnum, uuid } from 'drizzle-orm/pg-core';
+import { dbTable, text, timestamp, integer, boolean, primaryKeyId, foreignKeyInt } from '@/db/db.config';
 import { relations } from 'drizzle-orm';
 
 // Company subscription status enum
@@ -21,7 +22,7 @@ export const SubscriptionPlanEnum = pgEnum('subscription_plan', [
 
 // Companies table (for the central owner database)
 export const companies = pgTable('companies', {
-  id: uuid('id').defaultRandom().primaryKey(),
+  id: primaryKeyId(),
   name: varchar('name', { length: 255 }).notNull(),
   subdomain: varchar('subdomain', { length: 100 }).notNull().unique(), // e.g., "abc-vet" for abc-vet.smartdmv.com
   databaseName: varchar('database_name', { length: 100 }).notNull().unique(), // The dedicated database name for this company
@@ -35,7 +36,7 @@ export const companies = pgTable('companies', {
 
 // Company subscriptions table
 export const companySubscriptions = pgTable('company_subscriptions', {
-  id: uuid('id').defaultRandom().primaryKey(),
+  id: primaryKeyId(),
   companyId: uuid('company_id').references(() => companies.id).notNull(),
   plan: SubscriptionPlanEnum('plan').notNull(),
   status: SubscriptionStatusEnum('status').default('TRIAL').notNull(),
@@ -52,7 +53,7 @@ export const companySubscriptions = pgTable('company_subscriptions', {
 
 // Company users table (for owner/admin users)
 export const companyUsers = pgTable('company_users', {
-  id: uuid('id').defaultRandom().primaryKey(),
+  id: primaryKeyId(),
   companyId: uuid('company_id').references(() => companies.id),
   email: varchar('email', { length: 255 }).notNull().unique(),
   name: varchar('name', { length: 255 }),
@@ -66,7 +67,7 @@ export const companyUsers = pgTable('company_users', {
 
 // Company database configurations
 export const companyDatabases = pgTable('company_databases', {
-  id: uuid('id').defaultRandom().primaryKey(),
+  id: primaryKeyId(),
   companyId: uuid('company_id').references(() => companies.id).notNull(),
   databaseName: varchar('database_name', { length: 100 }).notNull(),
   connectionString: text('connection_string').notNull(),

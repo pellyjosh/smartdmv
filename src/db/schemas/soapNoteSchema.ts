@@ -1,6 +1,6 @@
 
 // schema/soapNoteSchema.ts
-import { dbTable, text, timestamp, integer, boolean } from '@/db/db.config';
+import { dbTable, text, timestamp, integer, boolean, primaryKeyId, foreignKeyInt } from '@/db/db.config';
 import { sql, relations } from 'drizzle-orm';
 import { createInsertSchema } from 'drizzle-zod';
 import { users } from './usersSchema';
@@ -8,14 +8,12 @@ import { pets } from './petsSchema';
 import { appointments } from './appointmentsSchema';
 
 
-const isSqlite = process.env.DB_TYPE === 'sqlite';
-
 
 export const soapNotes = dbTable('soap_notes', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  appointmentId: text("appointment_id").references(() => appointments.id),
-  practitionerId: text("practitioner_id").notNull().references(() => users.id),
-  petId: text("pet_id").notNull().references(() => pets.id),
+  id: primaryKeyId(),
+  appointmentId: foreignKeyInt("appointment_id").references(() => appointments.id),
+  practitionerId: foreignKeyInt("practitioner_id").notNull().references(() => users.id),
+  petId: foreignKeyInt("pet_id").notNull().references(() => pets.id),
   subjective: text("subjective"), // Patient history, reported symptoms
   objective: text("objective"), // Examination findings, vital signs, test results
   assessment: text("assessment"), // Diagnosis, clinical impression
@@ -25,14 +23,10 @@ export const soapNotes = dbTable('soap_notes', {
   hasTreatments: boolean("has_treatments").default(false), // Indicates if there are treatments recorded
   locked: boolean("locked").default(false),
   lockedAt: timestamp("locked_at"),
-  updatedById: text("updated_by_id"),
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedById: foreignKeyInt("updated_by_id").references(() => users.id),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
 });
 
 export type SOAPNote = typeof soapNotes.$inferSelect;

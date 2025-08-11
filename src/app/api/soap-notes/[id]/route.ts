@@ -12,9 +12,52 @@ const getTimestamp = () => isSqlite ? new Date().getTime() : new Date();
 
 // Schema for partial updates (PATCH)
 const soapNotePartialSchema = z.object({
-  appointmentId: z.string().optional().nullable(),
-  petId: z.string().optional(),
-  practitionerId: z.string().optional(),
+  appointmentId: z.union([z.string(), z.number(), z.null(), z.undefined()])
+    .transform((val) => {
+      if (val === null || val === undefined || val === '') {
+        return null;
+      }
+      if (typeof val === 'string') {
+        const parsed = parseInt(val, 10);
+        if (isNaN(parsed)) {
+          throw new Error('Appointment ID must be a valid number');
+        }
+        return parsed;
+      }
+      return val;
+    })
+    .optional()
+    .nullable(),
+  petId: z.union([z.string(), z.number()])
+    .transform((val) => {
+      if (typeof val === 'string') {
+        if (val.trim() === '') {
+          throw new Error('Pet ID cannot be empty');
+        }
+        const parsed = parseInt(val, 10);
+        if (isNaN(parsed)) {
+          throw new Error('Pet ID must be a valid number');
+        }
+        return parsed;
+      }
+      return val;
+    })
+    .optional(),
+  practitionerId: z.union([z.string(), z.number()])
+    .transform((val) => {
+      if (typeof val === 'string') {
+        if (val.trim() === '') {
+          throw new Error('Practitioner ID cannot be empty');
+        }
+        const parsed = parseInt(val, 10);
+        if (isNaN(parsed)) {
+          throw new Error('Practitioner ID must be a valid number');
+        }
+        return parsed;
+      }
+      return val;
+    })
+    .optional(),
   subjective: z.string().optional(),
   objective: z.string().optional(),
   assessment: z.string().optional(),
@@ -101,13 +144,13 @@ export async function PATCH(
     // Prepare update data with database-appropriate timestamp
     const updateData: any = {
       ...validatedData,
-      updatedAt: getTimestamp(), // Database-agnostic timestamp
+      updatedAt: new Date(), // Use Date object for timestamp with mode: 'date'
     };
     
     // Let Drizzle handle boolean conversions automatically for each database type
     
     // @ts-ignore
-    const [updatedSoapNote] = await db.update(soapNotes)
+    const [updatedSoapNote] = await (db as any).update(soapNotes)
       .set(updateData)
       .where(eq(soapNotes.id, soapNoteId))
       .returning();
@@ -172,7 +215,7 @@ export async function DELETE(
 
     // Delete the SOAP note
     // @ts-ignore
-    await db.delete(soapNotes).where(eq(soapNotes.id, soapNoteId));
+    await (db as any).delete(soapNotes).where(eq(soapNotes.id, soapNoteId));
 
     return NextResponse.json(
       { message: "SOAP note deleted successfully" },

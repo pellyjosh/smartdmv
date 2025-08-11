@@ -15,13 +15,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const resolvedParams = await params;
     const practiceId = resolvedParams.practiceId;
     
-    // Verify user has access to this practice
-    if (practiceId !== userPractice.practiceId) {
-      return NextResponse.json({ error: 'Access denied to this practice' }, { status: 403 });
+    // For administrators and super admins, allow access to any practice for now
+    // TODO: Implement proper practice access checking based on administrator_accessible_practices
+    if (userPractice.user.role === 'ADMINISTRATOR' || userPractice.user.role === 'SUPER_ADMIN') {
+      // Allow access - administrators can access any practice they're switching to
+    } else {
+      // For other roles, verify user has access to this specific practice
+      if (practiceId !== userPractice.practiceId) {
+        return NextResponse.json({ error: 'Access denied to this practice' }, { status: 403 });
+      }
     }
 
     const practice = await db.query.practices.findFirst({
-      where: eq(practices.id, practiceId),
+      where: eq(practices.id, parseInt(practiceId, 10)),
     });
 
     if (!practice) {

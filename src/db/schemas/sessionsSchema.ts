@@ -1,25 +1,17 @@
 // sessionsSchema.ts
-import { dbTable, text, timestamp } from '@/db/db.config';
+import { dbTable, text, timestamp, primaryKeyId, foreignKeyInt } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { users } from './usersSchema';
 
-const isSqlite = process.env.DB_TYPE === 'sqlite';
-
 export const sessions = dbTable('sessions', {
-    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID() as any),
-    userId: text('user_id').notNull().references(() => users.id as any, { onDelete: 'cascade' }),
+    id: primaryKeyId(),
+    userId: foreignKeyInt('user_id').notNull().references(() => users.id as any, { onDelete: 'cascade' }),
     
-    // For SQLite, timestamp (which is integer) can store Unix epoch seconds or milliseconds.
-    // For PG, timestamp with mode: 'date' and withTimezone: true is more appropriate.
-    expiresAt: isSqlite
-      ? timestamp('expiresAt', {mode: 'timestamp_ms'}).notNull() // Drizzle uses integer for SQLite timestamps
-      : timestamp('expiresAt').notNull(),
-
-    data: text('data'), // Assuming JSON stored as text
+    expiresAt: timestamp('expires_at', { mode: 'date' }).notNull(),
+    data: text('data'), // JSON stored as text
     
-    createdAt: isSqlite
-      ? timestamp('createdAt', {mode: 'timestamp_ms'}).notNull().default(sql`CURRENT_TIMESTAMP`)
-      : timestamp('createdAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`)
+    createdAt: timestamp('created_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
   });
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -30,9 +22,10 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
   }));
 
 export interface Session {
-  id: string;
-  userId: string;
+  id: number;
+  userId: number;
   expiresAt: Date;
   data: string | null;
   createdAt: Date;
+  updatedAt: Date;
 }

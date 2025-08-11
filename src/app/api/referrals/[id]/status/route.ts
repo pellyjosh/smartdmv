@@ -13,7 +13,7 @@ const updateStatusSchema = z.object({
 // PATCH /api/referrals/[id]/status - Update referral status
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const userPractice = await getUserPractice(request);
@@ -21,20 +21,21 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { id: idParam } = await params;
     const body = await request.json();
     const { status } = updateStatusSchema.parse(body);
-    const referralId = parseInt(params.id);
+    const referralId = parseInt(idParam);
 
     if (isNaN(referralId)) {
       return NextResponse.json({ error: 'Invalid referral ID' }, { status: 400 });
     }
 
     // Update the referral status
-    const [updatedReferral] = await db
+    const [updatedReferral] = await (db as any)
       .update(referrals)
       .set({ 
         status,
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
         // If marking as completed, set completed date
         ...(status === ReferralStatus.COMPLETED && { completedDate: new Date().toISOString() })
       })

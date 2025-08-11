@@ -1,22 +1,21 @@
 
 // schema/treatmentsSchema.ts - Updated to align with comprehensive schema
-import { dbTable, text, timestamp, integer, boolean, decimal } from '@/db/db.config';
+import { dbTable, text, timestamp, integer, boolean, decimal, primaryKeyId, foreignKeyInt } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { soapNotes } from './soapNoteSchema';
 import { pets } from './petsSchema';
 import { users } from './usersSchema';
+import { practices } from './practicesSchema';
 import { inventory } from './inventorySchema';
 import { createInsertSchema } from 'drizzle-zod';
 
 
-const isSqlite = process.env.DB_TYPE === 'sqlite';
-
 export const treatments = dbTable('treatments', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  soapNoteId: integer("soap_note_id").references(() => soapNotes.id),
-  petId: text("pet_id").notNull().references(() => pets.id),
-  practitionerId: text("practitioner_id").notNull().references(() => users.id),
-  practiceId: text("practice_id").notNull(),
+  id: primaryKeyId(),
+  soapNoteId: foreignKeyInt("soap_note_id").references(() => soapNotes.id),
+  petId: foreignKeyInt("pet_id").notNull().references(() => pets.id),
+  practitionerId: foreignKeyInt("practitioner_id").notNull().references(() => users.id),
+  practiceId: foreignKeyInt("practice_id").notNull().references(() => practices.id),
   
   // Treatment Information
   name: text("name").notNull(),
@@ -40,20 +39,14 @@ export const treatments = dbTable('treatments', {
   
   // Status & Billing (aligned with recommended schema)
   status: text("status", { enum: ["planned", "in_progress", "completed", "discontinued"] }).notNull().default(sql`'planned'`),
-  administeredDate: isSqlite
-    ? timestamp('administered_date', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('administered_date', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  administeredDate: timestamp('administered_date', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
   cost: decimal("cost"),
   billable: boolean("billable").default(false),
   notes: text("notes"),
   
-  createdAt: isSqlite
-    ? timestamp('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  createdAt: timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
 });
 
 export type Treatment = typeof treatments.$inferSelect;

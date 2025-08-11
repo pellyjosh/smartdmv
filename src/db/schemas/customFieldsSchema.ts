@@ -1,55 +1,37 @@
 // src/db/schemas/customFieldsSchema.ts
-import { dbTable, text, integer, timestamp } from '@/db/db.config';
+import { dbTable, text, integer, timestamp, primaryKeyId, foreignKeyInt, boolean } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { practices } from './practicesSchema'; // Ensure practices is imported
 
-const isSqlite = process.env.DB_TYPE === 'sqlite';
-
 export const customFieldCategories = dbTable('custom_field_categories', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  practiceId: text('practice_id').references(() => practices.id, { onDelete: 'cascade' }).notNull(), // Added .notNull() as practiceId seems mandatory from previous context
+  id: primaryKeyId(),
+  practiceId: foreignKeyInt('practice_id').references(() => practices.id, { onDelete: 'cascade' }).notNull(), // Added .notNull() as practiceId seems mandatory from previous context
   name: text('name').notNull(),
   description: text('description'),
-
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
 });
 
 export const customFieldGroups = dbTable('custom_field_groups', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  categoryId: integer('category_id').references(() => customFieldCategories.id, { onDelete: 'cascade' }).notNull(),
-  practiceId: text('practice_id').references(() => practices.id, { onDelete: 'cascade' }).notNull(), // Added .notNull()
+  id: primaryKeyId(),
+  categoryId: foreignKeyInt('category_id').references(() => customFieldCategories.id, { onDelete: 'cascade' }).notNull(),
+  practiceId: foreignKeyInt('practice_id').references(() => practices.id, { onDelete: 'cascade' }).notNull(), // Added .notNull()
   name: text('name').notNull(),
   key: text('key').notNull(),
   description: text('description'),
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
 });
 
 export const customFieldValues = dbTable('custom_field_values', {
-  id: integer('id').primaryKey({ autoIncrement: true }).notNull(),
-  groupId: integer('group_id').references(() => customFieldGroups.id, { onDelete: 'cascade' }).notNull(),
-  practiceId: text('practice_id').references(() => practices.id, { onDelete: 'cascade' }).notNull(), // Added .notNull()
+  id: primaryKeyId(),
+  groupId: foreignKeyInt('group_id').references(() => customFieldGroups.id, { onDelete: 'cascade' }).notNull(),
+  practiceId: foreignKeyInt('practice_id').references(() => practices.id, { onDelete: 'cascade' }).notNull(), // Added .notNull()
   value: text('value'),
   label: text('label'),
-  isActive: integer('is_active', { mode: "boolean" }).default(true).notNull(), // Use integer with boolean mode
-  createdAt: isSqlite
-    ? timestamp('createdAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
-
-  updatedAt: isSqlite
-    ? timestamp('updatedAt', { mode: 'timestamp_ms' }).notNull().default(sql`(strftime('%s', 'now') * 1000)`).$onUpdate(() => sql`(strftime('%s', 'now') * 1000)`)
-    : timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdateFn(() => new Date()),
 });
 
 // --- Existing Relations (no change here) ---

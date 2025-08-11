@@ -56,9 +56,9 @@ export async function GET(req: Request) {
     if (status === 'pending') {
       conditions.push(eq(appointments.status, 'pending'));
     } else if (status === 'approved') {
-      conditions.push(eq(appointments.status, 'scheduled')); // Assuming 'scheduled' is your approved state
+      conditions.push(eq(appointments.status, 'approved')); // Assuming 'scheduled' is your approved state
     } else if (status === 'rejected') {
-      conditions.push(eq(appointments.status, 'cancelled')); // Assuming 'cancelled' is your rejected state
+      conditions.push(eq(appointments.status, 'rejected')); // Assuming 'cancelled' is your rejected state
     }
     // If status is 'all', no status condition is added.
 
@@ -92,8 +92,8 @@ export async function GET(req: Request) {
         preferredDoctor: appt.practitioner?.name || null,
         source: 'website', // Assuming all these come from 'website' for now
         status: appt.status === 'pending' ? 'PENDING_APPROVAL' : // Map DB status back to frontend string
-                appt.status === 'scheduled' || appt.status === 'confirmed' ? 'APPROVED' :
-                appt.status === 'cancelled' ? 'REJECTED' : 'PENDING_APPROVAL', // Default to pending if unknown
+                appt.status === 'approved' || appt.status === 'confirmed' ? 'APPROVED' :
+                appt.status === 'rejected' ? 'REJECTED' : 'PENDING_APPROVAL', // Default to pending if unknown
         createdAt: new Date(appt.createdAt).toISOString(),
         updatedAt: appt.updatedAt ? new Date(appt.updatedAt).toISOString() : null,
         appointmentId: appt.id, // The appointment ID IS the request ID in this model

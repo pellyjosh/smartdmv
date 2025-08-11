@@ -56,7 +56,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = createInventorySchema.parse(body);
 
-    // Prepare data for SQLite insertion with proper type conversion
+    // Prepare data for database insertion with proper type conversion
+    const isSqlite = process.env.DB_TYPE === 'sqlite';
+    
     const insertData = {
       practiceId: userPractice.practiceId,
       name: validatedData.name,
@@ -70,9 +72,11 @@ export async function POST(request: NextRequest) {
       price: validatedData.price || null,
       location: validatedData.location || null,
       supplier: validatedData.supplier || null,
-      // Convert dates to millisecond timestamps for SQLite timestamp_ms mode
-      expiryDate: validatedData.expiryDate ? new Date(validatedData.expiryDate as string).getTime() : null,
-      lastRestockDate: new Date().getTime(),
+      // Handle dates based on database type
+      expiryDate: validatedData.expiryDate 
+        ? (isSqlite ? new Date(validatedData.expiryDate as string).getTime() : new Date(validatedData.expiryDate as string))
+        : null,
+      lastRestockDate: isSqlite ? new Date().getTime() : new Date(),
       batchTracking: false, // Default value
       deaSchedule: validatedData.deaSchedule,
       requiresSpecialAuth: validatedData.requiresSpecialAuth,

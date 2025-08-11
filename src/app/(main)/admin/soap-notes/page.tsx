@@ -465,6 +465,7 @@ function SOAPNotesList({
           </DialogHeader>
           <SOAPNoteForm 
             onSuccess={() => setIsDialogOpen(false)} 
+            refetchSoap={refetchSoap}
           />
         </DialogContent>
       </Dialog>
@@ -934,10 +935,12 @@ function SOAPNoteDetailsDialog({
 // Form for creating or editing a SOAP note
 function SOAPNoteForm({ 
   initialData, 
-  onSuccess 
+  onSuccess,
+  refetchSoap
 }: {
   initialData?: SOAPNote;
   onSuccess?: () => void; 
+  refetchSoap?: () => void;
 }) {
   const { toast } = useToast();
   const { user, userPracticeId } = useUser();
@@ -980,7 +983,9 @@ function SOAPNoteForm({
       });
       // Invalidate and immediately refetch SOAP notes
       queryClient.invalidateQueries({ queryKey: ['/api/soap-notes'] });
-      queryClient.refetchQueries({ queryKey: ['/api/soap-notes'] });
+      if (refetchSoap) {
+        refetchSoap();
+      }
       if (onSuccess) onSuccess();
     },
     onError: (error: Error) => {
@@ -995,7 +1000,14 @@ function SOAPNoteForm({
   // Form setup
   const form = useForm<SoapNoteFormValues>({
     resolver: zodResolver(soapNoteFormSchema),
-    defaultValues: initialData || {
+    defaultValues: initialData ? {
+      petId: initialData.petId?.toString() || '',
+      practitionerId: initialData.practitionerId?.toString() || '',
+      subjective: Array.isArray(initialData.subjective) ? initialData.subjective.join('\n') : initialData.subjective || '',
+      objective: Array.isArray(initialData.objective) ? initialData.objective.join('\n') : initialData.objective || '',
+      assessment: Array.isArray(initialData.assessment) ? initialData.assessment.join('\n') : initialData.assessment || '',
+      plan: Array.isArray(initialData.plan) ? initialData.plan.join('\n') : initialData.plan || '',
+    } : {
       petId: petId || '',
       practitionerId: user?.id || '',
       subjective: '',
@@ -1350,28 +1362,28 @@ function SOAPTemplatesList() {
                 </div>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-4">
-                {template.subjective && (
+                {template.subjective_template && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Subjective</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{template.subjective}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{Array.isArray(template.subjective_template) ? template.subjective_template.join(', ') : template.subjective_template}</p>
                   </div>
                 )}
-                {template.objective && (
+                {template.objective_template && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Objective</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{template.objective}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{Array.isArray(template.objective_template) ? template.objective_template.join(', ') : template.objective_template}</p>
                   </div>
                 )}
-                {template.assessment && (
+                {template.assessment_template && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Assessment</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{template.assessment}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{Array.isArray(template.assessment_template) ? template.assessment_template.join(', ') : template.assessment_template}</p>
                   </div>
                 )}
-                {template.plan && (
+                {template.plan_template && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Plan</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{template.plan}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{Array.isArray(template.plan_template) ? template.plan_template.join(', ') : template.plan_template}</p>
                   </div>
                 )}
               </CardContent>
@@ -1495,12 +1507,12 @@ function SOAPTemplateForm({
   const form = useForm<SoapTemplateFormValues>({
     resolver: zodResolver(soapTemplateFormSchema),
     defaultValues: initialData ? {
-      name: initialData.name || '',
-      category: initialData.category || '',
-      subjective: initialData.subjective_template || '',
-      objective: initialData.objective_template || '',
-      assessment: initialData.assessment_template || '',
-      plan: initialData.plan_template || ''
+      name: Array.isArray(initialData.name) ? initialData.name.join('\n') : initialData.name || '',
+      category: Array.isArray(initialData.category) ? initialData.category.join('\n') : initialData.category || '',
+      subjective: Array.isArray(initialData.subjective_template) ? initialData.subjective_template.join('\n') : initialData.subjective_template || '',
+      objective: Array.isArray(initialData.objective_template) ? initialData.objective_template.join('\n') : initialData.objective_template || '',
+      assessment: Array.isArray(initialData.assessment_template) ? initialData.assessment_template.join('\n') : initialData.assessment_template || '',
+      plan: Array.isArray(initialData.plan_template) ? initialData.plan_template.join('\n') : initialData.plan_template || ''
     } : {
       name: '',
       category: '',

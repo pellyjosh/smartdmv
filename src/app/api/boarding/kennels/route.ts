@@ -112,11 +112,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const kennelId = randomUUID();
+    // const kennelId = randomUUID();
 
     // Create the kennel - using a type assertion to handle the union type
     const newKennel = await (db as any).insert(kennels).values({
-      id: kennelId,
+      // id: kennelId,
       name,
       type,
       size,
