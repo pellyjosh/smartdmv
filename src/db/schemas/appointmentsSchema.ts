@@ -5,7 +5,16 @@ import { users } from './usersSchema';
 import { pets } from './petsSchema';
 import { practices } from './practicesSchema';
 
-export const appointmentStatusEnum = ['approved', 'rejected', 'pending'] as const;
+export const appointmentStatusEnum = [
+  'approved', 
+  'rejected', 
+  'pending',
+  'triage',
+  'active', 
+  'completed',
+  'pending_pickup',
+  'in_treatment'
+] as const;
 
 export const appointments = dbTable('appointments', {
   id: primaryKeyId(),

@@ -49,7 +49,7 @@ export function PrescriptionList({ soapNoteId, readOnly = false }: PrescriptionL
       }
       return response.json();
     },
-    enabled: !!soapNoteId
+    enabled: !!soapNoteId && soapNoteId > 0
   });
 
   // Fetch inventory items for medication details

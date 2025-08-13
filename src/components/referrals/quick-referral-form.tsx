@@ -3,13 +3,6 @@ import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useUser } from "@/context/UserContext";
-import { 
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -24,9 +17,9 @@ import { useForm } from "react-hook-form";
 
 // Simplified referral schema for quick referrals
 const quickReferralSchema = z.object({
-  petId: z.string(),
-  referringPracticeId: z.string(),
-  referringVetId: z.string(),
+  petId: z.number(),
+  referringPracticeId: z.number(),
+  referringVetId: z.number(),
   referralReason: z.string().min(3, "Please provide a reason for the referral"),
   referralNotes: z.string().optional(),
   specialty: z.enum(Object.values(VetSpecialty) as [string, ...string[]]),
@@ -36,7 +29,7 @@ const quickReferralSchema = z.object({
 type QuickReferralForm = z.infer<typeof quickReferralSchema>;
 
 interface QuickReferralFormProps {
-  petId: string;
+  petId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (referral: any) => void;
@@ -56,8 +49,8 @@ export function QuickReferralForm({
     resolver: zodResolver(quickReferralSchema),
     defaultValues: {
       petId,
-      referringPracticeId: userPracticeId || '0',
-      referringVetId: user?.id || '0',
+      referringPracticeId: parseInt(userPracticeId || '0'),
+      referringVetId: parseInt(user?.id || '0'),
       referralReason: "",
       specialty: VetSpecialty.OTHER,
       priority: ReferralPriority.ROUTINE,
@@ -77,6 +70,7 @@ export function QuickReferralForm({
       return await res.json();
     },
     onSuccess: (data) => {
+      setIsLoading(false);
       toast({
         title: "Referral Created",
         description: "The referral has been successfully created.",
@@ -86,6 +80,7 @@ export function QuickReferralForm({
       if (onSuccess) onSuccess(data);
     },
     onError: (error: Error) => {
+      setIsLoading(false);
       toast({
         title: "Error Creating Referral",
         description: error.message,
@@ -100,14 +95,8 @@ export function QuickReferralForm({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Create Quick Referral</DialogTitle>
-        </DialogHeader>
-        
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={form.control}
               name="specialty"
@@ -194,7 +183,7 @@ export function QuickReferralForm({
               )}
             />
             
-            <DialogFooter className="pt-4">
+            <div className="flex justify-end gap-2 pt-4">
               <Button 
                 type="button" 
                 variant="outline" 
@@ -211,10 +200,8 @@ export function QuickReferralForm({
                 )}
                 Create Referral
               </Button>
-            </DialogFooter>
+            </div>
           </form>
         </Form>
-      </DialogContent>
-    </Dialog>
   );
 }

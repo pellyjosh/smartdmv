@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 // Navigation components are now provided by AppLayout
 import { TriageItem } from "@/components/whiteboard/triage-item";
@@ -12,7 +12,7 @@ import { Loader2, PlusCircle, RefreshCw, FullscreenIcon } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { WhiteboardItem, Pet, UserRoleEnum } from "@/db/schema";
+import { WhiteboardItem, Pet, UserRoleEnum, Appointment } from "@/db/schema";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,8 +24,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 // Form schema for creating whiteboard items
 const whiteboardItemFormSchema = z.object({
   petId: z.coerce.number({ message: "Please select a pet" }),
-  status: z.string({ message: "Status is required" }),
-  urgency: z.string().optional(),
+  status: z.enum(['triage', 'active', 'completed', 'pending_pickup', 'in_treatment']).default('triage'),
+  urgency: z.enum(['high', 'medium', 'low', 'none']).optional().default('none'),
   notes: z.string().optional(),
   appointmentId: z.coerce.number().optional(),
   position: z.number().default(0),
@@ -43,77 +43,130 @@ export default function WhiteboardPage() {
   const { user } = useUser();
   const { toast } = useToast();
 
+  // Get practice ID from user context
+  const practiceId = user?.role === 'CLIENT' || user?.role === 'PRACTICE_ADMINISTRATOR' || user?.role === 'VETERINARIAN' || user?.role === 'PRACTICE_MANAGER'
+    ? (user as any).practiceId
+    : user?.role === 'ADMINISTRATOR' || user?.role === 'SUPER_ADMIN'
+    ? (user as any).currentPracticeId
+    : null;
+
   // Check if user has permission to access whiteboard
   const hasAccess = user && user.role !== UserRoleEnum.CLIENT;
 
   // Fetch whiteboard items
   const { data: whiteboardItems, isLoading: isWhiteboardLoading } = useQuery<WhiteboardItem[]>({
     queryKey: ["/api/whiteboard"],
-    enabled: !!user && hasAccess,
+    enabled: !!user && !!hasAccess,
   });
 
   // Fetch pets
   const { data: pets, isLoading: isPetsLoading } = useQuery<Pet[]>({
     queryKey: ["/api/pets"],
-    enabled: !!user && hasAccess,
+    enabled: !!user && !!hasAccess,
   });
+
+  // Fetch today's appointments
+  const { data: appointments, isLoading: isAppointmentsLoading } = useQuery<Appointment[]>({
+    queryKey: ["/api/appointments", "today", practiceId],
+    queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const params = new URLSearchParams({ date: today });
+      if (practiceId) {
+        params.append('practiceId', practiceId.toString());
+      }
+      const res = await apiRequest("GET", `/api/appointments?${params.toString()}`);
+      return await res.json();
+    },
+    enabled: !!user && !!hasAccess && !!practiceId,
+  });
+
+  // Create unified items that combine whiteboard items and appointments
+  const unifiedItems = React.useMemo(() => {
+    const items: (WhiteboardItem & { isAppointment?: boolean })[] = [];
+    
+    // Add existing whiteboard items
+    if (whiteboardItems) {
+      items.push(...whiteboardItems.map(item => ({ ...item, isAppointment: false })));
+    }
+    
+    // Add appointments as whiteboard items if they have a status that matches whiteboard workflow
+    if (appointments) {
+      appointments.forEach(appointment => {
+        const appointmentStatus = appointment.status as string;
+        if (['triage', 'active', 'completed', 'pending_pickup', 'in_treatment'].includes(appointmentStatus)) {
+          // Check if this appointment is already linked to a whiteboard item
+          const alreadyLinked = whiteboardItems?.some(item => item.appointmentId === parseInt(appointment.id));
+          
+          if (!alreadyLinked && appointment.petId) {
+            items.push({
+              id: parseInt(appointment.id) + 10000, // Offset to avoid ID conflicts
+              petId: parseInt(appointment.petId),
+              status: appointmentStatus as "triage" | "active" | "completed" | "pending_pickup" | "in_treatment",
+              urgency: 'medium' as const, // Default urgency for appointments
+              notes: appointment.description || null,
+              appointmentId: parseInt(appointment.id),
+              position: 0,
+              practiceId: parseInt(appointment.practiceId),
+              createdById: appointment.staffId ? parseInt(appointment.staffId) : 0,
+              createdAt: appointment.createdAt,
+              updatedAt: appointment.updatedAt,
+              isAppointment: true
+            });
+          }
+        }
+      });
+    }
+    
+    return items;
+  }, [whiteboardItems, appointments]);
 
   // Create whiteboard item form
   const form = useForm<WhiteboardItemFormValues>({
     resolver: zodResolver(whiteboardItemFormSchema),
     defaultValues: {
       status: "triage",
-      urgency: "medium",
+      urgency: "none",
       notes: "",
       position: 0,
     },
   });
 
   // Create whiteboard item mutation
-  const createWhiteboardItemMutation = useMutation({
-    mutationFn: async (data: WhiteboardItemFormValues) => {
+    const createWhiteboardItemMutation = useMutation({
+    mutationFn: async (data: Partial<WhiteboardItem>) => {
       const res = await apiRequest("POST", "/api/whiteboard", {
         ...data,
-        practiceId: user?.practiceId || 0,
+        practiceId: practiceId || 0,
         createdById: user?.id || 0,
       });
-      return await res.json();
+      return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/whiteboard"] });
-      setIsDialogOpen(false);
-      form.reset();
-      toast({
-        title: "Whiteboard item created",
-        description: "The item has been successfully added to the whiteboard.",
-      });
+      queryClient.invalidateQueries({ queryKey: ["whiteboard-items"] });
     },
-    onError: (error: Error) => {
-      toast({
-        title: "Failed to create whiteboard item",
-        description: error.message,
-        variant: "destructive",
-      });
+  });
+
+  const updateWhiteboardItemMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<WhiteboardItem> }) => {
+      const res = await apiRequest("PATCH", `/api/whiteboard/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["whiteboard-items"] });
     },
   });
 
   // Update whiteboard item mutation
-  const updateWhiteboardItemMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<WhiteboardItemFormValues> }) => {
-      const res = await apiRequest("PATCH", `/api/whiteboard/${id}`, data);
-      return await res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/whiteboard"] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Failed to update whiteboard item",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+    const updateItem = async (id: number, updates: Partial<WhiteboardItem>) => {
+    try {
+      const res = await apiRequest("PATCH", `/api/whiteboard/${id}`, updates);
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ["whiteboard-items"] });
+      }
+    } catch (error) {
+      console.error("Error updating whiteboard item:", error);
+    }
+  };
 
   // Delete whiteboard item mutation
   const deleteWhiteboardItemMutation = useMutation({
@@ -144,7 +197,11 @@ export default function WhiteboardPage() {
       : 0;
     
     createWhiteboardItemMutation.mutate({
-      ...data,
+      petId: data.petId as number,
+      status: data.status as "triage" | "active" | "completed" | "pending_pickup" | "in_treatment",
+      urgency: data.urgency as "high" | "medium" | "low" | "none",
+      notes: data.notes as string | undefined,
+      appointmentId: data.appointmentId as number | undefined,
       position: nextPosition
     });
   };
@@ -188,7 +245,7 @@ export default function WhiteboardPage() {
         // Register handler for whiteboard updates
         unregister = registerMessageHandler("whiteboard_update", (data) => {
           try {
-            if (data && data.practiceId === user.practiceId) {
+            if (data && data.practiceId === practiceId) {
               console.log('Whiteboard: Received update from WebSocket');
               // Refresh whiteboard data when updates come in
               queryClient.invalidateQueries({ queryKey: ["/api/whiteboard"] });
@@ -230,7 +287,7 @@ export default function WhiteboardPage() {
     if (item && item.status !== targetStatus) {
       updateWhiteboardItemMutation.mutate({
         id: itemId,
-        data: { status: targetStatus }
+        data: { status: targetStatus as "triage" | "active" | "completed" | "pending_pickup" | "in_treatment" }
       });
       
       // Notify other users via WebSocket
@@ -238,7 +295,7 @@ export default function WhiteboardPage() {
         sendMessage({
           type: "whiteboard_update",
           action: "status_change",
-          practiceId: user?.practiceId,
+          practiceId: practiceId,
           itemId,
           newStatus: targetStatus
         });
@@ -362,6 +419,49 @@ export default function WhiteboardPage() {
                         
                         <FormField
                           control={form.control}
+                          name="appointmentId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Link to Appointment (Optional)</FormLabel>
+                              <Select
+                                onValueChange={(value) => field.onChange(value ? Number(value) : undefined)}
+                                defaultValue={field.value?.toString()}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select an appointment" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {isAppointmentsLoading ? (
+                                    <SelectItem value="loading" disabled>Loading appointments...</SelectItem>
+                                  ) : appointments && appointments.length > 0 ? (
+                                    [
+                                      <SelectItem key="none" value="">No appointment</SelectItem>,
+                                      ...appointments
+                                        .filter(apt => apt.status === 'approved')
+                                        .map((appointment) => (
+                                          <SelectItem key={appointment.id} value={appointment.id.toString()}>
+                                            {new Date(appointment.date).toLocaleTimeString('en-US', { 
+                                              hour: 'numeric', 
+                                              minute: '2-digit',
+                                              hour12: true 
+                                            })} - Pet ID: {appointment.petId}
+                                          </SelectItem>
+                                        ))
+                                    ]
+                                  ) : (
+                                    <SelectItem value="none" disabled>No appointments today</SelectItem>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
                           name="notes"
                           render={({ field }) => (
                             <FormItem>
@@ -408,7 +508,7 @@ export default function WhiteboardPage() {
                     <TriageItem
                       key={item.id}
                       item={item}
-                      pet={pets?.find(p => p.id === item.petId)}
+                      pet={pets?.find(p => parseInt(p.id) === item.petId)}
                       onDragStart={(e) => handleDragStart(e, item.id)}
                       onUpdate={(data) => updateWhiteboardItemMutation.mutate({ id: item.id, data })}
                       onDelete={() => deleteWhiteboardItemMutation.mutate(item.id)}
@@ -454,7 +554,7 @@ export default function WhiteboardPage() {
                     <TriageItem
                       key={item.id}
                       item={item}
-                      pet={pets?.find(p => p.id === item.petId)}
+                      pet={pets?.find(p => parseInt(p.id) === item.petId)}
                       onDragStart={(e) => handleDragStart(e, item.id)}
                       onUpdate={(data) => updateWhiteboardItemMutation.mutate({ id: item.id, data })}
                       onDelete={() => deleteWhiteboardItemMutation.mutate(item.id)}
@@ -492,7 +592,7 @@ export default function WhiteboardPage() {
                     <TriageItem
                       key={item.id}
                       item={item}
-                      pet={pets?.find(p => p.id === item.petId)}
+                      pet={pets?.find(p => parseInt(p.id) === item.petId)}
                       onDragStart={(e) => handleDragStart(e, item.id)}
                       onUpdate={(data) => updateWhiteboardItemMutation.mutate({ id: item.id, data })}
                       onDelete={() => deleteWhiteboardItemMutation.mutate(item.id)}
@@ -578,14 +678,62 @@ export default function WhiteboardPage() {
                     </div>
                   </TabsContent>
                   <TabsContent value="appointments" className="mt-3">
-                    <div className="text-xs text-slate-500 text-center py-2">
-                      <p>Today's appointments will be displayed here.</p>
-                      <p className="mt-1">
-                        <Button variant="link" size="sm" className="p-0 h-auto" asChild>
-                          <a href="/appointments">View all appointments</a>
-                        </Button>
-                      </p>
-                    </div>
+                    {isAppointmentsLoading ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin text-primary-500" />
+                      </div>
+                    ) : appointments && appointments.length > 0 ? (
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {appointments.map((appointment) => (
+                          <div key={appointment.id} className="text-xs border border-slate-200 rounded-md p-2">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="font-medium text-slate-700">
+                                  {new Date(appointment.date).toLocaleTimeString('en-US', { 
+                                    hour: 'numeric', 
+                                    minute: '2-digit',
+                                    hour12: true 
+                                  })}
+                                </p>
+                                <p className="text-slate-600">
+                                  Pet ID: {appointment.petId}
+                                </p>
+                                {appointment.description && (
+                                  <p className="text-slate-500 mt-1 text-xs">
+                                    {appointment.description.length > 30 
+                                      ? `${appointment.description.substring(0, 30)}...`
+                                      : appointment.description
+                                    }
+                                  </p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <span className={`inline-block px-2 py-1 rounded-full text-xs ${
+                                  appointment.status === 'approved' 
+                                    ? 'bg-green-100 text-green-700' 
+                                    : appointment.status === 'pending'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : appointment.status === 'rejected'
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {appointment.status}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-500 text-center py-2">
+                        <p>No appointments scheduled for today.</p>
+                        <p className="mt-1">
+                          <Button variant="link" size="sm" className="p-0 h-auto" asChild>
+                            <a href="/appointments">Schedule appointments</a>
+                          </Button>
+                        </p>
+                      </div>
+                    )}
                   </TabsContent>
                 </Tabs>
               </div>

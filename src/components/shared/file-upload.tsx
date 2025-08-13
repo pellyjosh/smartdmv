@@ -24,6 +24,7 @@ interface FileUploadProps {
   allowedFileTypes?: string[];
   recordType: string;
   recordId?: number;
+  practiceId?: string;
   className?: string;
 }
 
@@ -35,6 +36,7 @@ export function FileUpload({
   allowedFileTypes = ["image/jpeg", "image/png", "image/gif", "application/pdf", "text/plain", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
   recordType,
   recordId,
+  practiceId,
   className
 }: FileUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -123,6 +125,9 @@ export function FileUpload({
       if (recordId) {
         formData.append("recordId", recordId.toString());
       }
+      if (practiceId) {
+        formData.append("practiceId", practiceId);
+      }
       
       // Simulate progress updates
       const progressInterval = setInterval(() => {
@@ -145,7 +150,8 @@ export function FileUpload({
         throw new Error(`Upload failed: ${response.statusText}`);
       }
       
-      const uploadedFiles: UploadedFile[] = await response.json();
+      const result = await response.json();
+      const uploadedFiles: UploadedFile[] = result.files || result; // Handle both response formats
       
       setUploadProgress(100);
       onFilesUploaded(uploadedFiles);

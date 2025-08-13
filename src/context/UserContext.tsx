@@ -6,6 +6,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { useRouter, usePathname } from 'next/navigation';
 import { switchPracticeAction } from '@/actions/authActions';
 import { SESSION_TOKEN_COOKIE_NAME, HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
+import { fetchWithRetry } from '@/lib/client-network-utils';
 
 // Define User types
 export interface BaseUser {
@@ -98,6 +99,8 @@ function isPathProtected(pathname: string): boolean {
 interface UserContextType {
   user: User | null;
   isLoading: boolean;
+  networkError: boolean;
+  retryAuth: () => void;
   initialAuthChecked: boolean;
   login: (emailInput: string, passwordInput: string) => Promise<User | null>;
   logout: () => Promise<void>;
@@ -126,18 +129,39 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true); // True by default until first fetchUser completes
   const [initialAuthChecked, setInitialAuthChecked] = useState(false);
+  const [networkError, setNetworkError] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+
+  // Load cached user data on initialization
+  useEffect(() => {
+    try {
+      const cachedUserData = sessionStorage.getItem(SESSION_TOKEN_COOKIE_NAME);
+      if (cachedUserData) {
+        const userData: User = JSON.parse(cachedUserData);
+        if (userData && userData.id) {
+          setUser(userData);
+          console.log('[UserContext INIT_CACHE] Loaded cached user data on initialization:', userData.email, userData.role);
+        }
+      }
+    } catch (error) {
+      console.error('[UserContext INIT_CACHE_ERROR] Error loading cached user data on initialization:', error);
+    }
+  }, []);
 
   const fetchUser = useCallback(async () => {
     console.log('[UserContext fetchUser START] Attempting to fetch current user from /api/auth/me. Current path:', pathname);
     setIsLoading(true);
-    try {
-      const response = await fetch('/api/auth/me');
-      console.log('[UserContext fetchUser] /api/auth/me response status:', response.status);
+    setNetworkError(false);
+    
+    const result = await fetchWithRetry('/api/auth/me', {
+      showToast: false, // Don't show toast for auth checks
+      maxRetries: 2,
+    });
 
-      if (response.ok) {
-        const userData: User | null = await response.json();
+    try {
+      if (result.data) {
+        const userData: User | null = result.data;
         if (userData && userData.id) {
           setUser(userData);
           sessionStorage.setItem(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(userData));
@@ -149,21 +173,40 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setClientCookie(SESSION_TOKEN_COOKIE_NAME, null);
           console.log('[UserContext fetchUser NO_USER] /api/auth/me returned no user or invalid data.');
         }
-      } else {
-        setUser(null);
-        sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
-        setClientCookie(SESSION_TOKEN_COOKIE_NAME, null);
-        console.warn(`[UserContext fetchUser API_FAIL] /api/auth/me call failed, status: ${response.status}. Setting user to null.`);
-        
-        // If it's a 401, redirect to login with session expired message
-        if (response.status === 401) {
-          console.log('[UserContext fetchUser] Session expired, redirecting to login');
-          window.location.href = '/auth/login?error=session_expired';
-          return;
+      } else if (result.error) {
+        // Handle network errors gracefully
+        if (result.isNetworkError || result.isDatabaseError) {
+          console.warn('[UserContext fetchUser NETWORK_ERROR] Network/database error occurred:', result.error);
+          setNetworkError(true);
+          
+          // Try to load cached user data when network is down
+          try {
+            const cachedUserData = sessionStorage.getItem(SESSION_TOKEN_COOKIE_NAME);
+            if (cachedUserData) {
+              const userData: User = JSON.parse(cachedUserData);
+              if (userData && userData.id) {
+                setUser(userData);
+                console.log('[UserContext fetchUser CACHED] Loaded cached user data during network error:', userData.email, userData.role);
+              }
+            } else {
+              console.log('[UserContext fetchUser CACHED] No cached user data found during network error');
+            }
+          } catch (cacheError) {
+            console.error('[UserContext fetchUser CACHED_ERROR] Error loading cached user data:', cacheError);
+          }
+          
+          // Don't clear user session for network errors - keep the user state if it exists
+          // This allows the app to continue working with cached user data while network is down
+        } else {
+          // For other errors (like 401), clear the session
+          setUser(null);
+          sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
+          setClientCookie(SESSION_TOKEN_COOKIE_NAME, null);
+          console.warn('[UserContext fetchUser API_FAIL] Auth API call failed:', result.error);
         }
       }
     } catch (error) {
-      console.error('[UserContext fetchUser CATCH_ERROR] Error fetching current user:', error);
+      console.error('[UserContext fetchUser CATCH_ERROR] Error processing auth response:', error);
       setUser(null);
       sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
       setClientCookie(SESSION_TOKEN_COOKIE_NAME, null);
@@ -174,10 +217,32 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, [pathname]); // pathname dependency ensures fetchUser can react to path changes if needed.
 
+  const retryAuth = useCallback(() => {
+    setNetworkError(false);
+    fetchUser();
+  }, [fetchUser]);
+
   useEffect(() => {
     console.log('[UserContext Mount/Effect] Initializing user state. Calling fetchUser.');
     fetchUser();
   }, [fetchUser]);
+
+  // Setup network event listeners to automatically retry when connection is restored
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('[UserContext Network] Connection restored, retrying auth check...');
+      if (networkError) {
+        fetchUser();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline);
+      return () => {
+        window.removeEventListener('online', handleOnline);
+      };
+    }
+  }, [networkError, fetchUser]);
 
   const navigateBasedOnRole = useCallback((role: User['role']) => {
     console.log(`[UserContext Nav] Navigating based on role: ${role}. Current pathname: ${pathname}`);
@@ -299,8 +364,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       console.log(`[UserContext switchPractice] Admin ${user.email} attempting to switch to practice ${newPracticeId}`);
       setIsLoading(true);
       try {
-        const { success, updatedUser } = await switchPracticeAction(user.id, newPracticeId);
-        if (success && updatedUser) {
+        const updatedUser = await switchPracticeAction(user.id, newPracticeId);
+        if (updatedUser) {
           console.log('[UserContext switchPractice] switchPracticeAction successful. Updated user from action:', JSON.stringify(updatedUser));
           setUser(updatedUser); 
           sessionStorage.setItem(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(updatedUser));
@@ -329,7 +394,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <UserContext.Provider value={{ user, isLoading, initialAuthChecked, login, logout, switchPractice, fetchUser }}>
+    <UserContext.Provider value={{ 
+      user, 
+      isLoading, 
+      networkError, 
+      retryAuth, 
+      initialAuthChecked, 
+      login, 
+      logout, 
+      switchPractice, 
+      fetchUser 
+    }}>
       {children}
     </UserContext.Provider>
   );

@@ -2,20 +2,30 @@
 "use client";
 import { useUser, type AdministratorUser } from "@/context/UserContext";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, XCircle } from 'lucide-react';
+import { XCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CustomizableDashboard } from "@/components/dashboard/customizable-dashboard"; // Import the customizable dashboard
+import { CustomizableDashboard } from "@/components/dashboard/customizable-dashboard";
+import { useProtectedPage } from "@/hooks/use-protected-page";
 
 
 export default function AdministratorDashboardPage() {
-  const { user, logout, isLoading, initialAuthChecked, switchPractice } = useUser();
-  const router = useRouter();
+  const { user, switchPractice } = useUser();
+  const { renderAuthState, NetworkErrorAlert } = useProtectedPage({
+    allowedRoles: ['ADMINISTRATOR', 'SUPER_ADMIN']
+  });
+  
   const [currentPracticeSelection, setCurrentPracticeSelection] = useState<string | undefined>(undefined);
-  const [isSetupCompleted, setIsSetupCompleted] = useState(false); // Example state for setup status
-  // const [showPracticeSelector, setShowPracticeSelector] = useState(false); // Control visibility of practice selector
+  const [isSetupCompleted, setIsSetupCompleted] = useState(false);
+
+  // Check if we should render auth state instead of the main content
+  const authStateComponent = renderAuthState();
+  if (authStateComponent) {
+    return authStateComponent;
+  }
+
+  // If we get here, we have an authenticated user with the right role
+  const adminUser = user as AdministratorUser;
 
   useEffect(() => {
     if (user && user.role === 'ADMINISTRATOR') {
@@ -25,52 +35,8 @@ export default function AdministratorDashboardPage() {
       } else if (!adminUser.currentPracticeId && currentPracticeSelection !== undefined) {
         setCurrentPracticeSelection(undefined);
       }
-      // Determine if practice selector should be shown
-      // setShowPracticeSelector(!!adminUser.accessiblePracticeIds && adminUser.accessiblePracticeIds.length > 0);
     }
-    // Simulate setup completion check, in a real app this would come from user data or API
-    // setIsSetupCompleted(user?.isSetupComplete || false); 
-  }, [user]); 
-
-  // Handle navigation in a single useEffect to avoid conditional hooks
-  useEffect(() => {
-    if (initialAuthChecked) {
-      if (!user) {
-        router.push('/login');
-      } else if (user.role !== 'ADMINISTRATOR') {
-        router.push('/access-denied');
-      }
-    }
-  }, [user, initialAuthChecked, router]);
-
-  if (isLoading || !initialAuthChecked) {
-    return (
-      <div className="flex flex-col justify-center items-center h-screen">
-        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-lg text-muted-foreground">Loading, please wait...</p>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="flex flex-col justify-center items-center h-screen">
-        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-lg text-muted-foreground">Redirecting to login...</p>
-      </div>
-    );
-  }
-
-  if (user.role !== 'ADMINISTRATOR') {
-     return (
-      <div className="flex flex-col justify-center items-center h-screen">
-        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-lg text-muted-foreground">Access Denied. Redirecting...</p>
-      </div>
-    );
-  }
-
-  const adminUser = user as AdministratorUser;
+  }, [user, currentPracticeSelection]); 
 
   const handlePracticeChange = async (newPracticeId: string) => {
     if (switchPractice && adminUser) {
@@ -80,6 +46,8 @@ export default function AdministratorDashboardPage() {
 
   return (
     <div className="container mx-auto">
+      <NetworkErrorAlert />
+
       {!isSetupCompleted && (
         <Alert
         variant="default"

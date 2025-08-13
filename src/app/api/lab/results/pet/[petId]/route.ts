@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db/tenant-db.config";
-import { labResults, labOrders, labTestCatalog } from "@/db/schemas/labSchema";
-import { pets } from "@/db/schemas/petsSchema";
+import { db } from "@/db/index";
+import { labResults, labOrders, labTestCatalog, pets } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 
 export async function GET(
@@ -9,108 +8,134 @@ export async function GET(
   { params }: { params: { petId: string } }
 ) {
   try {
-    const petId = params.petId;
-    if (!petId) {
+    const petIdString = params.petId;
+    if (!petIdString) {
       return NextResponse.json({ error: "Pet ID is required" }, { status: 400 });
     }
 
-    const db = await getDb();
+    const petId = parseInt(petIdString);
+    if (isNaN(petId)) {
+      return NextResponse.json({ error: "Invalid Pet ID" }, { status: 400 });
+    }
 
-    // First check if the pet exists
-    const pet = await db.select().from(pets).where(eq(pets.id, petId)).limit(1);
-    if (pet.length === 0) {
+        // First check if the pet exists
+    const pet = await db.query.pets.findFirst({
+      where: eq(pets.id, petId)
+    });
+    if (!pet) {
       return NextResponse.json({ error: "Pet not found" }, { status: 404 });
     }
 
-    // Fetch lab results for the pet by joining with lab orders
-    const results = await db
-      .select({
-        id: labResults.id,
-        resultDate: labResults.resultDate,
-        results: labResults.results,
-        interpretation: labResults.interpretation,
-        status: labResults.status,
-        referenceRange: labResults.referenceRange,
-        previousValue: labResults.previousValue,
-        previousDate: labResults.previousDate,
-        trendDirection: labResults.trendDirection,
-        abnormalFlags: labResults.abnormalFlags,
-        reviewedBy: labResults.reviewedBy,
-        reviewedAt: labResults.reviewedAt,
-        notes: labResults.notes,
-        filePath: labResults.filePath,
-        createdAt: labResults.createdAt,
-        // From lab orders
-        orderId: labOrders.id,
-        petId: labOrders.petId,
-        soapNoteId: labOrders.soapNoteId,
-        // From test catalog
-        testName: labTestCatalog.testName,
-        testCode: labTestCatalog.testCode,
-        category: labTestCatalog.category,
-        description: labTestCatalog.description
-      })
-      .from(labResults)
-      .leftJoin(labOrders, eq(labResults.labOrderId, labOrders.id))
-      .leftJoin(labTestCatalog, eq(labResults.testCatalogId, labTestCatalog.id))
-      .where(eq(labOrders.petId, petId))
-      .orderBy(desc(labResults.resultDate));
+    // Fetch lab results for the pet by using the correct table structure
+    // We need to query through labOrders since that's where petId is stored
+    const labOrdersForPet = await db.query.labOrders.findMany({
+      where: eq(labOrders.petId, petId),
+      with: {
+        results: {
+          with: {
+            test: true
+          },
+          orderBy: desc(labResults.resultDate)
+        },
+        pet: true
+      }
+    });
+
+    // Flatten the results from all orders
+    const results = labOrdersForPet.flatMap(order => 
+      order.results.map(result => ({
+        ...result,
+        order: {
+          ...order,
+          results: undefined // Remove nested results to avoid circular reference
+        }
+      }))
+    );
 
     // Transform the results to match the expected format
-    const transformedResults = results.map(result => {
-      let parameters = [];
-      
-      // Parse the results JSON if it exists
+        const transformedResults = results.map((result: any) => {
       try {
-        if (result.results) {
-          const parsedResults = JSON.parse(result.results);
-          // Convert the parsed results to the expected parameter format
-          if (Array.isArray(parsedResults)) {
-            parameters = parsedResults;
-          } else if (typeof parsedResults === 'object') {
-            // If it's an object, convert each key-value pair to a parameter
-            parameters = Object.entries(parsedResults).map(([name, value]: [string, any]) => ({
-              name,
-              value: value?.toString() || '',
-              units: value?.units || '',
-              status: result.status || 'pending',
-              referenceRange: result.referenceRange || '',
-              previousValue: result.previousValue || '',
-              trend: result.trendDirection === 'increasing' ? 'up' : 
-                     result.trendDirection === 'decreasing' ? 'down' : 'stable'
-            }));
-          }
+        // Parse the results JSON if it's a string
+        let parsedResults;
+        if (typeof result.results === 'string') {
+          parsedResults = JSON.parse(result.results);
+        } else {
+          parsedResults = result.results;
         }
-      } catch (e) {
-        console.warn('Error parsing lab results JSON:', e);
-        // Fallback: create a single parameter with the raw result
-        parameters = [{
-          name: result.testName || 'Test Result',
-          value: result.results || '',
-          units: '',
-          status: result.status || 'pending',
-          referenceRange: result.referenceRange || '',
-          previousValue: result.previousValue || '',
-          trend: result.trendDirection === 'increasing' ? 'up' : 
-                 result.trendDirection === 'decreasing' ? 'down' : 'stable'
-        }];
+        
+        // If parsedResults is an array (multiple test results), flatten them
+        if (Array.isArray(parsedResults)) {
+          return parsedResults.map((testResult, index) => ({
+            id: `${result.id}-${index}`, // Create unique ID for each test in the array
+            resultDate: result.resultDate,
+            testResult: testResult,
+            interpretation: result.interpretation,
+            status: typeof result.status === 'string' ? result.status : result.status[0],
+            normalRange: result.normalRange,
+            technician: result.technician,
+            verifiedDate: result.verifiedDate,
+            practitionerId: result.practitionerId,
+            pdfUrl: result.pdfUrl,
+            notes: typeof result.notes === 'string' ? result.notes : result.notes?.[0],
+            filePath: typeof result.filePath === 'string' ? result.filePath : result.filePath?.[0],
+            name: result.test?.testName || 'Test Result',
+            category: 'Lab Result',
+            type: 'lab_result',
+            metadata: {
+              orderId: result.labOrderId,
+              testCatalogId: result.testCatalogId
+            }
+          }));
+        } else {
+          // Single test result
+          return {
+            id: result.id,
+            resultDate: result.resultDate,
+            testResult: parsedResults,
+            interpretation: result.interpretation,
+            status: typeof result.status === 'string' ? result.status : result.status[0],
+            normalRange: result.normalRange,
+            technician: result.technician,
+            verifiedDate: result.verifiedDate,
+            practitionerId: result.practitionerId,
+            pdfUrl: result.pdfUrl,
+            notes: typeof result.notes === 'string' ? result.notes : result.notes?.[0],
+            filePath: typeof result.filePath === 'string' ? result.filePath : result.filePath?.[0],
+            testName: result.test?.testName || 'Unknown Test',
+            category: result.test?.category || 'lab_result',
+            provider: result.order?.provider || 'unknown',
+            orderDate: result.order?.orderDate,
+            sampleType: result.order?.sampleType,
+            soapLinks: result.order?.soapNoteId ? [{
+              id: result.labOrderId,
+              soapNoteId: result.order.soapNoteId,
+              title: "SOAP Note Link"
+            }] : []
+          };
+        }
+      } catch (parseError) {
+        console.error('Error parsing lab result:', parseError);
+        return {
+          id: result.id,
+          resultDate: result.resultDate,
+          testResult: result.results, // Return raw results if parsing fails
+          interpretation: result.interpretation,
+          status: typeof result.status === 'string' ? result.status : result.status[0],
+          normalRange: result.normalRange,
+          technician: result.technician,
+          verifiedDate: result.verifiedDate,
+          practitionerId: result.practitionerId,
+          pdfUrl: result.pdfUrl,
+          notes: typeof result.notes === 'string' ? result.notes : result.notes?.[0],
+          filePath: typeof result.filePath === 'string' ? result.filePath : result.filePath?.[0],
+          testName: result.test?.testName || 'Unknown Test',
+          category: result.test?.category || 'lab_result',
+          provider: result.order?.provider || 'unknown',
+          orderDate: result.order?.orderDate,
+          sampleType: result.order?.sampleType,
+          error: 'Failed to parse results JSON'
+        };
       }
-
-      return {
-        id: result.id,
-        testName: result.testName || 'Unknown Test',
-        status: result.status || 'pending',
-        resultDate: result.resultDate?.toISOString() || new Date().toISOString(),
-        parameters,
-        notes: result.notes,
-        soapLinks: result.soapNoteId ? [{
-          id: result.orderId,
-          soapNoteId: result.soapNoteId,
-          displaySection: 'objective' as const,
-          highlighted: false,
-          notes: result.interpretation
-        }] : []
-      };
     });
 
     return NextResponse.json(transformedResults);

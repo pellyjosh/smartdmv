@@ -9,6 +9,7 @@ import ReactQueryProvider  from '@/components/providers/ReactQueryProvider';
 import { ThemeProvider } from '@/context/ThemeContext'; 
 import { ThemeSwitcherWidget } from '@/components/ThemeSwitcherWidget'; 
 import ClientOnlyWrapper from '@/components/utils/ClientOnlyWrapper'; // Import the wrapper
+import { NetworkStatus } from '@/components/NetworkStatus';
 
 export const metadata: Metadata = {
   title: 'SmartDVM',
@@ -30,6 +31,7 @@ export default function RootLayout({
               {children}
             </ClientOnlyWrapper>
             <Toaster />
+            <NetworkStatus />
             <ThemeSwitcherWidget /> 
           </ThemeProvider>
         </UserProvider>

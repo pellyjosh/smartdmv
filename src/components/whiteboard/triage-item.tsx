@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pet, WhiteboardItem } from "@shared/schema";
+import { Pet, WhiteboardItem } from "@/db/schema";
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -60,8 +60,9 @@ export function TriageItem({ item, pet, onDragStart, onUpdate, onDelete }: Triag
   const getFormattedTime = () => {
     // This would typically use the appointment time in a real implementation
     // For now, let's generate a time based on the item's ID to simulate different times
-    const hour = 8 + (item.id % 12);
-    const minute = (item.id * 13) % 60;
+    const numericId = typeof item.id === 'string' ? parseInt(item.id) : item.id;
+    const hour = 8 + (numericId % 12);
+    const minute = (numericId * 13) % 60;
     return `${hour}:${minute < 10 ? '0' + minute : minute} ${hour >= 12 ? 'PM' : 'AM'}`;
   };
 
@@ -189,7 +190,7 @@ export function TriageItem({ item, pet, onDragStart, onUpdate, onDelete }: Triag
               <Label htmlFor="edit-urgency">Urgency</Label>
               <Select 
                 value={editUrgency} 
-                onValueChange={setEditUrgency}
+                onValueChange={(value) => setEditUrgency(value as "high" | "medium" | "low" | "none")}
               >
                 <SelectTrigger id="edit-urgency">
                   <SelectValue placeholder="Select urgency level" />

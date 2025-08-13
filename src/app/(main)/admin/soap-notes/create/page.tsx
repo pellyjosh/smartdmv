@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { MultiSelect, type MultiSelectOption } from "@/components/ui/multi-select";
 import { PrescriptionForm } from "@/components/prescriptions/prescription-form";
-import { PrescriptionList } from "@/components/prescriptions/prescription-list";
+import { SoapPrescriptionDisplay } from "@/components/prescriptions/soap-prescription-display";
 import { QuickReferralForm } from "@/components/referrals/quick-referral-form";
 import { FileUpload, type UploadedFile } from "@/components/shared/file-upload";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -44,10 +44,54 @@ import { FileAttachmentList } from "@/components/shared/file-attachment-list";
 import { SoapLabResultsSection } from "@/components/lab/soap-lab-results-section";
 import { HealthPlanSelector } from "@/components/health-plans/health-plan-selector";
 
+// Helper function to safely format dates
+const safeFormatDate = (dateString: string | null | undefined, appointmentData?: any): string => {
+  // Debug log to see what we're getting
+  if (appointmentData) {
+    console.log('Date formatting debug:', { dateString, appointmentData });
+  }
+  
+  if (!dateString) {
+    // Check for alternative date field names
+    const alternativeDates = appointmentData ? [
+      appointmentData.appointmentDate,
+      appointmentData.appointment_date,
+      appointmentData.scheduledDate,
+      appointmentData.scheduled_date,
+      appointmentData.dateTime,
+      appointmentData.date_time,
+      appointmentData.createdAt,
+      appointmentData.created_at
+    ] : [];
+    
+    for (const altDate of alternativeDates) {
+      if (altDate) {
+        dateString = altDate;
+        break;
+      }
+    }
+    
+    if (!dateString) {
+      return 'No Date';
+    }
+  }
+  
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return 'Invalid Date';
+    }
+    return format(date, 'MMM d, yyyy');
+  } catch (error) {
+    console.error('Date formatting error:', error, 'for date:', dateString);
+    return 'Invalid Date';
+  }
+};
+
 // Extended schema with validation for form
 const soapNoteFormSchema = z.object({
-  appointmentId: z.string().optional(),
-  petId: z.string().min(1, { message: "Please select a pet" }),
+  appointmentId: z.number().min(1, 'Please select an appointment'),
+  petId: z.number().min(1, { message: "Please select a pet" }),
   practitionerId: z.string().min(1, { message: "Practitioner ID is required" }),
   subjective: z.string().min(1, { message: "Subjective notes are required" }),
   objective: z.string().min(1, { message: "Objective findings are required" }),
@@ -131,6 +175,8 @@ const SOAPNoteCreatePage: React.FC = () => {
   const [soapNoteSaved, setSoapNoteSaved] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [currentSoapTab, setCurrentSoapTab] = useState("subjective");
+  const [petSelectorOpen, setPetSelectorOpen] = useState(false);
+  const [appointmentSelectorOpen, setAppointmentSelectorOpen] = useState(false);
 
   // Initialize the form with default values
   const form = useForm<SoapNoteFormValues>({
@@ -140,8 +186,8 @@ const SOAPNoteCreatePage: React.FC = () => {
       objective: "",
       assessment: "",
       plan: "",
-      appointmentId: "",
-      petId: "",
+      appointmentId: 0,
+      petId: 0,
       practitionerId: user?.id || "",
       // Subjective tab fields
       chiefComplaint: [],
@@ -264,22 +310,43 @@ const SOAPNoteCreatePage: React.FC = () => {
   const { data: appointments, isLoading: isLoadingAppointments } = useQuery({
     queryKey: ['/api/soap/appointments'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/soap/appointments');
+      const response = await apiRequest('GET', '/api/soap/appointments?status=active');
       return response.json();
     }
   });
   
-  // Fetch pets for dropdown
+  // Fetch all pets for dropdown
   const { data: pets, isLoading: isLoadingPets } = useQuery({
     queryKey: ['/api/pets', userPracticeId],
     queryFn: async () => {
       if (!userPracticeId) {
         throw new Error('Practice ID not available');
       }
+      
       const response = await apiRequest('GET', `/api/pets?practiceId=${userPracticeId}`);
       return response.json();
     },
     enabled: !!userPracticeId
+  });
+
+  // Watch for selected pet to fetch its appointments
+  const selectedPetId = form.watch('petId');
+  
+  // Fetch appointments for the selected pet
+  const { data: petAppointments, isLoading: isLoadingPetAppointments } = useQuery({
+    queryKey: ['/api/soap/appointments', selectedPetId],
+    queryFn: async () => {
+      if (!selectedPetId) {
+        return [];
+      }
+      
+      console.log('Fetching appointments for petId:', selectedPetId);
+      const response = await apiRequest('GET', `/api/soap/appointments?status=active&petId=${selectedPetId}`);
+      const appointments = await response.json();
+      console.log('Filtered appointments from server:', appointments);
+      return appointments;
+    },
+    enabled: !!selectedPetId
   });
   
   // Fetch SOAP templates for template selection
@@ -298,11 +365,18 @@ const SOAPNoteCreatePage: React.FC = () => {
   
   // Apply a template to the form
   const applyTemplate = (template: SOAPTemplate) => {
-    form.setValue('subjective', template.subjective_template || "");
-    form.setValue('objective', template.objective_template || "");
-    form.setValue('assessment', template.assessment_template || "");
-    form.setValue('plan', template.plan_template || "");
+    console.log('Applying template:', template); // Debug log
+    
+    // Use snake_case field names as they appear in the database
+    form.setValue('subjective', Array.isArray(template.subjective_template) ? template.subjective_template.join('\n') : template.subjective_template || "");
+    form.setValue('objective', Array.isArray(template.objective_template) ? template.objective_template.join('\n') : template.objective_template || "");
+    form.setValue('assessment', Array.isArray(template.assessment_template) ? template.assessment_template.join('\n') : template.assessment_template || "");
+    form.setValue('plan', Array.isArray(template.plan_template) ? template.plan_template.join('\n') : template.plan_template || "");
+    
     setSelectedTemplate(template);
+    
+    console.log('Form values after template application:', form.getValues()); // Debug log
+    
     toast({
       title: "Template Applied",
       description: `The "${template.name}" template has been applied.`,
@@ -314,7 +388,7 @@ const SOAPNoteCreatePage: React.FC = () => {
     mutationFn: async (data: SoapNoteFormValues) => {
       // Extract only the fields needed for the API
       const soapNoteData = {
-        appointmentId: data.appointmentId === "none" ? null : data.appointmentId,
+        appointmentId: data.appointmentId,
         petId: data.petId,
         practitionerId: data.practitionerId,
         subjective: data.subjective,
@@ -521,7 +595,7 @@ const SOAPNoteCreatePage: React.FC = () => {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
   
-  const isLoading = isLoadingAppointments || isLoadingPets || isLoadingTemplates || mutation.isPending || attachmentsMutation.isPending;
+  const isLoading = isLoadingAppointments || isLoadingPets || isLoadingPetAppointments || isLoadingTemplates || mutation.isPending || attachmentsMutation.isPending;
   
   // Add a referral to the list
   const handleAddReferral = (referral: any) => {
@@ -625,24 +699,54 @@ const SOAPNoteCreatePage: React.FC = () => {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Pet</FormLabel>
-                          <Select
-                            value={field.value || ""}
-                            onValueChange={(value) => field.onChange(value)}
-                            disabled={isLoading}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select a pet" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {pets?.map((pet: { id: string; name: string; species: string }) => (
-                                <SelectItem key={pet.id} value={pet.id}>
-                                  {pet.name} ({pet.species})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Popover open={petSelectorOpen} onOpenChange={setPetSelectorOpen}>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className={`w-full justify-between ${!field.value && "text-muted-foreground"}`}
+                                  disabled={isLoading}
+                                >
+                                  {field.value
+                                    ? pets?.find((pet: { id: number; name: string; species: string }) => pet.id === field.value)?.name + 
+                                      ` (${pets?.find((pet: { id: number; name: string; species: string }) => pet.id === field.value)?.species})`
+                                    : "Select a pet"}
+                                  <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-full p-0">
+                              <Command>
+                                <CommandInput placeholder="Search pets..." />
+                                <CommandList>
+                                  <CommandEmpty>No pets found.</CommandEmpty>
+                                  <CommandGroup>
+                                    {pets?.map((pet: { id: number; name: string; species: string }) => (
+                                      <CommandItem
+                                        key={pet.id}
+                                        value={`${pet.name} ${pet.species}`}
+                                        onSelect={() => {
+                                          console.log('Selected pet:', pet.id, pet.name); // Debug log
+                                          field.onChange(pet.id);
+                                          // Clear appointment selection when pet changes
+                                          form.setValue('appointmentId', 0);
+                                          setPetSelectorOpen(false);
+                                        }}
+                                      >
+                                        <Check
+                                          className={`mr-2 h-4 w-4 ${
+                                            field.value === pet.id ? "opacity-100" : "opacity-0"
+                                          }`}
+                                        />
+                                        {pet.name} ({pet.species})
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -654,25 +758,82 @@ const SOAPNoteCreatePage: React.FC = () => {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Appointment</FormLabel>
-                          <Select
-                            value={field.value || ""}
-                            onValueChange={(value) => field.onChange(value)}
-                            disabled={isLoading}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select an appointment" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="none">No appointment (ad hoc note)</SelectItem>
-                              {appointments?.map((appointment: { id: string; title: string; date: string }) => (
-                                <SelectItem key={appointment.id} value={appointment.id}>
-                                  {appointment.title} ({format(new Date(appointment.date), 'MMM d, yyyy')})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Popover open={appointmentSelectorOpen} onOpenChange={setAppointmentSelectorOpen}>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className={`w-full justify-between ${(!field.value || field.value === 0) && "text-muted-foreground"}`}
+                                  disabled={isLoading || !selectedPetId}
+                                >
+                                  {!selectedPetId ? (
+                                    "Select a pet first"
+                                  ) : isLoadingPetAppointments ? (
+                                    <>
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      Loading appointments...
+                                    </>
+                                  ) : field.value && field.value > 0 && petAppointments ? (
+                                    (() => {
+                                      // Handle both number and string field values
+                                      const fieldValueNum = typeof field.value === 'string' ? parseInt(field.value) : field.value;
+                                      const appointment = petAppointments.find((appointment: any) => appointment.id === fieldValueNum);
+                                      if (!appointment) return "Select an appointment";
+                                      
+                                      const title = appointment.title || appointment.name || appointment.type || `Appointment ${appointment.id}`;
+                                      const dateStr = safeFormatDate(appointment.date, appointment);
+                                      return `${title} (${dateStr})`;
+                                    })()
+                                  ) : (
+                                    "Select an appointment"
+                                  )}
+                                  <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-full p-0">
+                              <Command>
+                                <CommandInput placeholder="Search appointments..." />
+                                <CommandList>
+                                  <CommandEmpty>
+                                    {isLoadingPetAppointments && selectedPetId ? (
+                                      <div className="flex items-center justify-center py-4">
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Loading appointments...
+                                      </div>
+                                    ) : (
+                                      "No appointments found for this pet."
+                                    )}
+                                  </CommandEmpty>
+                                  <CommandGroup>
+                                    {petAppointments?.map((appointment: any) => {
+                                      const title = appointment.title || appointment.name || appointment.type || `Appointment ${appointment.id}`;
+                                      const dateStr = safeFormatDate(appointment.date, appointment);
+                                      
+                                      return (
+                                        <CommandItem
+                                          key={appointment.id}
+                                          value={`${title} ${dateStr}`}
+                                          onSelect={() => {
+                                            field.onChange(appointment.id);
+                                            setAppointmentSelectorOpen(false);
+                                          }}
+                                        >
+                                          <Check
+                                            className={`mr-2 h-4 w-4 ${
+                                              field.value === appointment.id || field.value === appointment.id.toString() ? "opacity-100" : "opacity-0"
+                                            }`}
+                                          />
+                                          {title} ({dateStr})
+                                        </CommandItem>
+                                      );
+                                    })}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1710,7 +1871,7 @@ const SOAPNoteCreatePage: React.FC = () => {
                             <div className="bg-white dark:bg-slate-900 rounded-md p-4 border border-green-200 dark:border-green-800">
                               <SoapLabResultsSection 
                                 soapNoteId={0} 
-                                petId={form.watch("petId") || ""} 
+                                petId={form.watch("petId") || 0} 
                                 section="objective"
                               />
                             </div>
@@ -2228,8 +2389,9 @@ const SOAPNoteCreatePage: React.FC = () => {
                 maxFiles={5}
                 maxSizeMB={10}
                 allowedFileTypes={["image/jpeg", "image/png", "image/gif", "application/pdf", "text/plain"]}
-                recordType="soap-note"
+                recordType={savedNoteId ? "soap-note" : "PENDING"}
                 recordId={savedNoteId || undefined}
+                practiceId={userPracticeId || undefined}
               />
               
               {uploadedFiles.length > 0 && (
@@ -2329,11 +2491,20 @@ const SOAPNoteCreatePage: React.FC = () => {
                   isEditable={true}
                 />
               ) : (
-                <div className="text-center py-4">
-                  <AlertCircle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Select a pet first
-                  </p>
+                <div>
+                  <Button 
+                    variant="outline"
+                    className="w-full"
+                    disabled={!form.watch("petId")}
+                  >
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    Link Lab Results
+                  </Button>
+                  {!form.watch("petId") && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Select a pet first
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -2359,15 +2530,24 @@ const SOAPNoteCreatePage: React.FC = () => {
                     Add Prescription
                   </Button>
                   
-                  {/* Always show PrescriptionList to display existing prescriptions */}
-                  <PrescriptionList soapNoteId={savedNoteId || 0} readOnly={false} />
+                  {/* Always show SoapPrescriptionDisplay to display existing prescriptions */}
+                  <SoapPrescriptionDisplay soapNoteId={savedNoteId || 0} />
                 </div>
               ) : (
-                <div className="text-center py-4">
-                  <AlertCircle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Select a pet first
-                  </p>
+                <div>
+                  <Button 
+                    variant="outline"
+                    className="w-full"
+                    disabled={!form.watch("petId")}
+                  >
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    Add Prescription
+                  </Button>
+                  {!form.watch("petId") && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Select a pet first
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -2443,11 +2623,20 @@ const SOAPNoteCreatePage: React.FC = () => {
                   )}
                 </div>
               ) : (
-                <div className="text-center py-4">
-                  <AlertCircle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Select a pet first
-                  </p>
+                <div>
+                  <Button 
+                    variant="outline"
+                    className="w-full"
+                    disabled={!form.watch("petId")}
+                  >
+                    <Share2 className="h-4 w-4 mr-2" />
+                    Add Referral
+                  </Button>
+                  {!form.watch("petId") && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Select a pet first
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -2467,7 +2656,6 @@ const SOAPNoteCreatePage: React.FC = () => {
           
           {form.watch('petId') ? (
             <PrescriptionForm 
-              petId={parseInt(form.watch('petId'))}
               soapNoteId={savedNoteId || 0}
               practiceId={parseInt(userPracticeId || "0") || 0} 
               onPrescriptionCreated={() => {

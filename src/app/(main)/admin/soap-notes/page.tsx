@@ -17,7 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { 
   AlertCircle, Check, Edit, Lock, PlusCircle, Trash2, Calendar, User, 
   Clipboard, Clock, Pill, Filter, FileText, Copy, ClipboardCopy, Paperclip, 
-  Loader2
+  Loader2, Camera, Eye, Image as ImageIcon
 } from "lucide-react";
 import { PrescriptionForm } from "@/components/prescriptions/prescription-form";
 import { PrescriptionList } from "@/components/prescriptions/prescription-list";
@@ -475,6 +475,7 @@ function SOAPNotesList({
         open={isDetailsDialogOpen} 
         onOpenChange={setIsDetailsDialogOpen} 
         noteId={selectedNoteId || 0} 
+        practiceId={userPracticeId}
       />
       
       {/* Delete Confirmation */}
@@ -527,11 +528,13 @@ function SOAPNotesList({
 function SOAPNoteDetailsDialog({ 
   open, 
   onOpenChange, 
-  noteId 
+  noteId,
+  practiceId
 }: { 
   open: boolean;
   onOpenChange: (open: boolean) => void;
   noteId: number;
+  practiceId?: string;
 }) {
   const { toast } = useToast();
   const [isPrescriptionFormOpen, setIsPrescriptionFormOpen] = useState(false);
@@ -595,7 +598,7 @@ function SOAPNoteDetailsDialog({
   });
 
   // Fetch attachments for this SOAP note
-  const { data: soapAttachments, isLoading: attachmentsLoading } = useQuery({
+  const { data: soapAttachments, isLoading: attachmentsLoading, refetch: refetchAttachments } = useQuery({
     queryKey: ['/api/medical-record-attachments/soap-note', note?.id],
     queryFn: async () => {
       const response = await fetch(`/api/medical-record-attachments/soap-note/${note?.id}`);
@@ -620,20 +623,46 @@ function SOAPNoteDetailsDialog({
   };
 
   // File upload handlers
-  const handleFilesUploaded = (uploadedFiles: UploadedFile[]) => {
+  const handleFilesUploaded = async (uploadedFiles: UploadedFile[]) => {
+    console.log('Files uploaded:', uploadedFiles);
     setAttachments(prev => [...prev, ...uploadedFiles]);
     setShowFileUpload(false);
-    // Refresh attachments list
-    queryClient.invalidateQueries({ queryKey: ['/api/medical-record-attachments/soap-note', note?.id] });
+    // Immediately refetch attachments list instead of just invalidating
+    await queryClient.invalidateQueries({ queryKey: ['/api/medical-record-attachments/soap-note', note?.id] });
+    refetchAttachments();
     toast({
       title: "Files uploaded successfully",
       description: `${uploadedFiles.length} file(s) have been attached to this SOAP note`,
     });
   };
 
-  const handleAttachmentDelete = (fileId: number) => {
-    setAttachments(prev => prev.filter(file => file.id !== fileId));
-    // The FileAttachmentList component will handle the API call and query invalidation
+  const handleAttachmentDelete = async (fileId: number) => {
+    try {
+      console.log('Deleting attachment:', fileId);
+      const response = await fetch(`/api/medical-record-attachments/delete/${fileId}`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete attachment');
+      }
+      
+      setAttachments(prev => prev.filter(file => file.id !== fileId));
+      // Immediately refetch attachments list instead of just invalidating
+      await queryClient.invalidateQueries({ queryKey: ['/api/medical-record-attachments/soap-note', note?.id] });
+      refetchAttachments();
+      toast({
+        title: "Attachment deleted",
+        description: "The file has been removed from this SOAP note",
+      });
+    } catch (error) {
+      console.error('Error deleting attachment:', error);
+      toast({
+        title: "Error deleting attachment",
+        description: error instanceof Error ? error.message : "Failed to delete the attachment",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -822,6 +851,7 @@ function SOAPNoteDetailsDialog({
                           endpoint="/api/medical-record-attachments"
                           recordType="soap-note"
                           recordId={note.id}
+                          practiceId={practiceId}
                           maxFiles={10}
                           maxSizeMB={25}
                           allowedFileTypes={[

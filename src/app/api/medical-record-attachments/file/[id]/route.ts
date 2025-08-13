@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
+import { db } from '@/db/index'
+import { medicalRecordAttachments } from '@/db/schema'
+import { eq } from 'drizzle-orm'
+
+const isSqlite = process.env.DB_TYPE === 'sqlite'
 
 export async function GET(
   request: NextRequest,
@@ -9,28 +14,59 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const attachmentId = parseInt(id, 10);
     
-    // In a real application, you would query the database to get the file path
-    // For now, return a placeholder response
-    
-    // Mock file path (in real app, get from database)
-    const mockFilePath = path.join(process.cwd(), "uploads", "soap-note", "9", `file-${id}.pdf`);
-    
-    // Check if file exists (for real files)
-    if (existsSync(mockFilePath)) {
-      const fileBuffer = await readFile(mockFilePath);
-      const headers = new Headers();
-      headers.set("Content-Type", "application/pdf");
-      headers.set("Content-Disposition", `attachment; filename="file-${id}.pdf"`);
-      
-      return new NextResponse(fileBuffer, { headers });
+    if (isNaN(attachmentId)) {
+      return NextResponse.json(
+        { error: "Invalid attachment ID" },
+        { status: 400 }
+      );
     }
     
-    // Return a placeholder for demo purposes
-    return NextResponse.json(
-      { error: "File not found" },
-      { status: 404 }
-    );
+    console.log(`Serving file for attachment ID: ${attachmentId}`);
+    
+    // Get the attachment record from database
+    let attachment;
+    if (isSqlite) {
+      attachment = await (db as any).get(`
+        SELECT * FROM medical_record_attachments WHERE id = ?
+      `, [attachmentId]);
+    } else {
+      // PostgreSQL using Drizzle ORM
+      const result = await db.query.medicalRecordAttachments.findFirst({
+        where: eq(medicalRecordAttachments.id, attachmentId)
+      });
+      attachment = result;
+    }
+    
+    if (!attachment) {
+      return NextResponse.json(
+        { error: "Attachment not found" },
+        { status: 404 }
+      );
+    }
+    
+    // Check if file exists
+    if (!existsSync(attachment.filePath)) {
+      return NextResponse.json(
+        { error: "File not found on disk" },
+        { status: 404 }
+      );
+    }
+    
+    // Read and serve the file
+    const fileBuffer = await readFile(attachment.filePath);
+    const headers = new Headers();
+    headers.set("Content-Type", attachment.fileType || "application/octet-stream");
+    
+    // Properly encode filename to handle non-ASCII characters
+    const encodedFilename = encodeURIComponent(attachment.fileName);
+    const dispositionType = attachment.fileType && attachment.fileType.startsWith('image/') ? 'inline' : 'attachment';
+    
+    // Use RFC 5987 encoding for filenames with non-ASCII characters
+    headers.set("Content-Disposition", `${dispositionType}; filename*=UTF-8''${encodedFilename}`);
+    
+    return new NextResponse(fileBuffer, { headers });
 
   } catch (error) {
     console.error("Error serving file:", error);

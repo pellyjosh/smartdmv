@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
 interface SoapLabResultsSectionProps {
-  petId: string;
+  petId: number;
   soapNoteId: number;
   section: "subjective" | "objective" | "assessment" | "plan";
   isEditable?: boolean;
@@ -32,7 +32,7 @@ export function SoapLabResultsSection({
       );
       return await response.json();
     },
-    enabled: !!soapNoteId
+    enabled: !!soapNoteId && soapNoteId > 0
   });
 
   const handleResultsAdded = () => {
@@ -55,7 +55,7 @@ export function SoapLabResultsSection({
             </CardHeader>
             <CardContent>
               <LabResultsList
-                petId={petId}
+                petId={petId.toString()}
                 soapNoteId={soapNoteId}
                 displayMode="linked"
                 section={section}
@@ -68,7 +68,7 @@ export function SoapLabResultsSection({
       {/* Add lab results button */}
       {isEditable && (
         <LabResultsSelector
-          petId={petId}
+          petId={petId.toString()}
           soapNoteId={soapNoteId}
           section={section}
           onResultsAdded={handleResultsAdded}

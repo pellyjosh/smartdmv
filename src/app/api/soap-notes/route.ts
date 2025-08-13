@@ -8,7 +8,7 @@ import { z } from "zod";
 const soapNoteSchema = z.object({
   appointmentId: z.union([z.string(), z.number(), z.null(), z.undefined()])
     .transform((val) => {
-      if (val === null || val === undefined || val === '') {
+      if (val === null || val === undefined || val === '' || val === 'none') {
         return null;
       }
       if (typeof val === 'string') {

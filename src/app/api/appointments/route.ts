@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db'; // Your Drizzle DB instance
 import { appointments, pets, appointmentStatusEnum } from '@/db/schema'; // Import appointments and pets schema
-import { eq, and } from 'drizzle-orm';
+import { eq, and, gte, lte } from 'drizzle-orm';
 import { z } from 'zod';
 
 // Define a Zod schema for the incoming request body
@@ -14,9 +14,9 @@ const insertAppointmentSchema = z.object({
   type: z.string({ message: "Please select appointment type" }),
   date: z.string().datetime({ message: "Please select a valid date and time (ISO format)." }),
   duration: z.coerce.number().min(15, { message: "Duration must be at least 15 minutes" }),
-  petId: z.string().optional().nullable(), // Allow null as per DB schema and frontend optionality
-  practitionerId: z.string().nonempty({ message: "Practitioner ID is required." }), // This is mandatory from frontend
-  practiceId: z.string().nonempty({ message: "Practice ID is required." }), // This is mandatory from frontend
+  petId: z.coerce.number().optional().nullable(), // Allow null as per DB schema and frontend optionality
+  practitionerId: z.coerce.number({ message: "Practitioner ID is required." }), // This is mandatory from frontend
+  practiceId: z.coerce.number({ message: "Practice ID is required." }), // This is mandatory from frontend
   notes: z.string().optional().nullable(), // Map to 'description' in DB, can be nullable
   // Frontend defaults to "scheduled", ensuring it's one of the enum values
   status: z.enum(appointmentStatusEnum).default("pending"),
@@ -49,8 +49,8 @@ export async function POST(req: Request) {
       status,
     } = validationResult.data;
 
-    let clientId: string | null = null;
-    let staffId: string | null = null; // No session, so staffId (who created it) is unknown or null
+    let clientId: number | null = null;
+    let staffId: number | null = null; // No session, so staffId (who created it) is unknown or null
 
     // If a petId is provided, attempt to find the pet and its owner (clientId)
     if (petId) {
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
     // This implies that if an appointment isn't for a specific pet, it might not have an associated client.
     // Adjust this logic if your business rules are different (e.g., must always have a client, even if not linked to a pet).
 
-    // Convert date string to Date object first, then get its timestamp
+    // Convert date string to Date object
     const appointmentDate = new Date(date);
     if (isNaN(appointmentDate.getTime())) {
       return NextResponse.json({ error: 'Invalid date format' }, { status: 400 });
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
     const newAppointmentData = {
       title: title,
       description: notes || null, // Map 'notes' from form to 'description' in DB
-      date: appointmentDate.getTime(), // <-- CORRECTED: Pass the number (milliseconds) here
+      date: appointmentDate, // Pass the Date object directly
       durationMinutes: duration.toString(), // Convert number duration to string as per your schema
       status: status,
       petId: petId || null,
@@ -90,8 +90,7 @@ export async function POST(req: Request) {
     console.log('Attempting to insert appointment:', newAppointmentData);
 
     // Insert the new appointment into the database
-    // .returning() allows you to get the inserted row back
-    const [createdAppointment] = await db.insert(appointments).values(newAppointmentData).returning();
+    const [createdAppointment] = await (db as any).insert(appointments).values(newAppointmentData).returning();
 
     if (!createdAppointment) {
       throw new Error('Failed to create appointment in database.');
@@ -113,12 +112,46 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const clientId = searchParams.get("clientId");
-    const practiceId = searchParams.get("practiceId");
+    const clientIdParam = searchParams.get("clientId");
+    const practiceIdParam = searchParams.get("practiceId");
+    const date = searchParams.get("date");
 
+    // Convert string parameters to numbers if provided
+    const clientId = clientIdParam ? parseInt(clientIdParam) : null;
+    const practiceId = practiceIdParam ? parseInt(practiceIdParam) : null;
+
+    // If date is provided, filter appointments for that specific date
+    if (date) {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const conditions = [];
+      if (practiceId) conditions.push(eq(appointments.practiceId, practiceId));
+      if (clientId) conditions.push(eq(appointments.clientId, clientId));
+      
+      // Add date range conditions
+      conditions.push(gte(appointments.date, startOfDay));
+      conditions.push(lte(appointments.date, endOfDay));
+
+      const result = await db.query.appointments.findMany({
+        where: and(...conditions),
+        with: {
+          pet: true,
+          practitioner: true,
+          practice: true,
+        },
+        orderBy: (appointments, { asc }) => [asc(appointments.date)],
+      });
+
+      return NextResponse.json(result);
+    }
+
+    // Original logic for non-date queries
     if (!clientId && !practiceId) {
       return NextResponse.json(
-        { error: "Either clientId or practiceId is required" },
+        { error: "Either clientId, practiceId, or date is required" },
         { status: 400 }
       );
     }

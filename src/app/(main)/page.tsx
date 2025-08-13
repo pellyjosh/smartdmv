@@ -25,11 +25,11 @@ const PublicHomePageContent = () => (
 );
 
 export default function HomePage() {
-  const { user, isLoading, initialAuthChecked } = useUser();
+  const { user, isLoading, initialAuthChecked, networkError, retryAuth } = useUser();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && initialAuthChecked && user) {
+    if (!isLoading && initialAuthChecked && user && !networkError) {
       // User is authenticated, redirect to their dashboard
       switch (user.role) {
         case 'CLIENT':
@@ -47,7 +47,40 @@ export default function HomePage() {
           break;
       }
     }
-  }, [user, isLoading, initialAuthChecked, router]);
+  }, [user, isLoading, initialAuthChecked, networkError, router]);
+
+  // Show network error state
+  if (networkError && !user) {
+    return (
+      <div className="flex flex-col justify-center items-center h-screen px-4">
+        <div className="text-center max-w-md">
+          <div className="mb-6">
+            <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Connection Error</h1>
+          <p className="text-gray-600 mb-6">
+            Unable to connect to the server. Please check your internet connection and try again.
+          </p>
+          <div className="space-y-3">
+            <Button onClick={retryAuth} className="w-full">
+              Try Again
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => router.push('/auth/login')}
+              className="w-full"
+            >
+              Go to Login
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading || !initialAuthChecked) {
     return (
@@ -70,9 +103,10 @@ export default function HomePage() {
   }
 
   // Only show public content if not loading and no user (unauthenticated)
-  return (
-    <div className="container mx-auto py-12">
-      <PublicHomePageContent />
-    </div>
-  );
+  // return (
+  //   <div className="container mx-auto py-12">
+  //     <PublicHomePageContent />
+  //   </div>
+  // );
+  router.replace('/auth/login');
 }
