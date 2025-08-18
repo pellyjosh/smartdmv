@@ -7,7 +7,7 @@ import { practices } from './practicesSchema';
 import { appointments } from './appointmentsSchema';
 
 export const whiteboardItemUrgencyEnum = ['high', 'medium', 'low', 'none'] as const;
-export const whiteboardItemStatusEnum = ['triage', 'active', 'completed', 'pending_pickup', 'in_treatment'] as const;
+export const whiteboardItemStatusEnum = ['triage', 'active', 'completed'] as const;
 
 export const whiteboardItems = dbTable('whiteboard_items', {
   id: primaryKeyId(),

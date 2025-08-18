@@ -14,7 +14,13 @@ type Context = {
 export async function POST(req: Request, context: Context) {
   try {
     const params = await context.params;
-    const appointmentId = params.id;
+    const appointmentIdString = params.id;
+    
+    // Convert string ID to integer
+    const appointmentId = parseInt(appointmentIdString);
+    if (isNaN(appointmentId)) {
+      return NextResponse.json({ error: 'Invalid appointment ID' }, { status: 400 });
+    }
 
     // Find the appointment
     const appointmentToApprove = await db.query.appointments.findFirst({
@@ -30,20 +36,15 @@ export async function POST(req: Request, context: Context) {
       return NextResponse.json({ error: 'Appointment is not in a pending state for approval.' }, { status: 400 });
     }
 
-    // Update the appointment status to 'scheduled' or 'confirmed'
-    // Due to union type issues with Drizzle ORM, use type suppression to bypass TypeScript error
-    // Handle ID as string (UUID) for SQLite compatibility
-    // Convert updatedAt to a format SQLite can bind (string or timestamp)
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
+    // Update the appointment status to 'approved'
     await db.update(appointments)
       .set({
-        status: 'approved', // Or 'confirmed', based on your desired workflow
-        updatedAt: new Date().toISOString(), // Convert Date to ISO string for SQLite compatibility
+        status: 'approved',
+        updatedAt: new Date(),
       })
-      .where(eq(appointments.id, appointmentId as any));
+      .where(eq(appointments.id, appointmentId));
     
-    // Fetch the updated appointment manually
+    // Fetch the updated appointment
     const updatedAppointment = await db.query.appointments.findFirst({
       where: eq(appointments.id, appointmentId),
     });

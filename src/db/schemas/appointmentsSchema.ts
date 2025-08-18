@@ -6,14 +6,16 @@ import { pets } from './petsSchema';
 import { practices } from './practicesSchema';
 
 export const appointmentStatusEnum = [
-  'approved', 
-  'rejected', 
-  'pending',
-  'triage',
-  'active', 
-  'completed',
-  'pending_pickup',
-  'in_treatment'
+  'pending',           // Initial booking, not yet confirmed
+  'approved',          // Confirmed by practice, ready for triage
+  'rejected',          // Declined by practice
+  'triage',            // Waiting for initial assessment
+  'active',            // Currently being treated
+  'in_treatment',      // Actively in treatment room
+  'completed',         // Finished successfully
+  'pending_pickup',    // Waiting for owner pickup
+  'cancelled',         // Cancelled by owner or practice
+  'no_show'            // Patient didn't arrive
 ] as const;
 
 export const appointments = dbTable('appointments', {

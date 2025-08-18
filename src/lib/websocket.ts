@@ -77,7 +77,8 @@ export function connectWebSocket() {
     };
     
     socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
+      console.warn('WebSocket connection failed (this is normal if no WebSocket server is running):', error);
+      // Don't throw error, just log it as a warning
     };
     
     return socket;

@@ -1,50 +1,43 @@
-// src/app/api/appointments/by-date/[date]/route.ts
+// src/app/api/appointments/by-date-range/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { eq, and, gte, lte } from 'drizzle-orm';
 import { getUserPractice } from '@/lib/auth-utils';
 import { db } from '@/db/index';
 import { appointments, pets } from '@/db/schema';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { date: string } }
-) {
+export async function GET(request: NextRequest) {
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Await params to ensure it's fully resolved
-    const resolvedParams = await params;
-    const { date } = resolvedParams;
-
     const { searchParams } = new URL(request.url);
+    const start = searchParams.get('start');
+    const end = searchParams.get('end');
     const practitionerId = searchParams.get('practitionerId');
 
-    if (!date) {
-      return NextResponse.json({ error: 'Date is required' }, { status: 400 });
+    if (!start || !end) {
+      return NextResponse.json({ error: 'Start and end dates are required' }, { status: 400 });
     }
 
-    // Parse the date
-    const requestedDate = new Date(date);
+    // Parse dates
+    const startDate = new Date(start);
+    const endDate = new Date(end);
 
-    if (isNaN(requestedDate.getTime())) {
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       return NextResponse.json({ error: 'Invalid date format' }, { status: 400 });
     }
 
-    // Define the start and end of the day
-    const startOfDay = new Date(requestedDate);
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const endOfDay = new Date(requestedDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    // Set to start and end of day
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
 
     // Build query conditions
     let conditions = [
       eq(appointments.practiceId, parseInt(userPractice.practiceId)),
-      gte(appointments.date, startOfDay),
-      lte(appointments.date, endOfDay)
+      gte(appointments.date, startDate),
+      lte(appointments.date, endDate)
     ];
 
     // Add practitioner filter if specified
@@ -82,9 +75,11 @@ export async function GET(
       .orderBy(appointments.date);
 
     return NextResponse.json(appointmentList);
-
   } catch (error) {
-    console.error('Error fetching appointments:', error);
-    return NextResponse.json({ error: 'Failed to fetch appointments' }, { status: 500 });
+    console.error('Error fetching appointments by date range:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch appointments' },
+      { status: 500 }
+    );
   }
 }

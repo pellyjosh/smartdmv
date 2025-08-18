@@ -116,6 +116,7 @@ export * from './schemas/soapNoteTemplateSchema';
 export * from './schemas/prescriptionsSchema';
 export * from './schemas/treatmentsSchema';
 export * from './schemas/whiteboardItemsSchema';
+export * from './schemas/whiteboardNotesSchema';
 export * from './schemas/inventorySchema';
 export * from './schemas/treatmentTemplatesSchema';
 export * from './schemas/referralsSchema';

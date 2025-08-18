@@ -18,7 +18,14 @@ const rejectRequestSchema = z.object({
 export async function POST(req: Request, context: Context) {
   try {
     const params = await context.params;
-    const appointmentId = params.id;
+    const appointmentIdString = params.id;
+    
+    // Convert string ID to integer
+    const appointmentId = parseInt(appointmentIdString);
+    if (isNaN(appointmentId)) {
+      return NextResponse.json({ error: 'Invalid appointment ID' }, { status: 400 });
+    }
+    
     const body = await req.json();
 
     const validationResult = rejectRequestSchema.safeParse(body);
@@ -47,18 +54,14 @@ export async function POST(req: Request, context: Context) {
       return NextResponse.json({ error: 'Appointment is not in a state that can be rejected.' }, { status: 400 });
     }
 
-    // Update the appointment status to 'cancelled' and store the reason in description
-    // Due to union type issues with Drizzle ORM, use type suppression to bypass TypeScript error
-    // Handle ID as string (UUID) and convert updatedAt for SQLite compatibility
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
+    // Update the appointment status to 'rejected' and store the reason in description
     const [updatedAppointment] = await db.update(appointments)
       .set({
         status: 'rejected',
         description: `REJECTED: ${rejectionReason}`, // Store reason in description
-        updatedAt: new Date().toISOString(), // Convert Date to ISO string for SQLite compatibility
+        updatedAt: new Date(),
       })
-      .where(eq(appointments.id, appointmentId as any))
+      .where(eq(appointments.id, appointmentId))
       .returning();
 
     if (!updatedAppointment) {

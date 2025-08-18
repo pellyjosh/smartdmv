@@ -3,6 +3,11 @@ import { db } from '@/db'; // Your Drizzle DB instance
 import { appointments, pets, appointmentStatusEnum } from '@/db/schema'; // Import appointments and pets schema
 import { eq, and, gte, lte } from 'drizzle-orm';
 import { z } from 'zod';
+import { 
+  type AppointmentStatus, 
+  isValidStatusTransition,
+  shouldAppearOnWhiteboard 
+} from '@/lib/appointment-workflow';
 
 // Define a Zod schema for the incoming request body
 // This schema strictly defines what the API expects from the frontend.
@@ -18,7 +23,7 @@ const insertAppointmentSchema = z.object({
   practitionerId: z.coerce.number({ message: "Practitioner ID is required." }), // This is mandatory from frontend
   practiceId: z.coerce.number({ message: "Practice ID is required." }), // This is mandatory from frontend
   notes: z.string().optional().nullable(), // Map to 'description' in DB, can be nullable
-  // Frontend defaults to "scheduled", ensuring it's one of the enum values
+  // Frontend defaults to "pending", ensuring it's one of the enum values
   status: z.enum(appointmentStatusEnum).default("pending"),
 });
 
