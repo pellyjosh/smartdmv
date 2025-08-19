@@ -41,8 +41,8 @@ export function generateDefaultWidgetsForRole(role: string): WidgetConfig[] {
   ];
   
   // Add role-specific widgets
-  switch(role as UserRole) { // Cast role to UserRole type for switch
-    case UserRoleEnum[3]: // VETERINARIAN
+  switch(role as UserRole) { // use string enum values directly
+    case UserRoleEnum.VETERINARIAN:
       return [
         ...baseWidgets,
         {
@@ -71,7 +71,7 @@ export function generateDefaultWidgetsForRole(role: string): WidgetConfig[] {
         }
       ];
     
-    case UserRoleEnum[4]: // TECHNICIAN
+  case UserRoleEnum.TECHNICIAN:
       return [
         ...baseWidgets,
         {
@@ -100,7 +100,7 @@ export function generateDefaultWidgetsForRole(role: string): WidgetConfig[] {
         }
       ];
     
-    case UserRoleEnum[5]: // RECEPTIONIST
+  case UserRoleEnum.RECEPTIONIST:
       return [
         ...baseWidgets,
         {
@@ -121,7 +121,7 @@ export function generateDefaultWidgetsForRole(role: string): WidgetConfig[] {
         }
       ];
     
-    case UserRoleEnum[6]: // PRACTICE_MANAGER
+  case UserRoleEnum.PRACTICE_MANAGER:
       return [
         ...baseWidgets,
         {
@@ -150,7 +150,8 @@ export function generateDefaultWidgetsForRole(role: string): WidgetConfig[] {
         }
       ];
     
-    case UserRoleEnum[7]: // PRACTICE_ADMIN (or UserRoleEnum[1] if 'PRACTICE_ADMINISTRATOR' is intended)
+  case UserRoleEnum.PRACTICE_ADMIN:
+  case UserRoleEnum.PRACTICE_ADMINISTRATOR:
       return [
         ...baseWidgets,
         {
@@ -171,7 +172,7 @@ export function generateDefaultWidgetsForRole(role: string): WidgetConfig[] {
         }
       ];
 
-    case UserRoleEnum[2]: // ADMINISTRATOR
+  case UserRoleEnum.ADMINISTRATOR:
       return [
         {
           id: "admin-widget1",
@@ -200,7 +201,7 @@ export function generateDefaultWidgetsForRole(role: string): WidgetConfig[] {
       ];
     
     // Client role
-    case UserRoleEnum[0]: // CLIENT
+  case UserRoleEnum.CLIENT:
       return [
         {
           id: "widget1",

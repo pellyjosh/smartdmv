@@ -26,12 +26,16 @@ export async function GET(req: Request) {
     }
 
     const { practiceId } = validationResult.data;
+    const practiceIdInt = typeof practiceId === 'string' ? parseInt(practiceId, 10) : practiceId;
+    if (!Number.isFinite(practiceIdInt)) {
+      return NextResponse.json({ error: 'Invalid practiceId. Must be a valid number.' }, { status: 400 });
+    }
 
     // Fetch users with role 'CLIENT' for the given practiceId
-    const clients = await db.query.users.findMany({
+  const clients = await db.query.users.findMany({
       where: and(
         eq(users.role, UserRoleEnum.CLIENT),
-        eq(users.practiceId, practiceId)
+    eq(users.practiceId, practiceIdInt)
       ),
       // Select all fields that are relevant for the frontend client list
       // Exclude sensitive fields like password

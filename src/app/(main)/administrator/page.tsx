@@ -18,6 +18,19 @@ export default function AdministratorDashboardPage() {
   const [currentPracticeSelection, setCurrentPracticeSelection] = useState<string | undefined>(undefined);
   const [isSetupCompleted, setIsSetupCompleted] = useState(false);
 
+  // Keep all hooks above any potential early return
+  useEffect(() => {
+    if (!user) return;
+    if (user.role === 'ADMINISTRATOR' || user.role === 'SUPER_ADMIN') {
+      const currentId = (user as any).currentPracticeId as string | undefined;
+      if (currentId && currentId !== currentPracticeSelection) {
+        setCurrentPracticeSelection(currentId);
+      } else if (!currentId && currentPracticeSelection !== undefined) {
+        setCurrentPracticeSelection(undefined);
+      }
+    }
+  }, [user, currentPracticeSelection]);
+
   // Check if we should render auth state instead of the main content
   const authStateComponent = renderAuthState();
   if (authStateComponent) {
@@ -26,17 +39,6 @@ export default function AdministratorDashboardPage() {
 
   // If we get here, we have an authenticated user with the right role
   const adminUser = user as AdministratorUser;
-
-  useEffect(() => {
-    if (user && user.role === 'ADMINISTRATOR') {
-      const adminUser = user as AdministratorUser;
-      if (adminUser.currentPracticeId && adminUser.currentPracticeId !== currentPracticeSelection) {
-        setCurrentPracticeSelection(adminUser.currentPracticeId);
-      } else if (!adminUser.currentPracticeId && currentPracticeSelection !== undefined) {
-        setCurrentPracticeSelection(undefined);
-      }
-    }
-  }, [user, currentPracticeSelection]); 
 
   const handlePracticeChange = async (newPracticeId: string) => {
     if (switchPractice && adminUser) {

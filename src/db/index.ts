@@ -3,7 +3,7 @@ import { config } from 'dotenv';
 config(); // Load environment variables at the very top
 
 // index.ts
-import { neon, NeonQueryFunction } from '@neondatabase/serverless';
+import { neon, neonConfig, NeonQueryFunction } from '@neondatabase/serverless';
 import { drizzle as drizzleNeonHttp, NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import * as schema from './schema';
 
@@ -25,15 +25,20 @@ console.log('[DB_INIT] Using PostgreSQL database');
 const isDrizzleKit = process.env.npm_lifecycle_event?.includes('db:') || 
                      process.argv.some(arg => arg.includes('drizzle-kit'));
 
-const postgresUrl = isDrizzleKit || process.env.NODE_ENV === 'development' 
+// Improve connection stability in serverless/HTTP mode
+// Caches the HTTP connection across invocations to reduce connect timeouts
+neonConfig.fetchConnectionCache = true;
+
+// Prefer POOLER for app runtime when available; use direct URL for migrations
+const postgresUrl = isDrizzleKit 
   ? process.env.POSTGRES_URL 
-  : process.env.POSTGRES_URL_POOLER || process.env.POSTGRES_URL;
+  : (process.env.POSTGRES_URL_POOLER || process.env.POSTGRES_URL);
 
 if (!postgresUrl) {
   throw new Error('POSTGRES_URL environment variable is not set.');
 }
 
-console.log(`🔌 Connecting to Neon PostgreSQL database... (${isDrizzleKit ? 'direct' : 'pooler'})`);
+console.log(`🔌 Connecting to Neon PostgreSQL database... (${isDrizzleKit ? 'direct' : (process.env.POSTGRES_URL_POOLER ? 'pooler' : 'direct')})`);
 
 let neonSql: NeonQueryFunction<false, false>;
 if (process.env.NODE_ENV === 'production') {

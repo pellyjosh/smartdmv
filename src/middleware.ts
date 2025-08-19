@@ -57,9 +57,17 @@ export async function middleware(request: NextRequest) {
   // 2. Handle the login page itself
   if (pathname === AUTH_PAGE) {
     if (isServerAuthenticated && isClientCookieValid && userFromClientCookie) {
-      console.log(`[Middleware] Authenticated user (${userFromClientCookie.email}) on auth page. Allowing request for client-side redirect from UserContext.`);
-      // UserContext will handle redirecting away from login if authenticated
+      // If we already have a valid server session and a client cookie with role, redirect now to avoid client-side loops
+      const role = userFromClientCookie.role;
+      let target = '/';
+      if (role === 'OWNER' || role === 'COMPANY_ADMIN') target = OWNER_DASHBOARD;
+      else if (role === 'ADMINISTRATOR' || role === 'SUPER_ADMIN') target = ADMINISTRATOR_DASHBOARD;
+      else if (role === 'PRACTICE_ADMINISTRATOR') target = PRACTICE_ADMIN_DASHBOARD;
+      else if (role === 'CLIENT') target = CLIENT_DASHBOARD;
+      console.log(`[Middleware] Authenticated user (${userFromClientCookie.email}) hit login. Redirecting to ${target} (role: ${role}).`);
+      return NextResponse.redirect(new URL(target, request.url));
     }
+    // If we don't have a client cookie yet, allow the request so UserContext can call /api/auth/me and then client-redirect.
     return NextResponse.next();
   }
 

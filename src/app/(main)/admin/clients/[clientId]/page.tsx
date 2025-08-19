@@ -426,7 +426,7 @@ export default function ClientDetailPage() {
             </div>
           ) : (
             <div className="text-center py-6">
-              <p className="text-muted-foreground">No pets found for this client.</p>
+              <p className="text-muted-foreground">No pets found for Client ID: {clientId}</p>
               <Button className="mt-4" asChild>
                 <Link href={`/admin/clients?addPet=${clientId}`}>Add a Pet</Link>
               </Button>

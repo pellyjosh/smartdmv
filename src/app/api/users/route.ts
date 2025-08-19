@@ -8,14 +8,16 @@ import { eq, and } from 'drizzle-orm';
 // GET all users, users by practiceId, or a specific user by ID
 export async function GET(request: NextRequest) {
   const { searchParams, pathname } = request.nextUrl;
-  const practiceId = searchParams.get('practiceId');
-  const userId = pathname.split('/').pop(); // Extract user ID from the URL path if present
+  const practiceIdParam = searchParams.get('practiceId');
+  const userIdParam = pathname.split('/').pop(); // Extract user ID from the URL path if present
+  const practiceId = practiceIdParam ? parseInt(practiceIdParam, 10) : undefined;
+  const userId = userIdParam && userIdParam !== 'users' ? parseInt(userIdParam, 10) : undefined;
 
   console.log('Pathname:', pathname);
   console.log('Extracted User ID:', userId);
 
   try {
-    if (userId && userId !== 'users') {
+    if (Number.isFinite(userId as number)) {
       const userData = await db.select().from(users).where(eq(users.id, userId)).limit(1);
       if (userData.length === 0) {
         console.log('User not found for ID:', userId);
@@ -25,8 +27,8 @@ export async function GET(request: NextRequest) {
     }
 
     let usersData;
-    if (practiceId) {
-      usersData = await db.select().from(users).where(eq(users.practiceId, practiceId));
+    if (Number.isFinite(practiceId as number)) {
+      usersData = await db.select().from(users).where(eq(users.practiceId, practiceId as number));
     } else {
       usersData = await db.select().from(users);
     }

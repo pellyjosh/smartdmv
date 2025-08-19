@@ -1,6 +1,6 @@
 'use client';
-import { useState, useRef, useCallback } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,7 +63,6 @@ import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/context/UserContext";
 import { UserRoleEnum, type User, type Pet } from "@/db/schema";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getPetAvatarColors, formatDate } from "@/lib/utils";
 import { SimpleCustomFieldSelect } from "@/components/form/simple-custom-field-select";
 import { 
@@ -71,6 +70,7 @@ import {
   Calendar, Clock, AlertCircle, CheckCircle, RefreshCw, ArrowUpRight
 } from "lucide-react";
 import { useCustomFields } from "@/hooks/use-custom-fields";
+import { apiRequest } from "@/lib/queryClient";
 
 // Predefined lists for dropdowns
 const speciesList = [
@@ -83,24 +83,20 @@ const speciesList = [
   { value: "Ferret", label: "Ferret" },
   { value: "Reptile", label: "Reptile" },
   { value: "Fish", label: "Fish" },
-  { value: "Horse", label: "Horse" },
   { value: "Other", label: "Other" },
 ];
 
-const breedsList = {
+const breedsList: Record<string, { value: string; label: string }[]> = {
   Dog: [
     { value: "Mixed Breed", label: "Mixed Breed" },
     { value: "Labrador Retriever", label: "Labrador Retriever" },
     { value: "German Shepherd", label: "German Shepherd" },
     { value: "Golden Retriever", label: "Golden Retriever" },
-    { value: "Bulldog", label: "Bulldog" },
     { value: "Beagle", label: "Beagle" },
     { value: "Poodle", label: "Poodle" },
     { value: "Rottweiler", label: "Rottweiler" },
     { value: "Yorkshire Terrier", label: "Yorkshire Terrier" },
-    { value: "Boxer", label: "Boxer" },
     { value: "Dachshund", label: "Dachshund" },
-    { value: "Shih Tzu", label: "Shih Tzu" },
   ],
   Cat: [
     { value: "Domestic Shorthair", label: "Domestic Shorthair" },
@@ -109,13 +105,11 @@ const breedsList = {
     { value: "Persian", label: "Persian" },
     { value: "Maine Coon", label: "Maine Coon" },
     { value: "Ragdoll", label: "Ragdoll" },
-    { value: "Bengal", label: "Bengal" },
-    { value: "Abyssinian", label: "Abyssinian" },
-    { value: "Sphynx", label: "Sphynx" },
-    { value: "Scottish Fold", label: "Scottish Fold" },
   ],
-  // Add more breeds for other species as needed
 };
+
+// Map for species-dependent breed lists
+const breedsBySpecies = breedsList;
 
 const genderList = [
   { value: "Male", label: "Male" },
@@ -147,8 +141,7 @@ const colorList = [
   { value: "Other", label: "Other" },
 ];
 
-// Map for species-dependent breed lists
-const breedsBySpecies = breedsList;
+// (removed duplicate breedsBySpecies declaration)
 
 // Combobox component for searchable dropdown
 function ComboboxSelect({
@@ -234,10 +227,7 @@ const clientFormSchema = z.object({
 const updateClientFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters" }),
   email: z.string().email({ message: "Please enter a valid email" }),
-  // password: z.string()
-  //   .min(6, { message: "Password must be at least 6 characters" })
-  //   .optional()
-  //   .transform(e => e === "" ? undefined : e), 
+  password: z.string().min(6, { message: "Password must be at least 6 characters" }).optional().transform(e => e === "" ? undefined : e), 
   phone: z.string().optional(),
   address: z.string().optional(),
   city: z.string().optional(),
@@ -282,7 +272,7 @@ export default function ClientsPage() {
   const [isDeleteClientDialogOpen, setIsDeleteClientDialogOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<User | null>(null);
   const [petPhoto, setPetPhoto] = useState<File | null>(null);
-  const [editPetId, setEditPetId] = useState<string | null>(null);
+  const [editPetId, setEditPetId] = useState<number | null>(null);
   const [selectedSpecies, setSelectedSpecies] = useState<string>("");
   const [selectedAddPetSpecies, setSelectedAddPetSpecies] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -294,27 +284,13 @@ export default function ClientsPage() {
     groups, 
     getValuesByGroupKey,
     getGroupByKey,
+    getValuesByGroupId,
     error: customFieldsError,
     isLoading: isCustomFieldsLoading
   } = useCustomFields();
-  
-  // Add a function to get values by group ID if it doesn't exist
-  const getValuesByGroupId = useCallback((groupId: number) => {
-    // If the groupId is invalid, return an empty array
-    if (!groupId) return [];
-    
-    try {
-      // Find the group values for the specified ID
-      const group = groups.find(g => g.id === groupId);
-      if (!group || !group.key) return [];
-      
-      // Try to get values using the group key
-      return getValuesByGroupKey(group.key) || [];
-    } catch (err) {
-      console.error(`Error getting values for group ID ${groupId}:`, err);
-      return [];
-    }
-  }, [groups, getValuesByGroupKey]);
+
+  // Ensure we have an array of groups when searching by name/key
+  const groupsArray: any[] = Array.isArray(groups) ? (groups as any[]) : [];
 
   // Create accessor functions for custom field values
   const getSpeciesList = () => {
@@ -331,7 +307,7 @@ export default function ClientsPage() {
       }
       
       // Try getting all groups to find the species group
-      const speciesGroup = groups.find(g => 
+  const speciesGroup = groupsArray.find((g: any) => 
         g.name?.toLowerCase().includes('species') || 
         g.key?.toLowerCase().includes('species')
       );
@@ -373,7 +349,7 @@ export default function ClientsPage() {
       }
       
       // Try getting all groups to find a breed group
-      const breedGroup = groups.find(g => 
+  const breedGroup = groupsArray.find((g: any) => 
         (g.name?.toLowerCase().includes('breed') || g.key?.toLowerCase().includes('breed')) &&
         (g.name?.toLowerCase().includes(species.toLowerCase()) || g.key?.toLowerCase().includes(species.toLowerCase()))
       );
@@ -387,7 +363,7 @@ export default function ClientsPage() {
       }
       
       // Look for any breed group if we can't find a species-specific one
-      const anyBreedGroup = groups.find(g => 
+  const anyBreedGroup = groupsArray.find((g: any) => 
         g.name?.toLowerCase().includes('breed') || g.key?.toLowerCase().includes('breed')
       );
       
@@ -427,7 +403,7 @@ export default function ClientsPage() {
       }
       
       // Try getting all groups to find color group
-      const colorGroup = groups.find(g => 
+  const colorGroup = groupsArray.find((g: any) => 
         g.name?.toLowerCase().includes('color') || 
         g.key?.toLowerCase().includes('color')
       );
@@ -462,7 +438,7 @@ export default function ClientsPage() {
       }
       
       // Try getting all groups to find gender group
-      const genderGroup = groups.find(g => 
+  const genderGroup = groupsArray.find((g: any) => 
         g.name?.toLowerCase().includes('gender') || 
         g.key?.toLowerCase().includes('gender') ||
         g.name?.toLowerCase().includes('sex') || 
@@ -499,7 +475,7 @@ export default function ClientsPage() {
       }
       
       // Try getting all groups to find pet type group
-      const petTypeGroup = groups.find(g => 
+  const petTypeGroup = groupsArray.find((g: any) => 
         (g.name?.toLowerCase().includes('type') && g.name?.toLowerCase().includes('pet')) || 
         (g.key?.toLowerCase().includes('type') && g.key?.toLowerCase().includes('pet'))
       );
@@ -527,7 +503,7 @@ export default function ClientsPage() {
   };
 
   // Fetch clients (users with CLIENT role)
-  const { data: clients, isLoading: isClientsLoading } = useQuery<User[]>({
+  const { data: clients, isLoading: isClientsLoading, refetch: refetchClients } = useQuery<User[]>({
     queryKey: ["/api/users/clients", userPracticeId],
     enabled: !!user && user.role !== UserRoleEnum.CLIENT,
     queryFn: async () => {
@@ -538,7 +514,7 @@ export default function ClientsPage() {
   });
 
   // Fetch pets
-  const { data: pets, isLoading: isPetsLoading } = useQuery<Pet[]>({
+  const { data: pets, isLoading: isPetsLoading, refetch: refetchPets } = useQuery<Pet[]>({
     queryKey: ["/api/pets", userPracticeId], // Include userPracticeId in the query key
     enabled: !!user && !!userPracticeId, // Only enable if user and practiceId are available
     queryFn: async () => { // Define the query function
@@ -551,10 +527,12 @@ export default function ClientsPage() {
   });
 
   // Filter clients by search query
-  const filteredClients = clients?.filter(client => 
-    client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredClients = clients?.filter(client => {
+    const name = client.name ?? "";
+    const email = client.email ?? "";
+    const q = searchQuery.toLowerCase();
+    return name.toLowerCase().includes(q) || email.toLowerCase().includes(q);
+  });
 
   // Client form
   const clientForm = useForm<ClientFormValues>({
@@ -583,7 +561,7 @@ export default function ClientsPage() {
     defaultValues: {
       name: "",
       email: "",
-      password: "",
+  password: undefined,
       phone: "",
       address: "",
       city: "",
@@ -605,8 +583,8 @@ export default function ClientsPage() {
       return await res.json();
     },
     onSuccess: (newClient) => {
-      // Invalidate queries to refresh the client list
-      queryClient.invalidateQueries({ queryKey: ["/api/users/clients"] });
+  // Immediately refetch clients list
+  refetchClients();
       // Show success message
       toast({
         title: "Client created",
@@ -633,22 +611,20 @@ export default function ClientsPage() {
   
 // Update client mutation
 const updateClientMutation = useMutation({
-  mutationFn: async (data: UpdateClientFormValues & { id: string }) => {
-    const { id, password, ...clientData } = data;
+  mutationFn: async (data: (UpdateClientFormValues & { id: string })) => {
+    const { id, password, ...clientData } = data as any;
 
-    const payload: Partial<Omit<User, 'id' | 'username'>> = { ...clientData };
+    const payload: any = { ...clientData };
 
     if (password && password.length > 0) {
       payload.password = password;
     }
 
-    console.log("Sending update payload:", payload); // Log the payload to ensure it's correct
-
     const res = await apiRequest("PATCH", `/api/users/${id}`, payload);
     return await res.json();
   },
   onSuccess: (updatedClient) => {
-    queryClient.invalidateQueries({ queryKey: ["/api/users/clients"] });
+  refetchClients();
     toast({
       title: "Client updated",
       description: "The client has been successfully updated.",
@@ -657,10 +633,10 @@ const updateClientMutation = useMutation({
     
     // Reset the form with the updated client's data, but clear password field
     if (updatedClient) {
-      updateClientForm.reset({ // Use updateClientForm here
+      updateClientForm.reset({
         name: updatedClient.name || "",
         email: updatedClient.email || "",
-        password: "", // Keep password field cleared
+        password: undefined,
         phone: updatedClient.phone || "",
         address: updatedClient.address || "",
         city: updatedClient.city || "",
@@ -696,8 +672,10 @@ const updateClientMutation = useMutation({
       return id;
     },
     onSuccess: (deletedId) => {
-      // Invalidate queries to refresh the client list
-      queryClient.invalidateQueries({ queryKey: ["/api/users/clients"] });
+  // Immediately refetch clients list
+  refetchClients();
+  // Also refetch pets in case of cascade deletions or ownership changes
+  refetchPets();
       
       // Show success message
       toast({
@@ -740,34 +718,44 @@ const updateClientMutation = useMutation({
     },
   });
 
+  // Keep critical IDs in sync with selected client/practice for Add Pet
+  useEffect(() => {
+    if (selectedClient) {
+      petForm.setValue("ownerId", String(selectedClient.id));
+    }
+    if (userPracticeId) {
+      petForm.setValue("practiceId", String(userPracticeId));
+    }
+  }, [selectedClient, userPracticeId]);
+
   // Create pet mutation
   const createPetMutation = useMutation({
     mutationFn: async (data: PetFormValues) => {
       try {
         // If a photo was selected, upload it first
-        let photoPath = null;
-        // if (petPhoto) {
-        //   const formData = new FormData();
-        //   formData.append('photo', petPhoto);
-          
-        //   // Upload the photo
-        //   const uploadRes = await fetch('/api/pets/upload-photo', {
-        //     method: 'POST',
-        //     body: formData,
-        //     credentials: 'include',
-        //   });
-          
-        //   if (!uploadRes.ok) {
-        //     throw new Error('Failed to upload pet photo');
-        //   }
-          
-        //   const uploadData = await uploadRes.json();
-        //   photoPath = uploadData.photoPath;
-        //   console.log("Photo uploaded successfully:", photoPath);
-        // }
+        let photoPath: string | null = null;
+        if (petPhoto) {
+          const formData = new FormData();
+          formData.append('photo', petPhoto);
+          formData.append('practiceId', String(userPracticeId || 'general'));
+          formData.append('clientId', String(data.ownerId));
+          formData.append('petId', 'new');
+
+          const uploadRes = await fetch('/api/pets/upload-photo', {
+            method: 'POST',
+            body: formData,
+            credentials: 'include',
+          });
+          if (!uploadRes.ok) {
+            const errText = await uploadRes.text().catch(() => '');
+            throw new Error(errText || 'Failed to upload pet photo');
+          }
+          const uploadData = await uploadRes.json();
+          photoPath = uploadData.photoPath;
+        }
         
         // Create the pet with the photo path
-        const petData = {
+  const petData = {
           ...data,
           photoPath
         };
@@ -780,7 +768,7 @@ const updateClientMutation = useMutation({
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/pets"] });
+      refetchPets();
       toast({
         title: "Pet created",
         description: "The pet has been successfully added.",
@@ -806,30 +794,30 @@ const updateClientMutation = useMutation({
     mutationFn: async (data: PetFormValues & { id: number }) => {
       try {
         // If a photo was selected, upload it first
-        let photoPath = undefined;
-        // if (petPhoto) {
-        //   const formData = new FormData();
-        //   formData.append('photo', petPhoto);
-          
-        //   // Upload the photo
-        //   const uploadRes = await fetch('/api/pets/upload-photo', {
-        //     method: 'POST',
-        //     body: formData,
-        //     credentials: 'include',
-        //   });
-          
-        //   if (!uploadRes.ok) {
-        //     throw new Error('Failed to upload pet photo');
-        //   }
-          
-        //   const uploadData = await uploadRes.json();
-        //   photoPath = uploadData.photoPath;
-        //   console.log("Photo uploaded successfully:", photoPath);
-        // }
+        let photoPath: string | undefined = undefined;
+        if (petPhoto) {
+          const formData = new FormData();
+          formData.append('photo', petPhoto);
+          formData.append('practiceId', String(userPracticeId || 'general'));
+          formData.append('clientId', String(data.ownerId));
+          formData.append('petId', String(data.id));
+
+          const uploadRes = await fetch('/api/pets/upload-photo', {
+            method: 'POST',
+            body: formData,
+            credentials: 'include',
+          });
+          if (!uploadRes.ok) {
+            const errText = await uploadRes.text().catch(() => '');
+            throw new Error(errText || 'Failed to upload pet photo');
+          }
+          const uploadData = await uploadRes.json();
+          photoPath = uploadData.photoPath;
+        }
         
         // Create the pet update data with the photo path
-        const { id, ...updateData } = data;
-        const petData = photoPath ? { ...updateData, photoPath } : updateData;
+  const { id, ...updateData } = data;
+  const petData = photoPath ? { ...updateData, photoPath } : updateData;
         
         const res = await apiRequest("PATCH", `/api/pets/${id}`, petData);
         return await res.json();
@@ -839,7 +827,7 @@ const updateClientMutation = useMutation({
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/pets"] });
+      refetchPets();
       toast({
         title: "Pet updated",
         description: "The pet has been successfully updated.",
@@ -859,6 +847,21 @@ const updateClientMutation = useMutation({
         variant: "destructive",
       });
     },
+  });
+
+  // Delete pet mutation
+  const deletePetMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/pets/${id}`);
+      return await res.json().catch(() => ({}));
+    },
+    onSuccess: () => {
+      refetchPets();
+      toast({ title: "Pet deleted", description: "The pet has been removed." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to delete pet", description: error.message, variant: "destructive" });
+    }
   });
 
   // Handle selecting a client
@@ -918,7 +921,7 @@ const handleEditClient = () => {
       // Update existing pet
       updatePetMutation.mutate({ 
         ...data, 
-        id: editPetId 
+        id: editPetId as number
       });
     } else {
       // Create new pet
@@ -1575,6 +1578,7 @@ const handleEditClient = () => {
                                             value={field.value}
                                             onChange={field.onChange}
                                             createIfNotExists={true}
+                                            fallbackOptions={getPetTypeList()}
                                           />
                                         </FormControl>
                                         <FormDescription>
@@ -1666,7 +1670,7 @@ const handleEditClient = () => {
                                         // Set the form default values
                                         petForm.reset({
                                           name: pet.name,
-                                          species: pet.species,
+                                          species: pet.species || "",
                                           breed: pet.breed || "",
                                           dateOfBirth: pet.dateOfBirth ? new Date(pet.dateOfBirth).toISOString().split('T')[0] : "",
                                           weight: pet.weight || "",
@@ -1675,19 +1679,28 @@ const handleEditClient = () => {
                                           gender: pet.gender || "",
                                           microchipNumber: pet.microchipNumber || "",
                                           pet_type: pet.pet_type || "",
-                                          ownerId: pet.ownerId,
-                                          practiceId: pet.practiceId,
+                                          ownerId: String(pet.ownerId),
+                                          practiceId: String(pet.practiceId),
                                         });
                                         // Open the edit dialog
                                         setSelectedSpecies(pet.species || "");
-                                        setEditPetId(pet.id);
+                                        setEditPetId(Number(pet.id));
                                         setIsEditPetDialogOpen(true);
                                       }}
                                     >
                                       <Edit className="h-4 w-4" />
                                     </Button>
-                                    <Button variant="ghost" size="icon">
-                                      <Trash className="h-4 w-4" />
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon"
+                                      onClick={() => deletePetMutation.mutate(Number(pet.id))}
+                                      disabled={deletePetMutation.isPending}
+                                    >
+                                      {deletePetMutation.isPending ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Trash className="h-4 w-4" />
+                                      )}
                                     </Button>
                                   </div>
                                 </div>
@@ -2111,6 +2124,7 @@ const handleEditClient = () => {
                           onChange={field.onChange}
                           value={field.value}
                           createIfNotExists={true}
+                          fallbackOptions={getPetTypeList()}
                         />
                       </FormItem>
                     )}
@@ -2229,19 +2243,10 @@ const handleEditClient = () => {
                     )}
                   /> */}
 
-                  <FormField
-                    control={updateClientForm.control}
-                    name="username" 
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Username</FormLabel>
-                        <FormControl>
-                          <Input {...field} readOnly disabled value={selectedClient?.username || ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="space-y-2">
+                    <FormLabel>Username</FormLabel>
+                    <Input readOnly disabled value={selectedClient?.username || ""} />
+                  </div>
                   
                   <FormField
                     control={updateClientForm.control}
@@ -2483,6 +2488,7 @@ interface ClientAppointmentsListProps {
 
 function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   const { data: appointments, isLoading, error } = useQuery({
     queryKey: ['/api/appointments/client', clientId],
@@ -2610,9 +2616,9 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
                       
                       <div className="mt-2 sm:mt-0 flex items-center">
                         <Badge variant={
-                          appointment.status === 'completed' ? "success" :
+                          appointment.status === 'completed' ? "secondary" :
                           appointment.status === 'cancelled' ? "destructive" :
-                          appointment.status === 'no-show' ? "warning" :
+                          appointment.status === 'no-show' ? "secondary" :
                           "default"
                         } className="ml-2">
                           {appointment.status === 'completed' ? "Completed" :

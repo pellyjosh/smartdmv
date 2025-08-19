@@ -10,12 +10,15 @@ import { HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
 export async function POST() {
   console.log('[API Logout START] Received request to /api/auth/logout');
   try {
-    const sessionTokenValue = (await cookies()).get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
+  const sessionTokenValue = (await cookies()).get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
 
     if (sessionTokenValue) {
       // Delete session from database
       console.log(`[API Logout] Attempting to delete session ${sessionTokenValue} from DB.`);
-      const deleteResult = await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionTokenValue)).returning({ id: sessionsTable.id });
+      const sessionId = parseInt(sessionTokenValue, 10);
+      const deleteResult = isNaN(sessionId)
+        ? []
+        : await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionId)).returning({ id: sessionsTable.id });
       if (deleteResult.length > 0) {
         console.log(`[API Logout] Session ${sessionTokenValue} deleted successfully from DB.`);
       } else {

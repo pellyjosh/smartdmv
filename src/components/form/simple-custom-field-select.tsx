@@ -41,6 +41,8 @@ interface SimpleCustomFieldSelectProps {
   showInactive?: boolean;
   createIfNotExists?: boolean; // For allowing creation of new category and group if not found
   value?: string; // For controlled component
+  // Fallback options to show if no custom field values are found
+  fallbackOptions?: Array<{ value: string; label: string }>;
 }
 
 export function SimpleCustomFieldSelect({
@@ -57,6 +59,7 @@ export function SimpleCustomFieldSelect({
   showInactive = false,
   createIfNotExists = false,
   value,
+  fallbackOptions,
 }: SimpleCustomFieldSelectProps) {
   // For external refresh control
   const refreshRef = React.useRef<() => void>(() => {});
@@ -68,6 +71,11 @@ export function SimpleCustomFieldSelect({
   // State for holding options
   const [options, setOptions] = React.useState<SimpleCustomFieldOption[]>([]);
   const [defaultValue, setDefaultValue] = React.useState<string | undefined>(undefined);
+  // Map fallback options into internal option shape (use negative IDs to avoid clashes)
+  const mappedFallbackOptions = React.useMemo<SimpleCustomFieldOption[]>(
+    () => (fallbackOptions || []).map((o, idx) => ({ id: -1 - idx, value: o.value, label: o.label, isActive: true })),
+    [fallbackOptions]
+  );
 
   // First, get categories
   const { data: categories, isLoading: isLoadingCategories } = useQuery({
@@ -188,6 +196,19 @@ export function SimpleCustomFieldSelect({
       }
     }
   }, [values, showInactive]);
+
+  // If there are no fetched options, fall back to provided fallbackOptions
+  React.useEffect(() => {
+    if (options.length === 0 && mappedFallbackOptions.length > 0) {
+      setOptions(mappedFallbackOptions);
+      // If no current value, set a sensible default (first fallback or "virtual")
+      if (!value && !defaultValue) {
+        const virtual = mappedFallbackOptions.find(o => o.value === "virtual");
+        setDefaultValue(virtual ? virtual.value : mappedFallbackOptions[0]?.value);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mappedFallbackOptions.length]);
 
   // Apply default value to form if needed
   React.useEffect(() => {

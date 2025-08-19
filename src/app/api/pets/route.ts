@@ -29,7 +29,8 @@ const getHandler = async (request: NextRequest) => {
     });
     if (petsData.length === 0) {
       console.log('No pets found for Client ID:', clientId);
-      return NextResponse.json({ error: 'No pets found for this client. Please ensure the client ID is correct and data exists in the database.' }, { status: 404 });
+      // Return an empty array with 200 so the UI can show a friendly empty state
+      return NextResponse.json([], { status: 200 });
     }
     return NextResponse.json(petsData, { status: 200 });
   } else if (practiceId) {
@@ -93,3 +94,58 @@ const getHandler = async (request: NextRequest) => {
 };
 
 export const GET = withNetworkErrorHandlingAndRetry(getHandler);
+
+// Create pet (wrapped with retry-aware error handler)
+const postHandler = async (request: NextRequest) => {
+  const body = await request.json();
+  const {
+    name,
+    species,
+    breed,
+    dateOfBirth,
+    weight,
+    allergies,
+    color,
+    gender,
+    microchipNumber,
+    pet_type,
+    photoPath,
+    ownerId,
+    practiceId,
+  } = body || {};
+
+  if (!name) {
+    return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+  }
+  if (!ownerId || !practiceId) {
+    return NextResponse.json({ error: 'ownerId and practiceId are required' }, { status: 400 });
+  }
+
+  const ownerIdInt = parseInt(String(ownerId), 10);
+  const practiceIdInt = parseInt(String(practiceId), 10);
+  if (!Number.isFinite(ownerIdInt) || !Number.isFinite(practiceIdInt)) {
+    return NextResponse.json({ error: 'Invalid ownerId or practiceId' }, { status: 400 });
+  }
+
+  const dob = dateOfBirth ? new Date(dateOfBirth) : null;
+
+  const [inserted] = await db.insert(pets).values({
+    name,
+    species: species ?? null,
+    breed: breed ?? null,
+    dateOfBirth: dob,
+    ownerId: ownerIdInt as any,
+    practiceId: practiceIdInt as any,
+    weight: weight ?? null,
+    allergies: allergies ?? null,
+    color: color ?? null,
+    gender: gender ?? null,
+    microchipNumber: microchipNumber ?? null,
+    pet_type: pet_type ?? null,
+    photoPath: photoPath ?? null,
+  }).returning();
+
+  return NextResponse.json(inserted, { status: 201 });
+};
+
+export const POST = withNetworkErrorHandlingAndRetry(postHandler);

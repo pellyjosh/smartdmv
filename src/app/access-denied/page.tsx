@@ -18,6 +18,9 @@ export default function AccessDeniedPage() {
         return '/practice-administrator';
       case 'CLIENT':
         return '/client';
+      case 'OWNER':
+      case 'COMPANY_ADMIN':
+        return '/owner';
       default:
         return '/';
     }

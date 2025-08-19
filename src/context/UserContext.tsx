@@ -160,7 +160,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
     });
 
     try {
-      if (result.data) {
+      if (result.data === null) {
+        // Explicit unauthenticated response
+        setUser(null);
+        sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
+        setClientCookie(SESSION_TOKEN_COOKIE_NAME, null);
+        console.log('[UserContext fetchUser NO_SESSION] /api/auth/me returned null (no session). User cleared.');
+      } else if (result.data) {
         const userData: User | null = result.data;
         if (userData && userData.id) {
           setUser(userData);
@@ -260,9 +266,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
       case 'SUPER_ADMIN':
         targetPath = '/administrator'; // Super admins use the administrator dashboard
         break;
+      case 'OWNER':
+      case 'COMPANY_ADMIN':
+        targetPath = '/owner';
+        break;
+      case 'VETERINARIAN':
+      case 'PRACTICE_MANAGER':
+        // These roles don't have dedicated dashboards yet; send to access denied
+        targetPath = '/access-denied';
+        break;
       default:
-        console.warn(`[UserContext Nav] Unknown role for navigation: ${role}. Redirecting to login.`);
-        targetPath = AUTH_PAGE;
+        console.warn(`[UserContext Nav] Unknown role for navigation: ${role}. Redirecting to access denied.`);
+        targetPath = '/access-denied';
     }
     
     if (pathname !== targetPath) {
