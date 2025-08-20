@@ -1,11 +1,11 @@
 'use client';
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useUser } from "@/context/UserContext";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { UserRole, type SOAPNote, type SOAPTemplate, insertSOAPNoteSchema } from "@/db/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -160,6 +160,7 @@ const SOAPNoteCreatePage: React.FC = () => {
   const { user, userPracticeId } = useUser();
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState("details");
   const [selectedTemplate, setSelectedTemplate] = useState<SOAPTemplate | null>(null);
   const [isPrescriptionFormOpen, setIsPrescriptionFormOpen] = useState(false);
@@ -245,6 +246,17 @@ const SOAPNoteCreatePage: React.FC = () => {
       followUpReason: ""
     }
   });
+
+  // Handle URL parameters for pre-selecting pet
+  useEffect(() => {
+    const petId = searchParams.get('petId');
+    if (petId) {
+      const petIdNumber = parseInt(petId, 10);
+      if (!isNaN(petIdNumber)) {
+        form.setValue('petId', petIdNumber);
+      }
+    }
+  }, [searchParams, form]);
   
   // Function to get validation errors for each tab
   const getTabValidationStatus = () => {

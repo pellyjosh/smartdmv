@@ -1747,12 +1747,17 @@ const handleEditClient = () => {
                               </CardContent>
                               <CardFooter className="pt-0">
                                 <div className="flex space-x-2 w-full">
-                                  <Link href={`/pet-soap-notes/${pet.id}`}>
+                                  <Link href={`/admin/soap-notes/pet/${pet.id}`}>
                                     <Button variant="outline" size="sm" className="flex-1 w-full">
                                       View Records
                                     </Button>
                                   </Link>
-                                  <Link href={`/appointments?view=schedule&petId=${pet.id}`}>
+                                  <Link href={`/admin/patient-timeline?petId=${pet.id}`}>
+                                    <Button variant="outline" size="sm" className="flex-1 w-full">
+                                      Timeline
+                                    </Button>
+                                  </Link>
+                                  <Link href={`/admin/appointments?view=schedule&petId=${pet.id}`}>
                                     <Button size="sm" className="flex-1 w-full">
                                       Schedule Visit
                                     </Button>
@@ -1853,7 +1858,7 @@ const handleEditClient = () => {
                                   
                                   <div className="flex items-center justify-between">
                                     <span className="font-medium">Timeline View</span>
-                                    <Link href={`/patient-timeline?petId=${pet.id}`}>
+                                    <Link href={`/admin/patient-timeline?petId=${pet.id}`}>
                                       <Button size="sm">
                                         Complete History
                                       </Button>
