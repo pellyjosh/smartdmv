@@ -1746,24 +1746,24 @@ const handleEditClient = () => {
                                 </div>
                               </CardContent>
                               <CardFooter className="pt-0">
-                                <div className="flex space-x-2 w-full">
+                               <div className="flex space-x-2 w-full">
                                   <Link href={`/admin/soap-notes/pet/${pet.id}`}>
                                     <Button variant="outline" size="sm" className="flex-1 w-full">
                                       View Records
                                     </Button>
                                   </Link>
-                                  <Link href={`/admin/patient-timeline?petId=${pet.id}`}>
+                                  {/* <Link href={`/admin/patient-timeline?petId=${pet.id}`}>
                                     <Button variant="outline" size="sm" className="flex-1 w-full">
                                       Timeline
                                     </Button>
-                                  </Link>
+                                  </Link> */}
                                   <Link href={`/admin/appointments?view=schedule&petId=${pet.id}`}>
-                                    <Button size="sm" className="flex-1 w-full">
-                                      Schedule Visit
-                                    </Button>
+                                  <Button size="sm" className="flex-1 w-full" style={{ flex: 1 }}>
+                                    Schedule Visit
+                                  </Button>
                                   </Link>
                                 </div>
-                              </CardFooter>
+                              </CardFooter >
                             </Card>
                           ))}
                         </div>

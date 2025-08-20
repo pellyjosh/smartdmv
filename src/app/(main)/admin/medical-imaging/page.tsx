@@ -62,6 +62,7 @@ import LoadingSpinner from "@/components/loading-spinner";
 import { Calendar, FileImage, FileX, ImageIcon, Upload, Plus } from "lucide-react";
 import ImagingViewer from "@/components/medical-imaging/imaging-viewer";
 import { apiRequest } from "@/lib/queryClient";
+import { useUser } from "@/context/UserContext";
 
 // Validation schema for new medical imaging record
 const createMedicalImagingSchema = z.object({
@@ -84,6 +85,7 @@ const MedicalImagingPage: React.FC = () => {
   const params = useParams();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user, userPracticeId } = useUser();
   const [selectedMedicalImaging, setSelectedMedicalImaging] = useState<string | null>(null);
   const [selectedSeries, setSelectedSeries] = useState<string | null>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
@@ -173,7 +175,7 @@ const MedicalImagingPage: React.FC = () => {
   } = useQuery({
     queryKey: ['/api/veterinarians'],
     queryFn: async () => {
-      const response = await fetch('/api/users/veterinarians');
+      const response = await fetch('/api/veterinarians');
       if (!response.ok) throw new Error("Failed to fetch veterinarians");
       return response.json();
     }
@@ -184,12 +186,14 @@ const MedicalImagingPage: React.FC = () => {
     data: pets,
     isLoading: isPetsLoading
   } = useQuery({
-    queryKey: ['/api/pets'],
+    queryKey: ['/api/pets', userPracticeId],
     queryFn: async () => {
-      const response = await fetch('/api/pets');
+      if (!userPracticeId) return [];
+      const response = await fetch(`/api/pets?practiceId=${userPracticeId}`);
       if (!response.ok) throw new Error("Failed to fetch pets");
       return response.json();
-    }
+    },
+    enabled: !!userPracticeId
   });
   
   // Form for creating a new medical imaging study
