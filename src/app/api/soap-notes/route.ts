@@ -145,9 +145,8 @@ export async function GET(request: Request) {
       queryOptions.limit = parseInt(limit);
     }
 
-    const notes = await db.query.soapNotes.findMany(queryOptions);
-    
-    return NextResponse.json(notes);
+  const notes = await db.query.soapNotes.findMany(queryOptions);
+  return NextResponse.json(notes);
   } catch (error) {
     console.error("Error fetching SOAP notes:", error);
     return NextResponse.json(

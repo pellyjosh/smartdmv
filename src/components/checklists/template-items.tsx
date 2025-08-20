@@ -349,8 +349,8 @@ export default function TemplateItems({ templateId, items = [], onItemsChanged }
                       <FormItem>
                         <FormLabel>Assignee Role</FormLabel>
                         <Select 
-                          onValueChange={field.onChange} 
-                          defaultValue={field.value}
+                          onValueChange={(v) => field.onChange(v === 'ANY' ? undefined : v)} 
+                          value={field.value ?? 'ANY'}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -358,7 +358,7 @@ export default function TemplateItems({ templateId, items = [], onItemsChanged }
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="">Any Staff</SelectItem>
+                            <SelectItem value="ANY">Any Staff</SelectItem>
                             <SelectItem value={UserRoleEnum.VETERINARIAN}>Veterinarian</SelectItem>
                             <SelectItem value={UserRoleEnum.TECHNICIAN}>Technician</SelectItem>
                             <SelectItem value={UserRoleEnum.RECEPTIONIST}>Receptionist</SelectItem>
@@ -488,8 +488,8 @@ export default function TemplateItems({ templateId, items = [], onItemsChanged }
                       <FormItem>
                         <FormLabel>Assignee Role</FormLabel>
                         <Select 
-                          onValueChange={field.onChange} 
-                          defaultValue={field.value}
+                          onValueChange={(v) => field.onChange(v === 'ANY' ? undefined : v)} 
+                          value={field.value ?? 'ANY'}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -497,7 +497,7 @@ export default function TemplateItems({ templateId, items = [], onItemsChanged }
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="">Any Staff</SelectItem>
+                            <SelectItem value="ANY">Any Staff</SelectItem>
                             <SelectItem value={UserRoleEnum.VETERINARIAN}>Veterinarian</SelectItem>
                             <SelectItem value={UserRoleEnum.TECHNICIAN}>Technician</SelectItem>
                             <SelectItem value={UserRoleEnum.RECEPTIONIST}>Receptionist</SelectItem>

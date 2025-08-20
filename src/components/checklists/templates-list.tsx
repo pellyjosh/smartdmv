@@ -43,17 +43,29 @@ export default function TemplatesList() {
   const [templateToView, setTemplateToView] = useState<any>(null);
   const [templateToDelete, setTemplateToDelete] = useState<any>(null);
 
-  const { data: templates = [], isLoading } = useQuery({
+  type TemplateRow = {
+    id: number;
+    name: string;
+    category?: string | null;
+    createdAt: string | Date;
+    createdByName?: string | null;
+  };
+
+  const { data: templates = [], isLoading } = useQuery<TemplateRow[]>({
     queryKey: ['/api/treatment-templates'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/treatment-templates');
+      return res.json();
+    },
     staleTime: 60000, // 1 minute
   });
 
   const canEditTemplates = user?.role === UserRoleEnum.PRACTICE_ADMINISTRATOR || 
                           user?.role === UserRoleEnum.PRACTICE_MANAGER || 
-                          user?.role === UserRoleEnum.VETERINARIAN;
+                          user?.role === UserRoleEnum.VETERINARIAN || user?.role === UserRoleEnum.ADMINISTRATOR;
                           
   const canDeleteTemplates = user?.role === UserRoleEnum.PRACTICE_ADMINISTRATOR || 
-                            user?.role === UserRoleEnum.PRACTICE_MANAGER;
+                            user?.role === UserRoleEnum.PRACTICE_MANAGER || user?.role === UserRoleEnum.ADMINISTRATOR;
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -126,7 +138,14 @@ export default function TemplatesList() {
                 </Badge>
               </TableCell>
               <TableCell>{template.createdByName || 'Unknown'}</TableCell>
-              <TableCell>{formatDistanceToNow(new Date(template.createdAt), { addSuffix: true })}</TableCell>
+              <TableCell>
+                {template.createdAt ? (
+                  (() => {
+                    const date = new Date(template.createdAt);
+                    return isNaN(date.getTime()) ? 'Unknown' : formatDistanceToNow(date, { addSuffix: true });
+                  })()
+                ) : 'Unknown'}
+              </TableCell>
               <TableCell className="text-right">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

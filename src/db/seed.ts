@@ -24,6 +24,12 @@ import {
   VetSpecialty,
   prescriptions
 } from './schema';
+import {
+  treatmentChecklistTemplates,
+  templateItems,
+  assignedChecklists,
+  checklistItems,
+} from './schema';
 import { seedMarketplaceData } from './seedMarketplaceData';
 
 // PostgreSQL-only database operations
@@ -326,6 +332,138 @@ async function seed() {
   // Step 8: Seed marketplace data
   console.log('🏪 Seeding marketplace data...');
   await seedMarketplaceData();
+
+  // Step 9: Seed treatment checklist templates and items
+  console.log('📝 Seeding treatment checklist templates...');
+  const templateRows = await insertWithReturning(
+    treatmentChecklistTemplates,
+    [
+      {
+        practiceId: practice1.id,
+        name: 'Post-Op Care (Canine)',
+        category: 'Surgery',
+        description: 'Standard post-operative care checklist for canine patients',
+        isActive: true,
+        autoAssignToDiagnosis: ['post_op'] as unknown as any,
+        createdById: (practiceAdminUser?.id ?? adminUser.id),
+      },
+      {
+        practiceId: practice1.id,
+        name: 'Vaccination Visit',
+        category: 'Wellness',
+        description: 'Checklist for routine vaccination visits',
+        isActive: true,
+        autoAssignToDiagnosis: ['vaccination'] as unknown as any,
+        createdById: (practiceAdminUser?.id ?? adminUser.id),
+      },
+    ],
+    'treatment_checklist_templates',
+    { id: treatmentChecklistTemplates.id, name: treatmentChecklistTemplates.name }
+  );
+
+  const postOpTemplate = templateRows[0];
+
+  console.log('🧩 Seeding template items...');
+  await insertBatch(
+    templateItems,
+    [
+      {
+        templateId: postOpTemplate.id,
+        title: 'Check vital signs',
+        description: 'Record temperature, pulse, respiration',
+        position: 1,
+        isRequired: true,
+        estimatedDuration: 5,
+        reminderThreshold: 2,
+        assigneeRole: 'TECHNICIAN',
+      },
+      {
+        templateId: postOpTemplate.id,
+        title: 'Change bandages',
+        description: 'Replace surgical bandages and assess incision',
+        position: 2,
+        isRequired: true,
+        estimatedDuration: 10,
+        reminderThreshold: 4,
+        assigneeRole: 'TECHNICIAN',
+      },
+      {
+        templateId: postOpTemplate.id,
+        title: 'Administer pain medication',
+        description: 'Give prescribed analgesic per dosage schedule',
+        position: 3,
+        isRequired: true,
+        estimatedDuration: 2,
+        reminderThreshold: 1,
+        assigneeRole: 'VETERINARIAN',
+      },
+    ],
+    'template_items'
+  );
+
+  console.log('📋 Seeding an assigned checklist and copying items...');
+  const assignedRows = await insertWithReturning(
+    assignedChecklists,
+    [
+      {
+        practiceId: practice1.id,
+        petId: (pet1?.id ?? 0),
+        templateId: postOpTemplate.id,
+        appointmentId: null,
+        soapNoteId: null,
+        name: 'Buddy - Post-Op Care',
+        status: 'pending' as const,
+        priority: 'medium' as const,
+        dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        assignedById: (practiceAdminUser?.id ?? adminUser.id),
+        assignedToId: vet1User.id,
+        notes: 'Monitor closely for the next 24 hours',
+      },
+    ],
+    'assigned_checklists',
+    { id: assignedChecklists.id, name: assignedChecklists.name }
+  );
+
+  const assigned = assignedRows[0];
+
+  // Copy template items to checklist items
+  const postOpItems = await pgDb
+    .select({
+      id: templateItems.id,
+      title: templateItems.title,
+      description: templateItems.description,
+      position: templateItems.position,
+      isRequired: templateItems.isRequired,
+      estimatedDuration: templateItems.estimatedDuration,
+      reminderThreshold: templateItems.reminderThreshold,
+      assigneeRole: templateItems.assigneeRole,
+    })
+    .from(templateItems)
+    .where((t) => (t as any).eq(templateItems.templateId, postOpTemplate.id) as any);
+
+  if (postOpItems.length) {
+    await insertBatch(
+      checklistItems,
+      postOpItems.map((ti, idx) => ({
+        checklistId: assigned.id,
+        title: ti.title,
+        description: ti.description,
+        priority: 'medium' as const,
+        dueDate: new Date(Date.now() + (idx + 1) * 3 * 60 * 60 * 1000),
+        completed: false,
+        completedAt: null,
+        completedById: null,
+        assignedToId: vet1User.id,
+        notes: null,
+        position: ti.position ?? idx + 1,
+        isRequired: ti.isRequired ?? false,
+        estimatedDuration: ti.estimatedDuration ?? null,
+        reminderThreshold: ti.reminderThreshold ?? null,
+        assigneeRole: ti.assigneeRole ?? null,
+      })),
+      'checklist_items'
+    );
+  }
 
   console.log('✅ Database seeding completed successfully!');
   console.log(`

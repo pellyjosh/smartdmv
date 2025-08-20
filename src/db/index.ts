@@ -53,9 +53,12 @@ if (process.env.NODE_ENV === 'production') {
   neonSql = global.DrizzleNeonClient;
 }
 
+// Note: Drizzle's built-in logger may attempt to call toISOString on values that
+// are not actual Date instances in some nested results (e.g., Neon HTTP adapter),
+// which can crash at runtime. Disable the logger to avoid this.
 dbInstance = drizzleNeonHttp(neonSql, {
   schema,
-  logger: process.env.NODE_ENV === 'development',
+  logger: false,
 });
 console.log('✅ Neon PostgreSQL Drizzle instance created.');
 

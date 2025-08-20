@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     if (administratorId) {
       // Verify the requesting user is the administrator or has permission
-      if (currentUser.id !== administratorId && currentUser.role !== 'SUPER_ADMIN') {
+      if (currentUser.id !== Number(administratorId) && currentUser.role !== 'SUPER_ADMIN') {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
 
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
           practiceId: administratorAccessiblePractices.practiceId,
         })
         .from(administratorAccessiblePractices)
-        .where(eq(administratorAccessiblePractices.administratorId, administratorId));
+  .where(eq(administratorAccessiblePractices.administratorId, Number(administratorId)));
 
       const practiceIds = accessiblePractices.map((p: any) => p.practiceId);
 
@@ -84,6 +84,8 @@ export async function GET(request: NextRequest) {
       // Return configs without actual API keys for security
       const maskedConfigs = configs.map((config: any) => ({
         ...config,
+        createdAt: config.createdAt ? new Date(config.createdAt).toISOString() : null,
+        updatedAt: config.updatedAt ? new Date(config.updatedAt).toISOString() : null,
         geminiApiKey: config.geminiApiKey ? '***masked***' : null,
         hasApiKey: !!config.geminiApiKey,
       }));
@@ -96,26 +98,27 @@ export async function GET(request: NextRequest) {
     }
 
     // For non-administrator requests, get user's practice configuration
-    let practiceId: string;
+    let practiceId: number;
     if (currentUser.role === 'ADMINISTRATOR' || currentUser.role === 'SUPER_ADMIN') {
-      practiceId = currentUser.currentPracticeId || '';
-      if (!practiceId) {
+      if (currentUser.currentPracticeId == null) {
         // Get first accessible practice for admin
         const adminPractices = await (db as any).select({ practiceId: administratorAccessiblePractices.practiceId })
           .from(administratorAccessiblePractices)
-          .where(eq(administratorAccessiblePractices.administratorId, currentUser.id))
+          .where(eq(administratorAccessiblePractices.administratorId, Number(currentUser.id)))
           .limit(1);
         
         if (adminPractices.length === 0) {
           return NextResponse.json({ error: 'No accessible practices found' }, { status: 400 });
         }
-        practiceId = adminPractices[0].practiceId;
+        practiceId = adminPractices[0].practiceId as number;
+      } else {
+        practiceId = currentUser.currentPracticeId as number;
       }
     } else {
-      practiceId = currentUser.currentPracticeId || '';
-      if (!practiceId) {
+      if (currentUser.currentPracticeId == null) {
         return NextResponse.json({ error: 'No practice associated with user' }, { status: 400 });
       }
+      practiceId = currentUser.currentPracticeId as number;
     }
 
     const config = await (db as any).query.aiConfigs.findFirst({
@@ -142,6 +145,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       config: {
         ...config,
+        createdAt: config.createdAt ? new Date(config.createdAt).toISOString() : null,
+        updatedAt: config.updatedAt ? new Date(config.updatedAt).toISOString() : null,
         geminiApiKey: config.geminiApiKey ? '***masked***' : null,
         hasApiKey: !!config.geminiApiKey,
         configuredByUser: config.configuredByUser,
@@ -164,28 +169,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user's practice ID
-    let practiceId: string;
+    let practiceId: number;
     if (currentUser.role === 'ADMINISTRATOR' || currentUser.role === 'SUPER_ADMIN') {
       // For admins, we'll use their currentPracticeId or the first accessible practice
-      practiceId = currentUser.currentPracticeId || '';
-      if (!practiceId) {
+      if (currentUser.currentPracticeId == null) {
         // Get first accessible practice for admin
         const adminPractices = await (db as any).select({ practiceId: administratorAccessiblePractices.practiceId })
           .from(administratorAccessiblePractices)
-          .where(eq(administratorAccessiblePractices.administratorId, currentUser.id))
+          .where(eq(administratorAccessiblePractices.administratorId, Number(currentUser.id)))
           .limit(1);
         
         if (adminPractices.length === 0) {
           return NextResponse.json({ error: 'No accessible practices found' }, { status: 400 });
         }
-        practiceId = adminPractices[0].practiceId;
+        practiceId = adminPractices[0].practiceId as number;
+      } else {
+        practiceId = currentUser.currentPracticeId as number;
       }
     } else {
       // For non-admins, use their current practice
-      practiceId = currentUser.currentPracticeId || '';
-      if (!practiceId) {
+      if (currentUser.currentPracticeId == null) {
         return NextResponse.json({ error: 'No practice associated with user' }, { status: 400 });
       }
+      practiceId = currentUser.currentPracticeId as number;
     }
 
     const body = await request.json();
@@ -199,8 +205,9 @@ export async function POST(request: NextRequest) {
       .where(eq(aiConfigs.practiceId, practiceId))
       .limit(1);
 
-    let result;
-    const now = Date.now(); // For SQLite timestamp_ms mode
+  let result;
+  // Use Date objects for Drizzle timestamp columns (mode: 'date')
+  const now = new Date();
     
     if (existingConfig.length > 0) {
       // Update existing config
@@ -210,7 +217,7 @@ export async function POST(request: NextRequest) {
           isEnabled: validatedData.isEnabled,
           maxTokens: '1000', // Set programmatically
           temperature: '0.7', // Set programmatically
-          configuredBy: currentUser.id,
+          configuredBy: Number(currentUser.id),
           updatedAt: now,
         })
         .where(eq(aiConfigs.practiceId, practiceId))
@@ -218,23 +225,25 @@ export async function POST(request: NextRequest) {
     } else {
       // Create new config
       result = await (db as any).insert(aiConfigs).values({
-        id: crypto.randomUUID(),
         practiceId: practiceId,
         geminiApiKey: encryptedApiKey,
         isEnabled: validatedData.isEnabled,
         maxTokens: '1000', // Set programmatically
         temperature: '0.7', // Set programmatically
-        configuredBy: currentUser.id,
-        createdAt: now,
-        updatedAt: now,
+  configuredBy: Number(currentUser.id),
+  createdAt: now,
+  updatedAt: now,
       }).returning();
     }
 
     // Return success without the actual API key
+    const saved = result[0] || {};
     return NextResponse.json({
       message: 'AI configuration saved successfully',
       config: {
-        ...result[0],
+        ...saved,
+        createdAt: saved.createdAt ? new Date(saved.createdAt).toISOString() : null,
+        updatedAt: saved.updatedAt ? new Date(saved.updatedAt).toISOString() : null,
         geminiApiKey: '***masked***',
         hasApiKey: true,
         configuredByUser: {
@@ -263,26 +272,27 @@ export async function PUT(request: NextRequest) {
     }
 
     // Get user's practice ID
-    let practiceId: string;
+    let practiceId: number;
     if (currentUser.role === 'ADMINISTRATOR' || currentUser.role === 'SUPER_ADMIN') {
-      practiceId = currentUser.currentPracticeId || '';
-      if (!practiceId) {
+      if (currentUser.currentPracticeId == null) {
         // Get first accessible practice for admin
         const adminPractices = await (db as any).select({ practiceId: administratorAccessiblePractices.practiceId })
           .from(administratorAccessiblePractices)
-          .where(eq(administratorAccessiblePractices.administratorId, currentUser.id))
+          .where(eq(administratorAccessiblePractices.administratorId, Number(currentUser.id)))
           .limit(1);
         
         if (adminPractices.length === 0) {
           return NextResponse.json({ error: 'No accessible practices found' }, { status: 400 });
         }
-        practiceId = adminPractices[0].practiceId;
+        practiceId = adminPractices[0].practiceId as number;
+      } else {
+        practiceId = currentUser.currentPracticeId as number;
       }
     } else {
-      practiceId = currentUser.currentPracticeId || '';
-      if (!practiceId) {
+      if (currentUser.currentPracticeId == null) {
         return NextResponse.json({ error: 'No practice associated with user' }, { status: 400 });
       }
+      practiceId = currentUser.currentPracticeId as number;
     }
 
     const body = await request.json();
@@ -290,8 +300,9 @@ export async function PUT(request: NextRequest) {
 
     // Build update object
     const updateObject: any = {
-      updatedAt: Date.now(), // For SQLite timestamp_ms mode
-      configuredBy: currentUser.id,
+      // Store as Date instance to match schema timestamp mode
+      updatedAt: new Date(),
+  configuredBy: Number(currentUser.id),
     };
 
     if (validatedData.isEnabled !== undefined) {
@@ -312,12 +323,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'AI configuration not found' }, { status: 404 });
     }
 
+    const updated = result[0] || {};
     return NextResponse.json({
       message: 'AI configuration updated successfully',
       config: {
-        ...result[0],
-        geminiApiKey: result[0].geminiApiKey ? '***masked***' : null,
-        hasApiKey: !!result[0].geminiApiKey,
+        ...updated,
+        createdAt: updated.createdAt ? new Date(updated.createdAt).toISOString() : null,
+        updatedAt: updated.updatedAt ? new Date(updated.updatedAt).toISOString() : null,
+        geminiApiKey: updated.geminiApiKey ? '***masked***' : null,
+        hasApiKey: !!updated.geminiApiKey,
         configuredByUser: {
           id: currentUser.id,
           name: currentUser.name,
@@ -338,8 +352,9 @@ export async function PUT(request: NextRequest) {
 // Helper function to get decrypted API key for internal use
 export async function getDecryptedApiKey(practiceId: string): Promise<string | null> {
   try {
+    const practiceIdNum = Number(practiceId);
     const config = await (db as any).select().from(aiConfigs)
-      .where(and(eq(aiConfigs.practiceId, practiceId), eq(aiConfigs.isEnabled, true)))
+      .where(and(eq(aiConfigs.practiceId, practiceIdNum), eq(aiConfigs.isEnabled, true)))
       .limit(1);
 
     if (config.length === 0 || !config[0].geminiApiKey) {

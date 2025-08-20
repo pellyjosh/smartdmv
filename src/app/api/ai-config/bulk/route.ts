@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
           practiceId: administratorAccessiblePractices.practiceId,
         })
         .from(administratorAccessiblePractices)
-        .where(eq(administratorAccessiblePractices.administratorId, validatedData.configuredBy));
+  .where(eq(administratorAccessiblePractices.administratorId, Number(validatedData.configuredBy)));
 
       targetPracticeIds = accessiblePractices.map((p: any) => p.practiceId);
     }
@@ -52,11 +52,12 @@ export async function POST(request: NextRequest) {
     const errors = [];
 
     // Process each practice
-    for (const practiceId of targetPracticeIds) {
+  for (const practiceId of targetPracticeIds) {
       try {
+    const practiceIdNum = Number(practiceId);
         // Check if config already exists for this practice
         const existingConfig = await (db as any).select().from(aiConfigs)
-          .where(eq(aiConfigs.practiceId, practiceId))
+          .where(eq(aiConfigs.practiceId, practiceIdNum))
           .limit(1);
 
         let result;
@@ -69,29 +70,31 @@ export async function POST(request: NextRequest) {
               isEnabled: validatedData.isEnabled,
               maxTokens: validatedData.maxTokens,
               temperature: validatedData.temperature,
-              configuredBy: validatedData.configuredBy,
+              configuredBy: Number(validatedData.configuredBy),
               updatedAt: new Date(),
             })
-            .where(eq(aiConfigs.practiceId, practiceId))
+            .where(eq(aiConfigs.practiceId, practiceIdNum))
             .returning();
         } else {
           // Create new config
           result = await (db as any).insert(aiConfigs).values({
-            id: crypto.randomUUID(),
-            practiceId: practiceId,
+            practiceId: practiceIdNum,
             geminiApiKey: encryptedApiKey,
             isEnabled: validatedData.isEnabled,
             maxTokens: validatedData.maxTokens,
             temperature: validatedData.temperature,
-            configuredBy: validatedData.configuredBy,
+            configuredBy: Number(validatedData.configuredBy),
           }).returning();
         }
 
+        const saved = result[0] || {};
         results.push({
           practiceId,
           success: true,
           config: {
-            ...result[0],
+            ...saved,
+            createdAt: saved.createdAt ? new Date(saved.createdAt).toISOString() : null,
+            updatedAt: saved.updatedAt ? new Date(saved.updatedAt).toISOString() : null,
             geminiApiKey: '***masked***',
             hasApiKey: true,
           }

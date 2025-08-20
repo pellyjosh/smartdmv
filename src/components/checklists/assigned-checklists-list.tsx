@@ -53,8 +53,23 @@ export default function AssignedChecklistsList() {
     ? '/api/client-portal/checklists' 
     : '/api/assigned-checklists';
 
-  const { data: checklists = [], isLoading } = useQuery({
+  type ChecklistSummary = {
+    id: number;
+    name: string;
+    status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+    priority: 'low' | 'medium' | 'high' | 'urgent' | null;
+    dueDate?: string | null;
+    items?: Array<{ id: number; completed: boolean }>;
+    petName: string;
+    petSpecies?: string | null;
+  };
+
+  const { data: checklists = [], isLoading } = useQuery<ChecklistSummary[]>({
     queryKey: [apiEndpoint],
+    queryFn: async () => {
+      const res = await apiRequest('GET', apiEndpoint);
+      return res.json();
+    },
     staleTime: 30000, // 30 seconds
   });
 
@@ -151,10 +166,14 @@ export default function AssignedChecklistsList() {
   // Only certain roles can manage checklists
   const canManageChecklists = user?.role === UserRoleEnum.PRACTICE_ADMINISTRATOR || 
                              user?.role === UserRoleEnum.PRACTICE_MANAGER || 
-                             user?.role === UserRoleEnum.VETERINARIAN;
+                             user?.role === UserRoleEnum.VETERINARIAN || user?.role === UserRoleEnum.ADMINISTRATOR;
 
   if (isLoading) {
-    return <div>Loading checklists...</div>;
+    return (
+      <div className="flex items-center justify-center p-10">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   if (checklists.length === 0) {
@@ -164,6 +183,7 @@ export default function AssignedChecklistsList() {
       </div>
     );
   }
+
 
   return (
     <div>

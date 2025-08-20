@@ -1,6 +1,25 @@
 import React, { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ChecklistItem } from "@shared/schema";
+// Use API DTO type rather than DB type since dates are serialized to strings
+type ChecklistItemDTO = {
+  id: number;
+  checklistId: number;
+  title: string;
+  description?: string | null;
+  priority?: 'low' | 'medium' | 'high' | 'urgent' | null;
+  dueDate?: string | null;
+  completed: boolean;
+  completedAt?: string | null;
+  completedById?: number | null;
+  assignedToId?: number | null;
+  notes?: string | null;
+  position: number;
+  isRequired: boolean;
+  estimatedDuration?: number | null;
+  reminderThreshold?: number | null;
+  assigneeRole?: string | null;
+  checklistName?: string | null;
+};
 import { queryClient } from "@/lib/queryClient";
 import { format, isWithinInterval, startOfDay, endOfDay, parseISO, isValid } from "date-fns";
 
@@ -84,7 +103,7 @@ export function StaffTasksView() {
   const [toDate, setToDate] = useState<Date | undefined>(undefined);
 
   // Fetch all items assigned to the current user
-  const { data: assignedItems, isLoading } = useQuery({
+  const { data: assignedItems, isLoading } = useQuery<ChecklistItemDTO[]>({
     queryKey: ["/api/checklist-items/my-items"],
     queryFn: async () => {
       const response = await fetch("/api/checklist-items/my-items");
@@ -159,7 +178,7 @@ export function StaffTasksView() {
   const filteredItems = React.useMemo(() => {
     if (!assignedItems) return [];
     
-    let filteredResults = assignedItems.filter((item: ChecklistItem) => {
+  let filteredResults = assignedItems.filter((item: ChecklistItemDTO) => {
       // Filter by search query
       const matchesSearch = 
         searchQuery === "" || 
@@ -202,7 +221,7 @@ export function StaffTasksView() {
     });
     
     // Sort the items
-    return filteredResults.sort((a, b) => {
+  return filteredResults.sort((a: ChecklistItemDTO, b: ChecklistItemDTO) => {
       if (sortBy === "dueDate") {
         if (!a.dueDate && !b.dueDate) return 0;
         if (!a.dueDate) return sortOrder === "asc" ? 1 : -1;

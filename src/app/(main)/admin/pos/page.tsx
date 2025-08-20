@@ -197,7 +197,8 @@ export default function POSPage() {
   const { toast } = useToast();
   const { practice } = usePractice();
   const queryClient = useQueryClient();
-  const { availableFeatures } = useFeatureAccess();
+  const featureAccess = useFeatureAccess();
+  const availableFeatures = 'availableFeatures' in featureAccess ? featureAccess.availableFeatures : [];
   
   // Check if user has access to point of sale feature
   const hasPointOfSaleAccess = availableFeatures?.includes('point_of_sale');
@@ -229,27 +230,44 @@ export default function POSPage() {
   };
   
   // Fetch inventory items
-  const { data: inventoryItems = [], isLoading: inventoryLoading } = useQuery({
+  const { data: inventoryItems = [], isLoading: inventoryLoading } = useQuery<InventoryItem[]>({
     queryKey: ['/api/inventory'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/inventory');
+      return res.json();
+    },
     refetchOnWindowFocus: false
   });
   
   // Fetch clients for search
-  const { data: clients = [], isLoading: clientsLoading } = useQuery({
+  const { data: clients = [], isLoading: clientsLoading } = useQuery<Client[]>({
     queryKey: ['/api/users/clients'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/users/clients');
+      return res.json();
+    },
     refetchOnWindowFocus: false
   });
   
   // Fetch pets for the selected client
-  const { data: pets = [], isLoading: petsLoading } = useQuery({
+  const { data: pets = [], isLoading: petsLoading } = useQuery<Pet[]>({
     queryKey: ['/api/pets', selectedClient?.id],
+    queryFn: async () => {
+      if (!selectedClient) return [] as Pet[];
+      const res = await apiRequest('GET', `/api/pets?clientId=${selectedClient.id}`);
+      return res.json();
+    },
     enabled: !!selectedClient,
     refetchOnWindowFocus: false
   });
   
   // Fetch transactions for history tab
-  const { data: transactions = [], isLoading: transactionsLoading } = useQuery({
+  const { data: transactions = [], isLoading: transactionsLoading } = useQuery<POSTransaction[]>({
     queryKey: ['/api/pos/transactions'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/pos/transactions');
+      return res.json();
+    },
     refetchOnWindowFocus: false
   });
   
@@ -929,10 +947,11 @@ export default function POSPage() {
                     </Sheet>
                     
                     {selectedClient && (
-                      <Select
-                        value={selectedPet?.id.toString() || ""}
+            <Select
+                        value={selectedPet ? selectedPet.id.toString() : 'NONE'}
                         onValueChange={(value) => {
-                          const pet = pets.find((p: Pet) => p.id.toString() === value);
+                          if (value === 'NONE') { setSelectedPet(null); return; }
+              const pet = (Array.isArray(pets) ? pets : []).find((p: Pet) => p.id.toString() === value);
                           setSelectedPet(pet || null);
                         }}
                       >
@@ -943,13 +962,13 @@ export default function POSPage() {
                           </div>
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">No pet selected</SelectItem>
+                          <SelectItem value="NONE">No pet selected</SelectItem>
                           {petsLoading ? (
-                            <SelectItem value="" disabled>Loading pets...</SelectItem>
-                          ) : pets.length === 0 ? (
-                            <SelectItem value="" disabled>No pets found</SelectItem>
+                            <SelectItem value="LOADING" disabled>Loading pets...</SelectItem>
+                          ) : (!Array.isArray(pets) || pets.length === 0) ? (
+                            <SelectItem value="EMPTY" disabled>No pets found</SelectItem>
                           ) : (
-                            pets.map((pet: Pet) => (
+                            (Array.isArray(pets) ? pets : []).map((pet: Pet) => (
                               <SelectItem key={pet.id} value={pet.id.toString()}>
                                 {pet.name} ({pet.species})
                               </SelectItem>

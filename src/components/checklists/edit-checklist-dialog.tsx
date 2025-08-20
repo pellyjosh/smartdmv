@@ -74,7 +74,6 @@ const checklistFormSchema = z.object({
   status: z.string().default('pending'),
   notes: z.string().optional(),
   dueDate: z.date().optional(),
-  assignedToId: z.coerce.number().optional(),
 });
 
 type ChecklistFormValues = z.infer<typeof checklistFormSchema>;
@@ -96,16 +95,26 @@ export default function EditChecklistDialog({
   const [activeTab, setActiveTab] = useState('details');
   const [editingItem, setEditingItem] = useState<any>(null);
   const [showEditItemDialog, setShowEditItemDialog] = useState(false);
+  const [showAddItemDialog, setShowAddItemDialog] = useState(false);
 
   // Fetch pets for dropdown
+  const practiceId = (user && ('currentPracticeId' in user ? (user as any).currentPracticeId : (user as any).practiceId)) as string | number | undefined;
   const { data: pets = [] } = useQuery({
-    queryKey: ['/api/pets'],
-    enabled: open,
+    queryKey: ['/api/pets', practiceId],
+    queryFn: async () => {
+      const res = await apiRequest('GET', `/api/pets?practiceId=${practiceId}`);
+      return res.json();
+    },
+    enabled: open && !!practiceId,
   });
 
-  // Fetch staff members for assignment
+  // Fetch staff members for task assignment
   const { data: staffMembers = [] } = useQuery({
     queryKey: ['/api/users/staff'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/users/staff');
+      return res.json();
+    },
     enabled: open && user?.role !== UserRoleEnum.CLIENT,
   });
 
@@ -129,7 +138,6 @@ export default function EditChecklistDialog({
       status: checklist.status || 'pending',
       notes: checklist.notes || '',
       dueDate: checklist.dueDate ? new Date(checklist.dueDate) : undefined,
-      assignedToId: checklist.assignedToId,
     },
   });
 
@@ -143,7 +151,6 @@ export default function EditChecklistDialog({
         status: checklist.status || 'pending',
         notes: checklist.notes || '',
         dueDate: checklist.dueDate ? new Date(checklist.dueDate) : undefined,
-        assignedToId: checklist.assignedToId,
       });
     }
   }, [checklist, form]);
@@ -151,7 +158,15 @@ export default function EditChecklistDialog({
   // Update mutation
   const updateMutation = useMutation({
     mutationFn: async (values: ChecklistFormValues) => {
-      const response = await apiRequest('PATCH', `/api/assigned-checklists/${checklist.id}`, values);
+      const payload = {
+        name: values.name,
+        petId: values.petId ? Number(values.petId) : null,
+        priority: values.priority,
+        status: values.status,
+        notes: values.notes ?? null,
+        // dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : null, // TEMPORARILY DISABLED
+      };
+      const response = await apiRequest('PATCH', `/api/assigned-checklists/${checklist.id}`, payload);
       return await response.json();
     },
     onSuccess: () => {
@@ -247,6 +262,33 @@ export default function EditChecklistDialog({
     },
   });
 
+  // Add item mutation
+  const addItemMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await apiRequest('POST', '/api/checklist-items', {
+        checklistId: checklist.id,
+        ...data
+      });
+      return await response.json();
+    },
+    onSuccess: () => {
+      refetchItems();
+      setShowAddItemDialog(false);
+      addItemForm.reset();
+      toast({
+        title: 'Task added',
+        description: 'New checklist task has been added successfully.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error adding task',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
   const handleToggleComplete = (item: any) => {
     toggleItemMutation.mutate({
       id: item.id,
@@ -255,9 +297,10 @@ export default function EditChecklistDialog({
   };
 
   const handleAssignItem = (itemId: number, assignedToId: string) => {
+    const parsed = assignedToId === 'NONE' ? undefined : parseInt(assignedToId, 10);
     assignItemMutation.mutate({
       id: itemId,
-      assignedToId: assignedToId ? parseInt(assignedToId) : undefined
+      assignedToId: typeof parsed === 'number' && !isNaN(parsed) ? parsed : undefined
     });
   };
 
@@ -289,6 +332,19 @@ export default function EditChecklistDialog({
     },
   });
 
+  // Create a form for adding new items
+  const addItemForm = useForm<z.infer<typeof editItemFormSchema>>({
+    resolver: zodResolver(editItemFormSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      priority: "medium",
+      dueDate: null,
+      assignedToId: "",
+      notes: "",
+    },
+  });
+
   // Update form when editing item changes
   useEffect(() => {
     if (editingItem) {
@@ -309,6 +365,18 @@ export default function EditChecklistDialog({
     
     updateItemMutation.mutate({
       id: editingItem.id,
+      title: values.title,
+      description: values.description,
+      priority: values.priority,
+      dueDate: values.dueDate,
+      assignedToId: values.assignedToId ? parseInt(values.assignedToId) : null,
+      notes: values.notes,
+    });
+  };
+
+  // Handle add item form submission
+  const onAddItemSubmit = (values: z.infer<typeof editItemFormSchema>) => {
+    addItemMutation.mutate({
       title: values.title,
       description: values.description,
       priority: values.priority,
@@ -478,40 +546,7 @@ export default function EditChecklistDialog({
                       </FormItem>
                     )}
                   />
-
-                  <FormField
-                    control={form.control}
-                    name="assignedToId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Assigned To</FormLabel>
-                        <Select 
-                          onValueChange={field.onChange} 
-                          defaultValue={field.value?.toString()}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select staff member" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="">Unassigned</SelectItem>
-                            {staffMembers.map((staff: any) => (
-                              <SelectItem key={staff.id} value={staff.id.toString()}>
-                                {staff.firstName} {staff.lastName} ({staff.role.replace('_', ' ')})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>
-                          Optional: assign to a specific staff member.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
                 </div>
-
                 <FormField
                   control={form.control}
                   name="notes"
@@ -550,9 +585,14 @@ export default function EditChecklistDialog({
             <div className="space-y-4 py-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium">Checklist Tasks</h3>
-                <Button size="sm" variant="outline" onClick={() => setActiveTab('details')}>
-                  <Pencil className="mr-1 h-4 w-4" /> Edit Checklist
-                </Button>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setShowAddItemDialog(true)}>
+                    <Plus className="mr-1 h-4 w-4" /> Add Task
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setActiveTab('details')}>
+                    <Pencil className="mr-1 h-4 w-4" /> Edit Checklist
+                  </Button>
+                </div>
               </div>
               
               {checklistItems.length > 0 ? (
@@ -597,14 +637,14 @@ export default function EditChecklistDialog({
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Select 
-                              value={item.assignedToId?.toString() || ""}
+                              value={item.assignedToId ? item.assignedToId.toString() : 'NONE'}
                               onValueChange={(value) => handleAssignItem(item.id, value)}
                             >
                               <SelectTrigger className="h-8 w-[140px]">
                                 <SelectValue placeholder="Assign to" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="">Unassigned</SelectItem>
+                                <SelectItem value="NONE">Unassigned</SelectItem>
                                 {staffMembers.map((staff: any) => (
                                   <SelectItem key={staff.id} value={staff.id.toString()}>
                                     {staff.firstName} {staff.lastName}
@@ -628,7 +668,7 @@ export default function EditChecklistDialog({
               ) : (
                 <div className="text-center py-8 border rounded-md bg-muted/20">
                   <p className="text-muted-foreground">No tasks in this checklist.</p>
-                  <Button size="sm" className="mt-4">
+                  <Button size="sm" className="mt-4" onClick={() => setShowAddItemDialog(true)}>
                     <Plus className="mr-1 h-4 w-4" /> Add Task
                   </Button>
                 </div>
@@ -727,8 +767,8 @@ export default function EditChecklistDialog({
                   <FormItem>
                     <FormLabel>Assigned To</FormLabel>
                     <Select 
-                      onValueChange={field.onChange} 
-                      defaultValue={field.value}
+                      onValueChange={(val) => field.onChange(val === 'NONE' ? '' : val)} 
+                      defaultValue={field.value || 'NONE'}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -736,7 +776,7 @@ export default function EditChecklistDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">Unassigned</SelectItem>
+                        <SelectItem value="NONE">Unassigned</SelectItem>
                         {staffMembers.map((staff: any) => (
                           <SelectItem key={staff.id} value={staff.id.toString()}>
                             {staff.firstName} {staff.lastName} ({staff.role.replace('_', ' ')})
@@ -820,6 +860,188 @@ export default function EditChecklistDialog({
               <Button type="submit" disabled={updateItemMutation.isPending}>
                 {updateItemMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Save Task
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+
+    {/* Add Item Dialog */}
+    <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
+      <DialogContent className="sm:max-w-[550px]">
+        <DialogHeader>
+          <DialogTitle>Add New Task</DialogTitle>
+          <DialogDescription>
+            Add a new task to this checklist
+          </DialogDescription>
+        </DialogHeader>
+        
+        <Form {...addItemForm}>
+          <form onSubmit={addItemForm.handleSubmit(onAddItemSubmit)} className="space-y-4 py-4">
+            <FormField
+              control={addItemForm.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Task Title</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Task title" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={addItemForm.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Textarea 
+                      placeholder="Task description" 
+                      className="resize-none h-20"
+                      {...field} 
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Describe what needs to be done
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={addItemForm.control}
+                name="priority"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Priority</FormLabel>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select priority" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="urgent">Urgent</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={addItemForm.control}
+                name="assignedToId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Assigned To</FormLabel>
+                    <Select 
+                      onValueChange={(val) => field.onChange(val === 'NONE' ? '' : val)} 
+                      defaultValue={field.value || 'NONE'}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Assign to" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="NONE">Unassigned</SelectItem>
+                        {staffMembers.map((staff: any) => (
+                          <SelectItem key={staff.id} value={staff.id.toString()}>
+                            {staff.firstName} {staff.lastName} ({staff.role.replace('_', ' ')})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={addItemForm.control}
+              name="dueDate"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Due Date</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant={"outline"}
+                          className={cn(
+                            "pl-3 text-left font-normal",
+                            !field.value && "text-muted-foreground"
+                          )}
+                        >
+                          {field.value ? (
+                            format(field.value, "PPP")
+                          ) : (
+                            <span>Pick a due date</span>
+                          )}
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value || undefined}
+                        onSelect={field.onChange}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormDescription>
+                    When should this task be completed
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={addItemForm.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes</FormLabel>
+                  <FormControl>
+                    <Textarea 
+                      placeholder="Additional notes or instructions" 
+                      className="resize-none h-20"
+                      {...field} 
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Any special instructions or additional context
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={() => setShowAddItemDialog(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={addItemMutation.isPending}>
+                {addItemMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Add Task
               </Button>
             </DialogFooter>
           </form>

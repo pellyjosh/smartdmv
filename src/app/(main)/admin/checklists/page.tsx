@@ -22,23 +22,38 @@ export default function ChecklistsPage() {
 
   const { isLoading: isLoadingTemplates } = useQuery({
     queryKey: ['/api/treatment-templates'],
+    queryFn: async () => {
+      const res = await fetch('/api/treatment-templates');
+      if (!res.ok) throw new Error('Failed to load templates');
+      return res.json();
+    },
     enabled: activeTab === 'templates'
   });
 
   const { isLoading: isLoadingChecklists } = useQuery({
     queryKey: ['/api/assigned-checklists'],
+    queryFn: async () => {
+      const res = await fetch('/api/assigned-checklists');
+      if (!res.ok) throw new Error('Failed to load checklists');
+      return res.json();
+    },
     enabled: activeTab === 'assigned'
   });
 
   const { isLoading: isLoadingTasks } = useQuery({
     queryKey: ['/api/checklist-items/my-items'],
+    queryFn: async () => {
+      const res = await fetch('/api/checklist-items/my-items');
+      if (!res.ok) throw new Error('Failed to load my tasks');
+      return res.json();
+    },
     enabled: activeTab === 'my-tasks'
   });
 
   // Only certain roles can create templates
   const canCreateTemplates = user?.role === UserRoleEnum.PRACTICE_ADMINISTRATOR || 
                             user?.role === UserRoleEnum.PRACTICE_MANAGER || 
-                            user?.role === UserRoleEnum.VETERINARIAN;
+                            user?.role === UserRoleEnum.VETERINARIAN || user?.role === UserRoleEnum.ADMINISTRATOR;;
 
   // Check if the user is staff (any role that can receive assigned tasks)
   const isStaffMember = user?.role !== UserRoleEnum.CLIENT && user?.role !== UserRoleEnum.SUPER_ADMIN;
@@ -92,12 +107,6 @@ export default function ChecklistsPage() {
         </TabsList>
 
         <div className="mt-4">
-          {isLoading && (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          )}
-
           <TabsContent value="assigned" className="space-y-4">
             <Card>
               <CardHeader>

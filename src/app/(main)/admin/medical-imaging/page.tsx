@@ -561,7 +561,7 @@ const MedicalImagingPage: React.FC = () => {
                         </FormControl>
                         <SelectContent>
                           {isPetsLoading ? (
-                            <SelectItem value="" disabled>Loading pets...</SelectItem>
+                            <SelectItem value="LOADING" disabled>Loading pets...</SelectItem>
                           ) : pets?.map((pet: any) => (
                             <SelectItem key={pet.id} value={pet.id.toString()}>
                               {pet.name} - {pet.species}

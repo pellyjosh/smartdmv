@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/UserContext";
 import { format, parseISO, compareDesc, safeParse } from "@/lib/date-utils";
-import { Calendar, Check, ChevronLeft, ChevronRight, Filter, Search, Stethoscope, Clipboard, CalendarCheck, Pill, HeartPulse, Pen, AlertTriangle, Clock, Video } from "lucide-react";
+import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Filter, Search, Stethoscope, Clipboard, CalendarCheck, Pill, HeartPulse, Pen, AlertTriangle, Clock, Video } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,14 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Calendar } from "@/components/ui/calendar";
 import { UserRoleEnum } from "@/db/schema";
+import { Pet } from "@/db/schemas/petsSchema";
 
 // Define types for the timeline items
 export type TimelineItemType = 
@@ -59,6 +62,7 @@ export default function PatientTimelinePage() {
   const [dateRangeEnd, setDateRangeEnd] = useState<Date | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [groupByDate, setGroupByDate] = useState(true);
+  const [petSelectorOpen, setPetSelectorOpen] = useState(false);
 
   // Get the petId from URL query params if available
   const searchParams = new URLSearchParams(window.location.search);
@@ -93,13 +97,54 @@ export default function PatientTimelinePage() {
     );
   }
 
+  // Get practice ID based on user type
+  const practiceId = useMemo(() => {
+    if (!user) return null;
+    
+    // For practice users (CLIENT, PRACTICE_ADMINISTRATOR, VETERINARIAN, PRACTICE_MANAGER)
+    if ('practiceId' in user) {
+      return user.practiceId;
+    }
+    
+    // For administrators and super admins
+    if ('currentPracticeId' in user) {
+      return user.currentPracticeId;
+    }
+    
+    return null;
+  }, [user]);
+
   // Fetch all pets
-  const { data: pets, isLoading: isPetsLoading } = useQuery({
-    queryKey: ["/api/pets"],
+  const { data: pets, isLoading: isPetsLoading } = useQuery<Pet[]>({
+    queryKey: ["/api/pets", practiceId],
+    enabled: !!practiceId,
+    queryFn: async () => {
+      if (!practiceId) {
+        throw new Error('No practice ID available');
+      }
+      
+      const response = await fetch(`/api/pets?practiceId=${practiceId}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Error fetching pets: ${response.status} ${response.statusText} - ${errorText}`);
+        throw new Error(`Failed to fetch pets: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log(`Fetched ${data.length} pets for practice ${practiceId}`);
+      return data;
+    }
   });
 
   // Fetch timeline data for the selected pet
-  const { data: timelineData, isLoading: isTimelineLoading, error: timelineError } = useQuery({
+  const { data: timelineData, isLoading: isTimelineLoading, error: timelineError } = useQuery<TimelineItem[]>({
     queryKey: ["/api/pets", selectedPetId, "timeline"],
     enabled: !!selectedPetId,
     queryFn: async ({ queryKey }) => {
@@ -122,11 +167,21 @@ export default function PatientTimelinePage() {
           throw new Error(`Failed to fetch timeline data: ${response.status} ${response.statusText}`);
         }
         
-        const data = await response.json();
+        const data: TimelineItem[] = await response.json();
         console.log(`Timeline data fetched for pet ${petId}: ${data.length} items`);
         
+        // Debug: Log some sample dates to understand their format
+        if (data.length > 0) {
+          console.log('Sample timeline item dates:', data.slice(0, 3).map(item => ({
+            id: item.id,
+            type: item.type,
+            date: item.date,
+            dateType: typeof item.date
+          })));
+        }
+        
         // Check if telemedicine data is present
-        const hasTelemedEvents = data.some(item => item.type === "telemedicine");
+        const hasTelemedEvents = data.some((item: TimelineItem) => item.type === "telemedicine");
         if (!hasTelemedEvents) {
           console.log("No telemedicine events found in the regular timeline data");
           console.log("Will query for virtual appointments separately");
@@ -144,11 +199,11 @@ export default function PatientTimelinePage() {
             });
             
             if (virtualApptsResponse.ok) {
-              const virtualAppts = await virtualApptsResponse.json();
+              const virtualAppts: any[] = await virtualApptsResponse.json();
               console.log(`Found ${virtualAppts.length} virtual appointments for pet ${petId}:`, virtualAppts);
               
               // If found, transform virtual appointments into timeline items and add them
-              const telemedEvents = virtualAppts.map(appt => ({
+              const telemedEvents: TimelineItem[] = virtualAppts.map((appt: any) => ({
                 id: appt.id,
                 type: "telemedicine",
                 title: appt.title || "Virtual Consultation",
@@ -185,8 +240,31 @@ export default function PatientTimelinePage() {
   // Get the selected pet details
   const selectedPet = useMemo(() => {
     if (!pets || !selectedPetId) return null;
-    return pets.find((pet: any) => pet.id === selectedPetId);
+    return pets.find((pet: Pet) => Number(pet.id) === selectedPetId);
   }, [pets, selectedPetId]);
+
+  // Helper function to parse dates more robustly
+  const parseTimelineDate = (dateValue: any): Date | null => {
+    if (!dateValue) return null;
+    
+    // If it's already a Date object
+    if (dateValue instanceof Date) {
+      return isNaN(dateValue.getTime()) ? null : dateValue;
+    }
+    
+    // If it's a number (timestamp)
+    if (typeof dateValue === 'number') {
+      const date = new Date(dateValue);
+      return isNaN(date.getTime()) ? null : date;
+    }
+    
+    // If it's a string, use safeParse
+    if (typeof dateValue === 'string') {
+      return safeParse(dateValue);
+    }
+    
+    return null;
+  };
 
   // Filter and sort timeline items
   const filteredTimelineItems = useMemo(() => {
@@ -230,7 +308,7 @@ export default function PatientTimelinePage() {
       startDateNoTime.setHours(0, 0, 0, 0);
       
       items = items.filter(item => {
-        const parsedDate = safeParse(item.date);
+        const parsedDate = parseTimelineDate(item.date);
         if (!parsedDate) {
           console.warn(`Invalid date encountered: ${item.date}`);
           return false; // Filter out items with invalid dates
@@ -245,7 +323,7 @@ export default function PatientTimelinePage() {
       endDate.setHours(23, 59, 59, 999);
       
       items = items.filter(item => {
-        const parsedDate = safeParse(item.date);
+        const parsedDate = parseTimelineDate(item.date);
         if (!parsedDate) {
           console.warn(`Invalid date encountered: ${item.date}`);
           return false; // Filter out items with invalid dates
@@ -266,8 +344,8 @@ export default function PatientTimelinePage() {
     
     // Sort by date, most recent first
     items.sort((a, b) => {
-      const dateA = safeParse(a.date);
-      const dateB = safeParse(b.date);
+      const dateA = parseTimelineDate(a.date);
+      const dateB = parseTimelineDate(b.date);
       
       // Handle case where one or both dates are invalid
       if (!dateA && !dateB) return 0;
@@ -287,7 +365,7 @@ export default function PatientTimelinePage() {
     const groups: Record<string, TimelineItem[]> = {};
     
     filteredTimelineItems.forEach(item => {
-      const parsedDate = safeParse(item.date);
+      const parsedDate = parseTimelineDate(item.date);
       
       // Skip items with invalid dates
       if (!parsedDate) {
@@ -329,7 +407,7 @@ export default function PatientTimelinePage() {
   const getTimelineItemIcon = (type: TimelineItemType) => {
     switch (type) {
       case "appointment":
-        return <Calendar className="h-4 w-4" />;
+        return <CalendarIcon className="h-4 w-4" />;
       case "telemedicine":
         return <Video className="h-4 w-4" />;
       case "soap_note":
@@ -345,7 +423,7 @@ export default function PatientTimelinePage() {
       case "checklist_item":
         return <CalendarCheck className="h-4 w-4" />;
       default:
-        return <Calendar className="h-4 w-4" />;
+        return <CalendarIcon className="h-4 w-4" />;
     }
   };
 
@@ -407,7 +485,7 @@ export default function PatientTimelinePage() {
                 <CardDescription>
                   {getTimelineItemTypeLabel(item.type)} • {
                     (() => {
-                      const parsedDate = safeParse(item.date);
+                      const parsedDate = parseTimelineDate(item.date);
                       return parsedDate ? format(parsedDate, 'PPp') : 'Date unavailable';
                     })()
                   }
@@ -524,27 +602,53 @@ export default function PatientTimelinePage() {
         </div>
         
         <div className="flex items-center gap-2">
-          <Select 
-            value={selectedPetId?.toString() || ""} 
-            onValueChange={(value) => setSelectedPetId(Number(value))}
-          >
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select a patient" />
-            </SelectTrigger>
-            <SelectContent>
-              {isPetsLoading ? (
-                <div className="p-2">Loading pets...</div>
-              ) : pets && pets.length > 0 ? (
-                pets.map((pet: any) => (
-                  <SelectItem key={pet.id} value={pet.id.toString()}>
-                    {pet.name} ({pet.species})
-                  </SelectItem>
-                ))
-              ) : (
-                <div className="p-2">No pets found</div>
-              )}
-            </SelectContent>
-          </Select>
+          <Popover open={petSelectorOpen} onOpenChange={setPetSelectorOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={petSelectorOpen}
+                className="w-[250px] justify-between"
+              >
+                {selectedPetId ? (
+                  (() => {
+                    const selectedPet = pets?.find(pet => Number(pet.id) === selectedPetId);
+                    return selectedPet ? `${selectedPet.name} (${selectedPet.species})` : "Select a patient";
+                  })()
+                ) : "Select a patient"}
+                <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[250px] p-0">
+              <Command>
+                <CommandInput placeholder="Search patients..." />
+                <CommandList>
+                  <CommandEmpty>
+                    {isPetsLoading ? "Loading pets..." : "No pets found."}
+                  </CommandEmpty>
+                  <CommandGroup>
+                    {pets && pets.map((pet: Pet) => (
+                      <CommandItem
+                        key={pet.id}
+                        value={`${pet.name} ${pet.species} ${pet.breed || ''}`}
+                        onSelect={() => {
+                          setSelectedPetId(Number(pet.id));
+                          setPetSelectorOpen(false);
+                        }}
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium">{pet.name}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {pet.species} {pet.breed ? `• ${pet.breed}` : ''}
+                          </span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
           
           <Button 
             variant="outline" 
@@ -585,7 +689,7 @@ export default function PatientTimelinePage() {
                       <span>•</span>
                       <span>Born: {
                         (() => {
-                          const parsedDate = safeParse(selectedPet.dateOfBirth);
+                          const parsedDate = parseTimelineDate(selectedPet.dateOfBirth);
                           return parsedDate ? format(parsedDate, 'MMM dd, yyyy') : 'Date unavailable';
                         })()
                       }</span>
@@ -642,7 +746,7 @@ export default function PatientTimelinePage() {
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="justify-start text-left font-normal w-full">
-                          <Calendar className="mr-2 h-4 w-4" />
+                          <CalendarIcon className="mr-2 h-4 w-4" />
                           {dateRangeStart ? format(dateRangeStart, 'PP') : "Start date"}
                         </Button>
                       </PopoverTrigger>
@@ -650,7 +754,7 @@ export default function PatientTimelinePage() {
                         <Calendar
                           mode="single"
                           selected={dateRangeStart as Date}
-                          onSelect={setDateRangeStart}
+                          onSelect={(date) => setDateRangeStart(date || null)}
                           initialFocus
                         />
                       </PopoverContent>
@@ -659,7 +763,7 @@ export default function PatientTimelinePage() {
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="justify-start text-left font-normal w-full">
-                          <Calendar className="mr-2 h-4 w-4" />
+                          <CalendarIcon className="mr-2 h-4 w-4" />
                           {dateRangeEnd ? format(dateRangeEnd, 'PP') : "End date"}
                         </Button>
                       </PopoverTrigger>
@@ -667,7 +771,7 @@ export default function PatientTimelinePage() {
                         <Calendar
                           mode="single"
                           selected={dateRangeEnd as Date}
-                          onSelect={setDateRangeEnd}
+                          onSelect={(date) => setDateRangeEnd(date || null)}
                           initialFocus
                           disabled={(date) => dateRangeStart ? date < dateRangeStart : false}
                         />
@@ -768,8 +872,8 @@ export default function PatientTimelinePage() {
             {groupByDate && groupedTimelineItems ? (
               Object.keys(groupedTimelineItems)
                 .sort((a, b) => {
-                  const dateA = safeParse(a);
-                  const dateB = safeParse(b);
+                  const dateA = parseTimelineDate(a);
+                  const dateB = parseTimelineDate(b);
                   
                   // Handle case where one or both dates are invalid
                   if (!dateA && !dateB) return 0;
@@ -785,7 +889,7 @@ export default function PatientTimelinePage() {
                       <span className="flex-shrink mx-4 text-gray-600 text-sm font-medium">
                         {
                           (() => {
-                            const parsedDate = safeParse(dateStr);
+                            const parsedDate = parseTimelineDate(dateStr);
                             return parsedDate ? format(parsedDate, 'MMMM d, yyyy') : 'Date unavailable';
                           })()
                         }

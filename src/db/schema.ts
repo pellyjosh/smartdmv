@@ -28,6 +28,7 @@ import {
   labOrderTestsRelations,
   labResultsRelations
 } from './schemas/labSchema';
+import { treatmentChecklistTemplates, templateItems, assignedChecklists, checklistItems } from './schemas/checklistsSchema';
 import {
   kennels,
   boardingStays,
@@ -97,7 +98,12 @@ export const schema = {
   medicalRecordAttachments,
   electronicSignatures,
   // AI Configuration tables
-  aiConfigs
+  aiConfigs,
+  // Checklists tables
+  treatmentChecklistTemplates,
+  templateItems,
+  assignedChecklists,
+  checklistItems
 };
 
 // Re-export all tables and their relations for Drizzle to use
@@ -126,6 +132,7 @@ export * from './schemas/labSchema';
 export * from './schemas/boardingSchema';
 export * from './schemas/medicalImagingSchema';
 export * from './schemas/aiConfigSchema';
+export * from './schemas/checklistsSchema';
 
 // You might also want to re-export the userRoleEnum if it's used elsewhere for typing
 export { UserRoleEnum };

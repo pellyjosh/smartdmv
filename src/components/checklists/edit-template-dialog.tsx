@@ -99,7 +99,18 @@ export default function EditTemplateDialog({ template, open, onOpenChange }: Edi
   }, [template, form]);
 
   // Fetch template items
-  const { data: templateItems = [], refetch } = useQuery({
+  type TemplateItemRow = {
+    id: number;
+    title: string;
+    description?: string | null;
+    position?: number | null;
+    isRequired?: boolean | null;
+    estimatedDuration?: number | null;
+    reminderThreshold?: number | null;
+    assigneeRole?: string | null;
+  };
+
+  const { data: templateItems = [], refetch } = useQuery<TemplateItemRow[]>({
     queryKey: ['/api/treatment-templates', template.id, 'items'],
     queryFn: async () => {
       const res = await apiRequest('GET', `/api/treatment-templates/${template.id}/items`);
@@ -179,7 +190,7 @@ export default function EditTemplateDialog({ template, open, onOpenChange }: Edi
                       <FormLabel>Category</FormLabel>
                       <Select 
                         onValueChange={field.onChange} 
-                        defaultValue={field.value}
+                        value={field.value}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -234,13 +245,14 @@ export default function EditTemplateDialog({ template, open, onOpenChange }: Edi
                       <FormLabel>Auto-assign to Appointment Types</FormLabel>
                       <div className="space-y-4">
                         <div className="flex flex-wrap gap-2">
-                          {field.value?.map((type, index) => (
+                          {(field.value || []).map((type, index) => (
                             <Badge key={index} variant="secondary" className="px-2 py-1 flex items-center gap-1">
                               {type}
                               <X 
                                 className="h-3 w-3 cursor-pointer" 
                                 onClick={() => {
-                                  const newValues = [...field.value];
+                                  const base = field.value || [];
+                                  const newValues = [...base];
                                   newValues.splice(index, 1);
                                   field.onChange(newValues);
                                 }} 
@@ -251,8 +263,9 @@ export default function EditTemplateDialog({ template, open, onOpenChange }: Edi
                         <div className="flex">
                           <Select 
                             onValueChange={(value) => {
-                              if (value && !field.value?.includes(value)) {
-                                const newValues = [...(field.value || []), value];
+                              const base = field.value || [];
+                              if (value && !base.includes(value)) {
+                                const newValues = [...base, value];
                                 field.onChange(newValues);
                                 setAppointmentType('');
                               }

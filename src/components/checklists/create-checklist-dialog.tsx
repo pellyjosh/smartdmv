@@ -42,6 +42,7 @@ import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useUser } from '@/context/UserContext';
 
 // Define the form schema
 const checklistFormSchema = z.object({
@@ -71,7 +72,12 @@ export default function CreateChecklistDialog({
   initialAppointmentId 
 }: CreateChecklistDialogProps) {
   const { toast } = useToast();
+  const { user } = useUser();
   const queryClient = useQueryClient();
+  const practiceId = (user && ('currentPracticeId' in user ? (user as any).currentPracticeId : (user as any).practiceId)) as string | number | undefined;
+  const petIdWatch = ((): number | undefined => {
+    try { return (useForm as any) ? undefined : undefined; } catch { return undefined; }
+  })();
   
   // Define form
   const form = useForm<ChecklistFormValues>({
@@ -89,21 +95,41 @@ export default function CreateChecklistDialog({
   });
 
   // Fetch templates for dropdown
-  const { data: templates = [] } = useQuery({
+  type TemplateSummary = { id: number; name: string; category?: string | null };
+  const { data: templates = [] } = useQuery<TemplateSummary[]>({
     queryKey: ['/api/treatment-templates'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/treatment-templates');
+      return res.json();
+    },
     enabled: open,
   });
 
   // Fetch pets for dropdown
-  const { data: pets = [] } = useQuery({
-    queryKey: ['/api/pets'],
-    enabled: open,
+  type PetSummary = { id: number; name: string; species?: string | null };
+  const { data: pets = [] } = useQuery<PetSummary[]>({
+    queryKey: ['/api/pets', practiceId],
+    queryFn: async () => {
+      const res = await apiRequest('GET', `/api/pets?practiceId=${practiceId}`);
+      return res.json();
+    },
+    enabled: open && !!practiceId,
   });
 
   // Create mutation
   const mutation = useMutation({
     mutationFn: async (values: ChecklistFormValues) => {
-      const response = await apiRequest('POST', '/api/assigned-checklists', values);
+      const payload = {
+        name: values.name,
+        petId: Number(values.petId),
+        templateId: values.templateId ? Number(values.templateId) : null,
+        priority: values.priority,
+        status: values.status,
+        notes: values.notes ?? null,
+        dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : null,
+        appointmentId: values.appointmentId ? Number(values.appointmentId) : null,
+      };
+      const response = await apiRequest('POST', '/api/assigned-checklists', payload);
       return await response.json();
     },
     onSuccess: () => {
@@ -164,8 +190,8 @@ export default function CreateChecklistDialog({
                 <FormItem>
                   <FormLabel>Pet</FormLabel>
                   <Select 
-                    onValueChange={field.onChange} 
-                    defaultValue={field.value.toString()}
+                    onValueChange={(val) => field.onChange(Number(val))}
+                    value={field.value ? String(field.value) : ''}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -195,8 +221,8 @@ export default function CreateChecklistDialog({
                 <FormItem>
                   <FormLabel>Template (Optional)</FormLabel>
                   <Select 
-                    onValueChange={field.onChange} 
-                    defaultValue={field.value?.toString()}
+                    onValueChange={(val) => field.onChange(val && val !== 'NONE' ? Number(val) : undefined)}
+                    value={field.value ? String(field.value) : 'NONE'}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -204,7 +230,7 @@ export default function CreateChecklistDialog({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="0">Create from scratch</SelectItem>
+                      <SelectItem value="NONE">Create from scratch</SelectItem>
                       {templates.map((template: any) => (
                         <SelectItem key={template.id} value={template.id.toString()}>
                           {template.name} 
@@ -231,8 +257,8 @@ export default function CreateChecklistDialog({
                   <FormItem>
                     <FormLabel>Priority</FormLabel>
                     <Select 
-                      onValueChange={field.onChange} 
-                      defaultValue={field.value}
+                      onValueChange={field.onChange}
+                      value={field.value}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -258,8 +284,8 @@ export default function CreateChecklistDialog({
                   <FormItem>
                     <FormLabel>Status</FormLabel>
                     <Select 
-                      onValueChange={field.onChange} 
-                      defaultValue={field.value}
+                      onValueChange={field.onChange}
+                      value={field.value}
                     >
                       <FormControl>
                         <SelectTrigger>

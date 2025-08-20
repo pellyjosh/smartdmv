@@ -84,7 +84,7 @@ export async function GET(
       );
     }
 
-    const soapNote = await db.query.soapNotes.findFirst({
+  const soapNote = await db.query.soapNotes.findFirst({
       where: eq(soapNotes.id, soapNoteId),
       with: {
         appointment: true,
@@ -100,8 +100,7 @@ export async function GET(
         { status: 404 }
       );
     }
-
-    return NextResponse.json(soapNote);
+  return NextResponse.json(soapNote);
   } catch (error) {
     console.error("Error fetching SOAP note:", error);
     return NextResponse.json(
