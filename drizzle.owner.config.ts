@@ -6,7 +6,7 @@ export default {
   out: './src/owner/db/migrations',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.OWNER_DATABASE_URL || process.env.DATABASE_URL!,
+    url: process.env.DATABASE_URL?.includes('%23') ? process.env.DATABASE_URL : (process.env.DATABASE_URL || '').replace('#', '%23'),
   },
   verbose: true,
   strict: true,

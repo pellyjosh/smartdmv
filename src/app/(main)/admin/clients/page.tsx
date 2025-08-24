@@ -505,8 +505,11 @@ export default function ClientsPage() {
   // Fetch clients (users with CLIENT role)
   const { data: clients, isLoading: isClientsLoading, refetch: refetchClients } = useQuery<User[]>({
     queryKey: ["/api/users/clients", userPracticeId],
-    enabled: !!user && user.role !== UserRoleEnum.CLIENT,
+    enabled: !!user && user.role !== UserRoleEnum.CLIENT && !!userPracticeId && userPracticeId.toString().trim() !== '',
     queryFn: async () => {
+      if (!userPracticeId || userPracticeId.toString().trim() === '') {
+        throw new Error('Practice ID is required');
+      }
       const res = await fetch(`/api/auth/clients?practiceId=${userPracticeId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch clients");
       return res.json();

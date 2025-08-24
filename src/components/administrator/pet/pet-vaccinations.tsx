@@ -135,7 +135,7 @@ const PetVaccinations = ({ petId }: { petId: string }) => {
           </div>
           <div className="flex items-center gap-2">
               {canManageVaccinations && (
-                <Link href={`/vaccinations/add?petId=${petId}`}>
+                <Link href={`/admin/vaccinations/add?petId=${petId}`}>
                   <Button size="sm" className="h-8 gap-1">
                     <Plus className="h-4 w-4" />
                     Add Vaccination
@@ -172,7 +172,7 @@ const PetVaccinations = ({ petId }: { petId: string }) => {
             <div className="py-8 text-center">
               <p className="text-muted-foreground mb-2">No vaccination records found</p>
               {canManageVaccinations && (
-                <Link href={`/vaccinations/add?petId=${petId}`}>
+                <Link href={`/admin/vaccinations/add?petId=${petId}`}>
                   <Button size="sm">
                     <Plus className="h-4 w-4 mr-2" />
                     Add Vaccination

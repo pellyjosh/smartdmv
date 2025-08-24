@@ -1,10 +1,11 @@
 import { config } from 'dotenv';
 import bcrypt from 'bcryptjs';
+import { eq } from 'drizzle-orm';
 
 config(); // Load environment variables from .env file
 
 import { db } from './index';
-import { NeonHttpDatabase } from 'drizzle-orm/neon-http';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 // Import all necessary schemas
 import {
   practices,
@@ -32,8 +33,8 @@ import {
 } from './schema';
 import { seedMarketplaceData } from './seedMarketplaceData';
 
-// PostgreSQL-only database operations
-const pgDb = db as NeonHttpDatabase<typeof import('./schema')>;
+// PostgreSQL-only database operations (node-postgres Drizzle DB)
+const pgDb = db as unknown as NodePgDatabase<typeof import('./schema')>;
 
 // Type-safe database operations for PostgreSQL
 async function insertWithUpsert<T>(table: any, data: T[], tableName: string) {
@@ -175,6 +176,27 @@ async function seed() {
 
   const insertedUsers = await insertWithReturning(users, usersData, 'users', { id: users.id, email: users.email, role: users.role });
   const [adminUser, practiceAdminUser, client1User, client2User, vet1User, vet2User, vet3User] = insertedUsers;
+
+  // Step 2.5: Seed administrator accessible practices for SUPER_ADMIN and ADMINISTRATOR users
+  console.log('🔐 Seeding administrator accessible practices...');
+  const adminAccessiblePracticesData = [];
+  
+  // For SUPER_ADMIN users, give access to all practices
+  if (adminUser.role === UserRoleEnum.SUPER_ADMIN || adminUser.role === UserRoleEnum.ADMINISTRATOR) {
+    for (const practice of insertedPractices) {
+      adminAccessiblePracticesData.push({
+        administratorId: adminUser.id,
+        practiceId: practice.id,
+      });
+    }
+  }
+  
+  // Add any other administrator users access here
+  // For practice administrators, they typically don't need entries in this table as they have direct practiceId
+  
+  if (adminAccessiblePracticesData.length > 0) {
+    await insertWithUpsert(administratorAccessiblePractices, adminAccessiblePracticesData, 'administrator_accessible_practices');
+  }
 
   // Step 3: Seed pets with references to users and practices
   console.log('🐕 Seeding pets...');
@@ -439,7 +461,7 @@ async function seed() {
       assigneeRole: templateItems.assigneeRole,
     })
     .from(templateItems)
-    .where((t) => (t as any).eq(templateItems.templateId, postOpTemplate.id) as any);
+    .where(eq(templateItems.templateId, postOpTemplate.id));
 
   if (postOpItems.length) {
     await insertBatch(

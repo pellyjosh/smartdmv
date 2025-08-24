@@ -81,6 +81,7 @@ export async function POST(req: Request) {
     // Prepare data for Drizzle insertion
     const newAppointmentData = {
       title: title,
+      type: type, // ADD THIS LINE - Save the appointment type to database
       description: notes || null, // Map 'notes' from form to 'description' in DB
       date: appointmentDate, // Pass the Date object directly
       durationMinutes: duration.toString(), // Convert number duration to string as per your schema
@@ -116,17 +117,24 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
+    // console.log('[DEBUG API] Starting GET /api/appointments');
+    
     const { searchParams } = new URL(req.url);
     const clientIdParam = searchParams.get("clientId");
     const practiceIdParam = searchParams.get("practiceId");
     const date = searchParams.get("date");
 
+    // console.log('[DEBUG API] Raw query params:', { clientIdParam, practiceIdParam, date });
+
     // Convert string parameters to numbers if provided
     const clientId = clientIdParam ? parseInt(clientIdParam) : null;
     const practiceId = practiceIdParam ? parseInt(practiceIdParam) : null;
 
+    // console.log('[DEBUG API] Parsed params:', { clientId, practiceId, date });
+
     // If date is provided, filter appointments for that specific date
     if (date) {
+      console.log('[DEBUG API] Date-based query');
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(date);
@@ -140,6 +148,8 @@ export async function GET(req: Request) {
       conditions.push(gte(appointments.date, startOfDay));
       conditions.push(lte(appointments.date, endOfDay));
 
+      // console.log('[DEBUG API] Date conditions count:', conditions.length);
+
       const result = await db.query.appointments.findMany({
         where: and(...conditions),
         with: {
@@ -150,11 +160,13 @@ export async function GET(req: Request) {
         orderBy: (appointments, { asc }) => [asc(appointments.date)],
       });
 
+      // console.log('[DEBUG API] Date-based results:', result.length);
       return NextResponse.json(result);
     }
 
     // Original logic for non-date queries
     if (!clientId && !practiceId) {
+      // console.log('[DEBUG API] Missing required params - returning 400');
       return NextResponse.json(
         { error: "Either clientId, practiceId, or date is required" },
         { status: 400 }
@@ -162,8 +174,16 @@ export async function GET(req: Request) {
     }
 
     const conditions = [];
-    if (clientId) conditions.push(eq(appointments.clientId, clientId));
-    if (practiceId) conditions.push(eq(appointments.practiceId, practiceId));
+    if (clientId) {
+      // console.log('[DEBUG API] Adding clientId condition:', clientId);
+      conditions.push(eq(appointments.clientId, clientId));
+    }
+    if (practiceId) {
+      // console.log('[DEBUG API] Adding practiceId condition:', practiceId);
+      conditions.push(eq(appointments.practiceId, practiceId));
+    }
+
+    // console.log('[DEBUG API] About to query database with', conditions.length, 'conditions');
 
     const result = await db.query.appointments.findMany({
       where: and(...conditions),
@@ -174,6 +194,23 @@ export async function GET(req: Request) {
       },
       orderBy: (appointments, { desc }) => [desc(appointments.date)],
     });
+
+    // console.log('[DEBUG API] Query completed, found', result.length, 'appointments');
+    
+    if (result.length > 0) {
+      // console.log('[DEBUG API] Sample appointment:', {
+      //   id: result[0].id,
+      //   title: result[0].title,
+      //   type: result[0].type,
+      //   practiceId: result[0].practiceId,
+      //   status: result[0].status,
+      //   date: result[0].date
+      // });
+      
+      // Log all appointment types
+      const types = [...new Set(result.map(r => r.type).filter(Boolean))];
+      // console.log('[DEBUG API] All types found:', types);
+    }
 
     return NextResponse.json(result);
   } catch (error) {

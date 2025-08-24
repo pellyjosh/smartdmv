@@ -12,6 +12,7 @@ export const appointmentStatusEnum = [
   'triage',            // Waiting for initial assessment
   'active',            // Currently being treated
   'in_treatment',      // Actively in treatment room
+  'in_progress',       // For telemedicine sessions that are active
   'completed',         // Finished successfully
   'pending_pickup',    // Waiting for owner pickup
   'cancelled',         // Cancelled by owner or practice
@@ -31,6 +32,12 @@ export const appointments = dbTable('appointments', {
   type: text('type'),
   practitionerId: foreignKeyInt('practitioner_id').references(() => users.id, { onDelete: 'set null' }),
   practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
+  
+  // Telemedicine specific fields
+  roomId: text('room_id'), // Unique room ID for WebRTC sessions
+  notes: text('notes'), // Session notes/appointment notes
+  telemedicineStartedAt: timestamp('telemedicine_started_at', { mode: 'date' }),
+  telemedicineEndedAt: timestamp('telemedicine_ended_at', { mode: 'date' }),
 
   createdAt: timestamp('createdAt', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
@@ -76,8 +83,19 @@ export interface Appointment {
   petId: string | null;
   clientId: string | null;
   staffId: string | null;
-  practitionerId: string | null; // Add to the TypeScript interface
+  type: string | null;
+  practitionerId: string | null;
   practiceId: string;
+  roomId: string | null;
+  notes: string | null;
+  telemedicineStartedAt: Date | null;
+  telemedicineEndedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  // Relations
+  pet?: any;
+  client?: any;
+  staff?: any;
+  practitioner?: any;
+  practice?: any;
 }

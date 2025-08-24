@@ -434,23 +434,34 @@ export function useUser() {
 
   // Example of how to access practiceId safely:
   const userPracticeId = context.user ?
-    (context.user.role === 'CLIENT' || context.user.role === 'PRACTICE_ADMINISTRATOR' ?
-      context.user.practiceId :
-      (context.user.role === 'ADMINISTRATOR' ? context.user.currentPracticeId : undefined)
+    (context.user.role === 'CLIENT' || context.user.role === 'PRACTICE_ADMINISTRATOR' || context.user.role === 'VETERINARIAN' || context.user.role === 'PRACTICE_MANAGER' ?
+      (context.user.practiceId && context.user.practiceId.toString().trim() !== '' ? context.user.practiceId : undefined) :
+      (context.user.role === 'ADMINISTRATOR' || context.user.role === 'SUPER_ADMIN' ? 
+        (context.user.currentPracticeId && context.user.currentPracticeId.toString().trim() !== '' ? context.user.currentPracticeId : undefined) : 
+        undefined)
     ) : undefined;
 
+  console.log('[useUser] User object:', context.user);
+  console.log('[useUser] User role:', context.user?.role);
+  console.log('[useUser] Raw practiceId:', context.user && 'practiceId' in context.user ? context.user.practiceId : 'N/A');
+  console.log('[useUser] Raw currentPracticeId:', context.user && 'currentPracticeId' in context.user ? context.user.currentPracticeId : 'N/A');
   console.log('[useUser] Derived userPracticeId:', userPracticeId);
 
   // You can also return a more specific user object if needed
   // This approach is useful if different parts of your app need different user properties
   const getUserPracticeId = useCallback(() => {
     if (!context.user) return undefined;
-    if (context.user.role === 'CLIENT' || context.user.role === 'PRACTICE_ADMINISTRATOR') {
-      return context.user.practiceId;
+    
+    if (context.user.role === 'CLIENT' || context.user.role === 'PRACTICE_ADMINISTRATOR' || context.user.role === 'VETERINARIAN' || context.user.role === 'PRACTICE_MANAGER') {
+      const practiceId = context.user.practiceId;
+      return practiceId && practiceId.toString().trim() !== '' ? practiceId : undefined;
     }
-    if (context.user.role === 'ADMINISTRATOR') {
-      return context.user.currentPracticeId;
+    
+    if (context.user.role === 'ADMINISTRATOR' || context.user.role === 'SUPER_ADMIN') {
+      const currentPracticeId = context.user.currentPracticeId;
+      return currentPracticeId && currentPracticeId.toString().trim() !== '' ? currentPracticeId : undefined;
     }
+    
     return undefined;
   }, [context.user]);
 

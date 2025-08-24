@@ -56,8 +56,10 @@ export async function GET(request: NextRequest) {
               appointment.status === 'rejected' ? 'cancelled' : 
               appointment.status === 'pending' ? 'pending' : 'completed',
       reason: appointment.description || 'General consultation',
-      type: Math.random() > 0.5 ? 'in-person' : 'virtual', // Mock data - you may want to add this field to schema
-      duration: parseInt(appointment.durationMinutes || '30'),
+      type: appointment.type || 'in-person', // Use actual appointment type from database
+      duration: parseInt(Array.isArray(appointment.durationMinutes) 
+        ? appointment.durationMinutes[0] || '30' 
+        : appointment.durationMinutes || '30'),
       petId: appointment.petId,
       petName: appointment.pet?.name,
       doctor: appointment.practitioner?.name || 'Dr. Smith',
@@ -99,6 +101,7 @@ export async function POST(request: NextRequest) {
     // Create appointment with client information
     const newAppointment = await (db as any).insert(appointments).values({
       title: appointmentData.title,
+      type: appointmentData.type || null, // Add appointment type
       description: appointmentData.description || null,
       date: new Date(appointmentData.date),
       durationMinutes: appointmentData.durationMinutes || '30',

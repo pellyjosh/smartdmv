@@ -54,12 +54,24 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import PageHeader from "@/components/page-header";
 import Breadcrumbs from "@/components/breadcrumbs";
 import LoadingSpinner from "@/components/loading-spinner";
-import { Calendar, FileImage, FileX, ImageIcon, Upload, Plus } from "lucide-react";
+import { Calendar, FileImage, FileX, ImageIcon, Upload, Plus, Check, ChevronsUpDown } from "lucide-react";
 import ImagingViewer from "@/components/medical-imaging/imaging-viewer";
 import { apiRequest } from "@/lib/queryClient";
 import { useUser } from "@/context/UserContext";
@@ -91,6 +103,8 @@ const MedicalImagingPage: React.FC = () => {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isNewStudyDialogOpen, setIsNewStudyDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [vetComboboxOpen, setVetComboboxOpen] = useState(false);
+  const [petComboboxOpen, setPetComboboxOpen] = useState(false);
   
   // Parse pet ID from URL if available
   const petId = params.petId ? parseInt(params.petId as string) : undefined;
@@ -554,25 +568,58 @@ const MedicalImagingPage: React.FC = () => {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Pet</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a pet" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {isPetsLoading ? (
-                            <SelectItem value="LOADING" disabled>Loading pets...</SelectItem>
-                          ) : pets?.map((pet: any) => (
-                            <SelectItem key={pet.id} value={pet.id.toString()}>
-                              {pet.name} - {pet.species}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover open={petComboboxOpen} onOpenChange={setPetComboboxOpen}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={petComboboxOpen}
+                              className="w-full justify-between"
+                            >
+                              {field.value
+                                ? pets?.find((pet: any) => pet.id.toString() === field.value)?.name + 
+                                  ` - ${pets?.find((pet: any) => pet.id.toString() === field.value)?.species}`
+                                : "Select a pet..."}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0">
+                          <Command>
+                            <CommandInput placeholder="Search pets..." />
+                            <CommandEmpty>No pet found.</CommandEmpty>
+                            <CommandGroup>
+                              {isPetsLoading ? (
+                                <CommandItem disabled>Loading pets...</CommandItem>
+                              ) : (
+                                pets?.map((pet: any) => (
+                                  <CommandItem
+                                    key={pet.id}
+                                    value={`${pet.name} ${pet.species}`}
+                                    onSelect={() => {
+                                      field.onChange(pet.id.toString());
+                                      setPetComboboxOpen(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 ${
+                                        field.value === pet.id.toString() ? "opacity-100" : "opacity-0"
+                                      }`}
+                                    />
+                                    {pet.name} - {pet.species}
+                                    {pet.breed && (
+                                      <span className="ml-auto text-xs text-muted-foreground">
+                                        {pet.breed}
+                                      </span>
+                                    )}
+                                  </CommandItem>
+                                ))
+                              )}
+                            </CommandGroup>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -631,23 +678,57 @@ const MedicalImagingPage: React.FC = () => {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Veterinarian</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select veterinarian" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {veterinarians?.map((vet: any) => (
-                            <SelectItem key={vet.id} value={vet.id}>
-                              {vet.firstName} {vet.lastName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover open={vetComboboxOpen} onOpenChange={setVetComboboxOpen}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={vetComboboxOpen}
+                              className="w-full justify-between"
+                            >
+                              {field.value
+                                ? veterinarians?.find((vet: any) => vet.id.toString() === field.value)?.name
+                                : "Select veterinarian..."}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0">
+                          <Command>
+                            <CommandInput placeholder="Search veterinarians..." />
+                            <CommandEmpty>No veterinarian found.</CommandEmpty>
+                            <CommandGroup>
+                              {isVeterinariansLoading ? (
+                                <CommandItem disabled>Loading veterinarians...</CommandItem>
+                              ) : (
+                                veterinarians?.map((vet: any) => (
+                                  <CommandItem
+                                    key={vet.id}
+                                    value={vet.name}
+                                    onSelect={() => {
+                                      field.onChange(vet.id.toString());
+                                      setVetComboboxOpen(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 ${
+                                        field.value === vet.id.toString() ? "opacity-100" : "opacity-0"
+                                      }`}
+                                    />
+                                    {vet.name}
+                                    {vet.email && (
+                                      <span className="ml-auto text-xs text-muted-foreground">
+                                        {vet.email}
+                                      </span>
+                                    )}
+                                  </CommandItem>
+                                ))
+                              )}
+                            </CommandGroup>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                       <FormMessage />
                     </FormItem>
                   )}

@@ -38,7 +38,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { Loader2, Plus, Search, Filter, Calendar } from "lucide-react";
+import { Loader2, Plus, Search, Filter, Calendar, AlertTriangle, Clock, CheckCircle } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import { format } from "date-fns";
 import { UserRoleEnum } from "@/db/schema";
@@ -113,6 +113,34 @@ const VaccinationsPage = () => {
     }
   }, [error, errorToastShown, toast]);
 
+  // Get vaccination priority for sorting (higher number = more urgent)
+  const getVaccinationPriority = (vaccination: any): number => {
+    const { status, nextDueDate, expirationDate } = vaccination;
+    
+    if (status === "cancelled") return 0;
+    if (status === "missed") return 5;
+    
+    const today = new Date();
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(today.getDate() + 30);
+    
+    // Check expiration dates first
+    if (expirationDate) {
+      const expDate = new Date(expirationDate);
+      if (expDate < today) return 4; // Expired
+      if (expDate < thirtyDaysFromNow) return 3; // Expiring soon
+    }
+    
+    // Check due dates
+    if (nextDueDate) {
+      const dueDate = new Date(nextDueDate);
+      if (dueDate < today) return 4; // Overdue
+      if (dueDate < thirtyDaysFromNow) return 2; // Due soon
+    }
+    
+    return 1; // Valid
+  };
+
   // Filter vaccinations based on search term and species filter
   const filteredVaccinations = error 
     ? []
@@ -132,6 +160,20 @@ const VaccinationsPage = () => {
              vaccination.vaccineName.toLowerCase().includes(searchLower) ||
              vaccination.manufacturer?.toLowerCase().includes(searchLower) ||
              vaccination.lotNumber?.toLowerCase().includes(searchLower);
+    })
+    // Sort by priority (most urgent first) then by administration date
+    ?.sort((a: any, b: any) => {
+      const priorityA = getVaccinationPriority(a);
+      const priorityB = getVaccinationPriority(b);
+      
+      if (priorityA !== priorityB) {
+        return priorityB - priorityA; // Higher priority first
+      }
+      
+      // If same priority, sort by administration date (newest first)
+      const dateA = new Date(a.administrationDate).getTime();
+      const dateB = new Date(b.administrationDate).getTime();
+      return dateB - dateA;
     });
 
   // Find pet name by ID
@@ -139,6 +181,41 @@ const VaccinationsPage = () => {
     const pet = pets?.find((p: any) => p.id === petId);
     return pet ? pet.name : "Unknown Pet";
   };
+
+  // Get pet species by ID
+  const getPetSpecies = (petId: any): string => {
+    const pet = pets?.find((p: any) => p.id === petId);
+    return pet ? pet.species : "Unknown";
+  };
+
+  // Calculate statistics
+  const getVaccinationStats = () => {
+    if (!vaccinations) return { total: 0, overdue: 0, dueThisMonth: 0, valid: 0 };
+    
+    const today = new Date();
+    const oneMonthFromNow = new Date();
+    oneMonthFromNow.setMonth(today.getMonth() + 1);
+    
+    let overdue = 0;
+    let dueThisMonth = 0;
+    let valid = 0;
+    
+    vaccinations.forEach((vaccination: any) => {
+      const priority = getVaccinationPriority(vaccination);
+      if (priority >= 4) overdue++;
+      else if (priority >= 2) dueThisMonth++;
+      else valid++;
+    });
+    
+    return {
+      total: vaccinations.length,
+      overdue,
+      dueThisMonth,
+      valid
+    };
+  };
+
+  const stats = getVaccinationStats();
 
   // Format date for display
   const formatDate = (dateString: any): string => {
@@ -208,7 +285,8 @@ const VaccinationsPage = () => {
   const isPracticeAdmin = user?.role === UserRoleEnum.PRACTICE_ADMINISTRATOR;
   const isSuperAdmin = user?.role === UserRoleEnum.SUPER_ADMIN;
   const isVet = user?.role === UserRoleEnum.VETERINARIAN;
-  const canManageVaccinations = isPracticeAdmin || isSuperAdmin || isVet;
+  const isAdministrator = user?.role === UserRoleEnum.ADMINISTRATOR;
+  const canManageVaccinations = isPracticeAdmin || isSuperAdmin || isVet || isAdministrator;
 
   return (
     <>
@@ -223,12 +301,12 @@ const VaccinationsPage = () => {
 
           {canManageVaccinations && (
             <div className="flex gap-2">
-              <Link href="/vaccinations/types">
+              <Link href="/admin/vaccinations/types">
                 <Button variant="outline">
                   Manage Vaccine Types
                 </Button>
               </Link>
-              <Link href="/vaccinations/add">
+              <Link href="/admin/vaccinations/add">
                 <Button>
                   <Plus className="h-4 w-4 mr-2" /> 
                   Add Vaccination
@@ -237,6 +315,67 @@ const VaccinationsPage = () => {
             </div>
           )}
         </div>
+
+        {/* Statistics Cards */}
+        {!isLoadingVaccinations && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <div className="rounded-full p-2 bg-blue-100">
+                    <Calendar className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-muted-foreground">Total Records</p>
+                    <p className="text-2xl font-bold">{stats.total}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <div className="rounded-full p-2 bg-red-100">
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-muted-foreground">Overdue</p>
+                    <p className="text-2xl font-bold text-red-600">{stats.overdue}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <div className="rounded-full p-2 bg-yellow-100">
+                    <Clock className="h-4 w-4 text-yellow-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-muted-foreground">Due Soon</p>
+                    <p className="text-2xl font-bold text-yellow-600">{stats.dueThisMonth}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <div className="rounded-full p-2 bg-green-100">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-muted-foreground">Up to Date</p>
+                    <p className="text-2xl font-bold text-green-600">{stats.valid}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <Card>
           <CardHeader>
@@ -309,7 +448,7 @@ const VaccinationsPage = () => {
                       : "No recently expired vaccinations in the last 3 months."}
                 </p>
                 {canManageVaccinations && (
-                  <Link href="/vaccinations/add">
+                  <Link href="/admin/vaccinations/add">
                     <Button>
                       <Plus className="h-4 w-4 mr-2" /> Add Vaccination
                     </Button>
@@ -327,6 +466,7 @@ const VaccinationsPage = () => {
                         <TableHead>Date Administered</TableHead>
                         <TableHead>Next Due Date</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Administering Vet</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -335,16 +475,23 @@ const VaccinationsPage = () => {
                         <TableRow key={vaccination.id}>
                           <TableCell>
                             <Link href={`/pets/${vaccination.petId}`}>
-                              <span className="font-medium hover:underline cursor-pointer">
-                                {getPetName(vaccination.petId)}
-                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-medium hover:underline cursor-pointer">
+                                  {getPetName(vaccination.petId)}
+                                </span>
+                                <span className="text-xs text-muted-foreground capitalize">
+                                  {getPetSpecies(vaccination.petId)}
+                                </span>
+                              </div>
                             </Link>
                           </TableCell>
                           <TableCell>
-                            <div className="font-medium">{vaccination.vaccineName}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {vaccination.manufacturer || "Unknown manufacturer"}
-                              {vaccination.lotNumber && ` • Lot: ${vaccination.lotNumber}`}
+                            <div className="flex flex-col">
+                              <div className="font-medium">{vaccination.vaccineName}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {vaccination.manufacturer || "Unknown manufacturer"}
+                                {vaccination.lotNumber && ` • Lot: ${vaccination.lotNumber}`}
+                              </div>
                             </div>
                           </TableCell>
                           <TableCell>
@@ -356,8 +503,13 @@ const VaccinationsPage = () => {
                           <TableCell>
                             {getStatusBadge(vaccination)}
                           </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {vaccination.administeringVet?.name || "Not specified"}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right">
-                            <Link href={`/vaccinations/${vaccination.id}`}>
+                            <Link href={`/admin/vaccinations/${vaccination.id}`}>
                               <Button variant="ghost" size="sm">
                                 Details
                               </Button>

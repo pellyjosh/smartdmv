@@ -49,6 +49,12 @@ import {
   aiConfigs,
   aiConfigsRelations
 } from './schemas/aiConfigSchema';
+import {
+  vaccineTypes,
+  vaccinations,
+  vaccineTypesRelations,
+  vaccinationsRelations
+} from './schemas/vaccinationsSchema';
 
 export const schema = {
   users,
@@ -99,6 +105,9 @@ export const schema = {
   electronicSignatures,
   // AI Configuration tables
   aiConfigs,
+  // Vaccination tables
+  vaccineTypes,
+  vaccinations,
   // Checklists tables
   treatmentChecklistTemplates,
   templateItems,
@@ -132,6 +141,7 @@ export * from './schemas/labSchema';
 export * from './schemas/boardingSchema';
 export * from './schemas/medicalImagingSchema';
 export * from './schemas/aiConfigSchema';
+export * from './schemas/vaccinationsSchema';
 export * from './schemas/checklistsSchema';
 
 // You might also want to re-export the userRoleEnum if it's used elsewhere for typing

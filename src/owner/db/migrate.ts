@@ -3,10 +3,10 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 
-const ownerDbUrl = process.env.OWNER_DATABASE_URL || process.env.DATABASE_URL;
+const ownerDbUrl = process.env.DATABASE_URL;
 
 if (!ownerDbUrl) {
-  throw new Error('OWNER_DATABASE_URL or DATABASE_URL environment variable is required');
+  throw new Error('DATABASE_URL environment variable is required');
 }
 
 const sql = postgres(ownerDbUrl, { max: 1 });

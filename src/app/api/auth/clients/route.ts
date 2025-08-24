@@ -14,7 +14,13 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
 
-    const queryParams = Object.fromEntries(searchParams);
+    // Debug log to see what parameters are being received
+    console.log('[API Clients GET] Received URL:', req.url);
+    console.log('[API Clients GET] Search params:', Array.from(searchParams.entries()));
+
+    const queryParams = Object.fromEntries(searchParams.entries());
+    console.log('[API Clients GET] Query params object:', queryParams);
+    
     const validationResult = getClientsSchema.safeParse(queryParams);
 
     if (!validationResult.success) {

@@ -24,6 +24,7 @@ const newAppointmentSchema = z.object({
   petBreed: z.string().optional().nullable(),
   petAge: z.string().optional().nullable(),
   reason: z.string().min(1, "Reason for appointment is required."),
+  appointmentType: z.string().optional().nullable(), // Add appointment type field
   // Frontend sends date as string, combine with time to form ISO string
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD format."),
   time: z.string().regex(/^\d{2}:\d{2}$/, "Time must be HH:MM format."),
@@ -50,7 +51,7 @@ export async function GET(req: Request) {
 
     const { practiceId, status } = validationResult.data;
 
-    const conditions = [eq(appointments.practiceId, practiceId)];
+    const conditions = [eq(appointments.practiceId, parseInt(practiceId))];
 
     // Map frontend status string to database status enum
     if (status === 'pending') {
@@ -82,9 +83,9 @@ export async function GET(req: Request) {
         clientEmail: appt.client?.email || 'N/A',
         clientPhone: appt.client?.phone || null,
         petName: appt.pet?.name || 'N/A', // Get pet name from relation
-        petType: appt.pet?.type || 'N/A',
+        petType: appt.pet?.species || 'N/A', // Use species instead of type
         petBreed: appt.pet?.breed || null,
-        petAge: appt.pet?.age || null,
+        petAge: appt.pet?.dateOfBirth ? new Date().getFullYear() - new Date(appt.pet.dateOfBirth).getFullYear() : null, // Calculate age from dateOfBirth
         reason: appt.description || appt.title, // Map description/title to reason
         date: format(appt.date, 'yyyy-MM-dd'), // Format date back to string for frontend
         time: format(appt.date, 'HH:mm'), // Format time back to string for frontend
@@ -137,12 +138,13 @@ export async function POST(req: Request) {
     if (!client) {
         // If client doesn't exist, create a new user/client record
         const [newClient] = await db.insert(users).values({
-            id: crypto.randomUUID(),
             email: requestData.clientEmail,
+            username: requestData.clientEmail, // Use email as username
+            password: 'temp-password', // You'll need to handle password properly
             name: requestData.clientName,
             phone: requestData.clientPhone,
-            role: 'client', // Assign a default role
-            practiceId: requestData.practiceId, // Assign to the practice
+            role: 'CLIENT', // Assign a default role
+            practiceId: parseInt(requestData.practiceId), // Assign to the practice
         }).returning();
         if (!newClient) throw new Error("Failed to create new client user.");
         client = newClient;
@@ -150,20 +152,19 @@ export async function POST(req: Request) {
 
     // --- Create/Find Pet ---
     // This logic might need to be more sophisticated (e.g., check for pet owned by client)
-    // For simplicity, we'll create a new pet for each new request or find if exists by name/type for this client
+    // For simplicity, we'll create a new pet for each new request or find if exists by name/species for this client
     let pet = await db.query.pets.findFirst({
-        where: and(eq(pets.name, requestData.petName), eq(pets.type, requestData.petType), eq(pets.ownerId, client.id))
+        where: and(eq(pets.name, requestData.petName), eq(pets.species, requestData.petType), eq(pets.ownerId, client.id))
     });
 
     if (!pet) {
         const [newPet] = await db.insert(pets).values({
-            id: crypto.randomUUID(),
             name: requestData.petName,
-            type: requestData.petType,
+            species: requestData.petType, // Use species instead of type
             breed: requestData.petBreed,
-            age: requestData.petAge,
+            dateOfBirth: requestData.petAge ? new Date(new Date().getFullYear() - parseInt(requestData.petAge), 0, 1) : null, // Convert age to approximate birth date
             ownerId: client.id, // Link pet to client
-            practiceId: requestData.practiceId, // Link pet to practice
+            practiceId: parseInt(requestData.practiceId), // Link pet to practice
         }).returning();
         if (!newPet) throw new Error("Failed to create new pet.");
         pet = newPet;
@@ -179,14 +180,14 @@ export async function POST(req: Request) {
 
     // --- Create the Appointment ---
     const [createdAppointment] = await db.insert(appointments).values({
-        id: crypto.randomUUID(),
         title: `Appointment for ${requestData.petName} (${requestData.reason})`,
+        type: requestData.appointmentType || 'routine-checkup', // Add appointment type with default
         description: requestData.requestNotes || requestData.reason,
         date: appointmentDate,
         status: 'pending', // Initial status for a new request
         petId: pet.id,
         clientId: client.id,
-        practiceId: requestData.practiceId,
+        practiceId: parseInt(requestData.practiceId),
         // practitionerId and staffId can be set later upon approval if preferredDoctor is a name
         // For now, if preferredDoctor is a name, you'd need to find the user ID. Leaving null for simplicity.
         practitionerId: null, // Assuming this is set upon approval
@@ -204,7 +205,7 @@ export async function POST(req: Request) {
         clientName: client.name,
         clientEmail: client.email,
         petName: pet.name,
-        petType: pet.type,
+        petType: pet.species, // Use species instead of type
         // Add other fields from original requestData if needed by frontend
         date: format(createdAppointment.date, 'yyyy-MM-dd'),
         time: format(createdAppointment.date, 'HH:mm'),

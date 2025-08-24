@@ -8,7 +8,6 @@ import { DatePicker } from "@/components/admin/appointments/date-picker";
 import { AppointmentCard } from "@/components/admin/appointments/appointment-card";
 import { EnhancedCalendar } from "@/components/admin/appointments/enhanced-calendar";
 import { DraggableCalendar } from "@/components/admin/appointments/draggable-calendar";
-import { SimpleCustomFieldSelect } from "@/components/form/simple-custom-field-select";
 import { Button } from "@/components/ui/button";
 import { Loader2, CalendarPlus, Layout, LayoutGrid } from "lucide-react";
 import {
@@ -44,6 +43,7 @@ import { z } from "zod";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { useToast } from "@/hooks/use-toast";
 
 // Form schema for creating appointments
@@ -355,14 +355,25 @@ export default function AppointmentsPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Type</FormLabel>
-                        <SimpleCustomFieldSelect
-                          name="type"
-                          groupKey="appointment_types"
-                          placeholder="Select appointment type"
-                          value={field.value}
-                          onChange={field.onChange}
-                          required={true}
-                        />
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select appointment type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="virtual">Virtual Consultation</SelectItem>
+                            <SelectItem value="telemedicine">Telemedicine</SelectItem>
+                            <SelectItem value="in-person">In-Person Visit</SelectItem>
+                            <SelectItem value="wellness">Wellness Check</SelectItem>
+                            <SelectItem value="surgery">Surgery</SelectItem>
+                            <SelectItem value="emergency">Emergency</SelectItem>
+                            <SelectItem value="follow-up">Follow-up</SelectItem>
+                            <SelectItem value="vaccination">Vaccination</SelectItem>
+                            <SelectItem value="dental">Dental Care</SelectItem>
+                            <SelectItem value="grooming">Grooming</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -410,29 +421,25 @@ export default function AppointmentsPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Pet</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value?.toString()}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select pet" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {isLoadingPets ? (
-                              <SelectItem value="loading" disabled>Loading pets...</SelectItem>
-                            ) : pets && pets.length > 0 ? (
-                              pets.map((pet) => (
-                                <SelectItem key={pet.id} value={pet.id.toString()}>
-                                  {pet.name} 
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="none" disabled>No pets available</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <Combobox
+                            options={
+                              isLoadingPets 
+                                ? [{ value: "loading", label: "Loading pets..." }]
+                                : pets && pets.length > 0 
+                                  ? pets.map((pet) => ({
+                                      value: pet.id.toString(),
+                                      label: `${pet.name} (${pet.species}${pet.breed ? ` - ${pet.breed}` : ''})`
+                                    }))
+                                  : [{ value: "none", label: "No pets available" }]
+                            }
+                            value={field.value}
+                            onSelect={field.onChange}
+                            placeholder="Search and select pet..."
+                            emptyText="No pets found."
+                            disabled={isLoadingPets || !pets || pets.length === 0}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -445,38 +452,29 @@ export default function AppointmentsPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Practitioner</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value?.toString()}
-                        >  
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select practitioner" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {user && user.role === UserRoleEnum.CLIENT ? (
-                              <SelectItem value={user.id}>
-                              Default Practitioner
-                            </SelectItem>
-                          ) : isLoadingStaff ? (
-                            <SelectItem value="loading" disabled>Loading staff...</SelectItem>
-                          ) : staff && staff.length > 0 ? (
-                            staff.map((s) => (
-                              <SelectItem key={s.id} value={s.id}>
-                                {s.name}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            // Fallback if no staff data and not client role (e.g., initial load)
-                            <SelectItem value={user?.id || ""} disabled={!user?.id}>
-                                {user?.name || "Select a practitioner"}
-                            </SelectItem>
-                          )}
-
-                            
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <Combobox
+                          options={
+                            user && user.role === UserRoleEnum.CLIENT 
+                              ? [{ value: user.id, label: "Default Practitioner" }]
+                              : isLoadingStaff 
+                                ? [{ value: "loading", label: "Loading staff..." }]
+                                : staff && staff.length > 0 
+                                  ? staff.map((s) => ({
+                                      value: s.id,
+                                      label: `${s.name}${s.email ? ` (${s.email})` : ''}`
+                                    }))
+                                  : user?.id 
+                                    ? [{ value: user.id, label: user.name || "Current User" }]
+                                    : [{ value: "none", label: "No practitioners available" }]
+                          }
+                          value={field.value}
+                          onSelect={field.onChange}
+                          placeholder="Search and select practitioner..."
+                          emptyText="No practitioners found."
+                          disabled={isLoadingStaff || (user?.role === UserRoleEnum.CLIENT && !user?.id)}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

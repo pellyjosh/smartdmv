@@ -19,18 +19,154 @@ import { Appointment } from "@/db/schema";
 import { 
   Loader2, MicIcon, VideoIcon, PhoneOffIcon, MessageSquare, 
   Settings, Video, Calendar, Clock, PlusCircle, CheckCircle, AlertCircle, CalendarPlus,
-  User
+  User, Wifi, WifiOff
 } from "lucide-react";
-// import { MarketplaceFeatureContainer } from "@/components/features/marketplace-feature-message";
 import { format } from "date-fns";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { telemedicineService, WebSocketStatus } from "@/lib/websocket";
+import { AppointmentCardSkeleton } from "@/components/ui/shimmer";
 
 export default function TelemedicinePage() {  
   const router = useRouter();
-  const { user } = useUser();
-  // const featureAccess = useFeatureAccess("TELEMEDICINE");  // Assuming this hook might be custom
-  // const hasTelemedicineAccess = true; // featureAccess.hasAccess ||  // Need to adapt this to your permission system
-    // (featureAccess.availableFeatures && featureAccess.availableFeatures.includes("TELEMEDICINE"));
-  // const isFeatureAccessLoading = false; // featureAccess.isLoading;  // Adjust based on how you check loading now
+  const { user, userPracticeId } = useUser();
+  const [wsStatus, setWsStatus] = useState<WebSocketStatus>(WebSocketStatus.DISCONNECTED);
+
+  // Helper function to check if appointment is virtual/telemedicine
+  const isVirtualAppointment = (appointmentOrType: any): boolean => {
+    // Handle both appointment object and type string
+    const type = typeof appointmentOrType === 'string' 
+      ? appointmentOrType 
+      : appointmentOrType?.type;
+      
+    if (!type) {
+      return false;
+    }
+    
+    const normalizedType = type.toLowerCase().trim();
+    
+    // Check for various possible formats
+    const virtualKeywords = [
+      'telemedicine',
+      'virtual-consultation',
+      'virtual',
+      'online',
+      'video',
+      'remote',
+      'teleconsultation',
+      'tele-medicine',
+      'video call',
+      'video consultation'
+    ];
+    
+    const isVirtual = virtualKeywords.some(keyword => normalizedType.includes(keyword));
+    
+    // Simple logging for debugging
+    if (isVirtual) {
+      console.log(`✅ Virtual appointment detected: ${type}`);
+    }
+    
+    return isVirtual;
+  };
+
+  // Debug logging
+  console.log('[Telemedicine] User:', user?.email, 'Practice ID:', userPracticeId);
+
+  // Show loading shimmer if user data is not ready yet
+  if (!user) {
+    return (
+      <div className="h-full">
+        <main className="flex-1 overflow-y-auto pb-16 md:pb-0 p-4 md:p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-4">
+              <div className="h-8 w-48 bg-gray-200 animate-pulse rounded"></div>
+              <div className="h-4 w-24 bg-gray-200 animate-pulse rounded"></div>
+            </div>
+            <div className="h-10 w-48 bg-gray-200 animate-pulse rounded"></div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <AppointmentCardSkeleton key={i} />
+            ))}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // WebSocket connection effect - Safe and robust
+  useEffect(() => {
+    // Only attempt connection if we have user data
+    if (!user || !userPracticeId) {
+      console.log('[Telemedicine] Skipping WebSocket connection - missing user or practice ID');
+      setWsStatus(WebSocketStatus.DISCONNECTED);
+      return;
+    }
+
+    let isComponentMounted = true;
+    let statusUnsubscribe: (() => void) | null = null;
+
+    // Delayed connection to avoid blocking the UI
+    const connectTimer = setTimeout(() => {
+      if (!isComponentMounted) return;
+
+      console.log('[Telemedicine] Attempting WebSocket connection...');
+      
+      try {
+        // Set connecting status
+        setWsStatus(WebSocketStatus.CONNECTING);
+        
+        // Listen for status changes first
+        statusUnsubscribe = telemedicineService.onStatusChange((status) => {
+          if (isComponentMounted) {
+            console.log('[Telemedicine] WebSocket status changed:', status);
+            setWsStatus(status);
+          }
+        });
+
+        // Attempt connection
+        telemedicineService.connect();
+        
+        // Set a timeout to stop trying if connection fails
+        const connectionTimeout = setTimeout(() => {
+          if (isComponentMounted && telemedicineService.getStatus() === WebSocketStatus.CONNECTING) {
+            console.log('[Telemedicine] Connection timeout, setting to disconnected');
+            setWsStatus(WebSocketStatus.DISCONNECTED);
+          }
+        }, 10000); // 10 second timeout
+
+        return () => {
+          clearTimeout(connectionTimeout);
+        };
+
+      } catch (error) {
+        console.error('[Telemedicine] WebSocket connection error:', error);
+        if (isComponentMounted) {
+          setWsStatus(WebSocketStatus.DISCONNECTED);
+        }
+      }
+    }, 500); // 500ms delay to not block initial render
+
+    // Cleanup function
+    return () => {
+      isComponentMounted = false;
+      clearTimeout(connectTimer);
+      
+      if (statusUnsubscribe) {
+        try {
+          statusUnsubscribe();
+        } catch (error) {
+          console.warn('[Telemedicine] Error unsubscribing from status:', error);
+        }
+      }
+      
+      try {
+        telemedicineService.disconnect();
+      } catch (error) {
+        console.warn('[Telemedicine] Error disconnecting WebSocket:', error);
+      }
+    };
+  }, [user, userPracticeId]);
 
   // Fetch upcoming telemedicine appointments
   const { 
@@ -38,31 +174,61 @@ export default function TelemedicinePage() {
     isLoading: isLoadingUpcoming,
     error: upcomingError
   } = useQuery({
-    queryKey: ['/api/appointments'],
+    queryKey: ['/api/appointments', 'upcoming', userPracticeId],
     queryFn: async () => {
-      console.log('Fetching all appointments to filter virtual ones (Telemedicine Page)');
+      console.log('[Telemedicine] Fetching upcoming appointments, practiceId:', userPracticeId);
+      console.log('[Telemedicine] User object:', user);
 
-      const response = await fetch('/api/appointments', { credentials: "include" });
+      const url = `/api/appointments?practiceId=${userPracticeId}`;
+      console.log('[Telemedicine] Full API URL:', url);
+
+      const response = await fetch(url, { credentials: "include" });
+      console.log('[Telemedicine] Response status:', response.status);
+      console.log('[Telemedicine] Response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch appointments (Telemedicine)');
+        const errorText = await response.text();
+        console.error('[Telemedicine] Failed to fetch appointments:', response.status, response.statusText);
+        console.error('[Telemedicine] Error response body:', errorText);
+        throw new Error(`Failed to fetch appointments (Telemedicine): ${response.status} ${errorText}`);
       }
 
       const allAppointments = await response.json();
+      console.log('[Telemedicine] All appointments received:', allAppointments.length);
+      console.log('[Telemedicine] All appointments data:', allAppointments);
 
       // Filter for upcoming virtual appointments
       const now = new Date();
+      console.log('[Telemedicine] Current time:', now);
+      
       const virtualAppointments = allAppointments.filter((appt: Appointment) => {
         const appointmentDate = new Date(appt.date);
-        return appt.type === 'virtual' && 
-               appt.status === 'scheduled' &&
-               appointmentDate > now;
+        const isVirtualType = isVirtualAppointment(appt.type);
+        const isUpcoming = appointmentDate > now;
+        const isActiveStatus = appt.status === 'approved' || appt.status === 'pending';
+        
+        // Log only virtual appointments that match our criteria
+        if (isVirtualType && isActiveStatus && isUpcoming) {
+          console.log(`📅 Upcoming virtual appointment: ${appt.title} (${appt.type}) on ${appointmentDate.toLocaleDateString()}`);
+        }
+        
+        return isVirtualType && isActiveStatus && isUpcoming;
       });
+
+      console.log('[Telemedicine] Filtered upcoming virtual appointments:', virtualAppointments.length);
+
+      // Debug: Show all telemedicine/virtual appointments regardless of status/date
+      const allVirtualAppointments = allAppointments.filter((appt: Appointment) => 
+        isVirtualAppointment(appt.type)
+      );
+      console.log('[Telemedicine] ALL virtual appointments (ignoring status/date):', allVirtualAppointments);
 
       // Sort by date
       return virtualAppointments.sort((a: Appointment, b: Appointment) => {
         return new Date(a.date).getTime() - new Date(b.date).getTime();
       });
-    }
+    },
+    enabled: !!userPracticeId // Only run query when we have a practice ID
   });
 
   // Fetch completed telemedicine appointments
@@ -71,13 +237,13 @@ export default function TelemedicinePage() {
     isLoading: isLoadingCompleted,
     error: completedError
   } = useQuery({
-    queryKey: ['/api/appointments/virtual', 'completed'],
+    queryKey: ['/api/appointments', 'completed', userPracticeId],
     queryFn: async () => {
       // Log for debugging
-      console.log('Fetching completed virtual appointments');
+      console.log('Fetching completed virtual appointments, practiceId:', userPracticeId);
 
       // Try fetching all appointments first, then filter client-side
-      const response = await fetch('/api/appointments');
+      const response = await fetch(`/api/appointments?practiceId=${userPracticeId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch appointments');
       }
@@ -86,14 +252,26 @@ export default function TelemedicinePage() {
       console.log('All appointments for completed section:', allAppointments);
 
       // Filter for virtual appointments with completed status
-      const completedVirtualAppointments = allAppointments.filter(  // Filter for completed virtual appointments
-        (appt: any) => appt.type === 'virtual' && appt.status === 'completed'
-      );
+      const completedVirtualAppointments = allAppointments.filter((appt: any) => {
+        const isVirtualType = isVirtualAppointment(appt.type);
+        const isCompleted = appt.status === 'completed';
+        
+        console.log('[Telemedicine] Checking completed appointment:', {
+          id: appt.id,
+          title: appt.title,
+          type: appt.type,
+          status: appt.status,
+          isVirtualType,
+          isCompleted
+        });
+        
+        return isVirtualType && isCompleted;
+      });
 
       console.log('Filtered completed virtual appointments:', completedVirtualAppointments);
       return completedVirtualAppointments;
     },
-    // enabled: hasTelemedicineAccess === true
+    enabled: !!userPracticeId // Only run query when we have a practice ID
   });
 
   // Show marketplace UI for users without feature access
@@ -169,12 +347,32 @@ export default function TelemedicinePage() {
     <div className="h-full">
       <main className="flex-1 overflow-y-auto pb-16 md:pb-0 p-4 md:p-6">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Telemedicine</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold">Telemedicine</h1>
+            <div className="flex items-center gap-2">
+              {wsStatus === WebSocketStatus.CONNECTED ? (
+                <div className="flex items-center gap-1 text-green-600">
+                  <Wifi className="h-4 w-4" />
+                  <span className="text-sm font-medium">Connected</span>
+                </div>
+              ) : wsStatus === WebSocketStatus.CONNECTING || wsStatus === WebSocketStatus.RECONNECTING ? (
+                <div className="flex items-center gap-1 text-yellow-600">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm font-medium">Connecting</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 text-gray-400">
+                  <WifiOff className="h-4 w-4" />
+                  <span className="text-sm font-medium">Offline</span>
+                </div>
+              )}
+            </div>
+          </div>
           <Button asChild>
-            <a href="/appointments/new?type=virtual">
+            <Link href="/admin/appointments?type=virtual&view=schedule">
               <CalendarPlus className="h-4 w-4 mr-2" />
               Schedule Virtual Appointment
-            </a>
+            </Link>
           </Button>
         </div>
 
@@ -182,15 +380,18 @@ export default function TelemedicinePage() {
          <div className="max-w-full space-y-6">
            <Tabs defaultValue="upcoming">
              <TabsList>
-               <TabsTrigger value="upcoming">Upcoming Consultations</TabsTrigger>
-               <TabsTrigger value="completed">Completed</TabsTrigger>
+               <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+               <TabsTrigger value="completed">History</TabsTrigger>
                <TabsTrigger value="settings">Settings</TabsTrigger>
              </TabsList>
 
              <TabsContent value="upcoming" className="space-y-6 pt-4">
-               {isLoadingUpcoming ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+               
+               {!userPracticeId || isLoadingUpcoming ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <AppointmentCardSkeleton key={i} />
+                  ))}
                 </div>
               ) : upcomingError ? (
                 <Card>
@@ -216,7 +417,7 @@ export default function TelemedicinePage() {
                       You don't have any upcoming virtual consultations scheduled. Create a new virtual appointment to get started.
                     </p>
                     <Button asChild>
-                      <Link href="/appointments/new?type=virtual">
+                      <Link href="/admin/appointments?type=virtual&view=schedule">
                         <CalendarPlus className="h-4 w-4 mr-2" />
                         Schedule Consultation
                       </Link>
@@ -252,11 +453,10 @@ export default function TelemedicinePage() {
                         {appointment.notes && (
                           <p className="text-sm text-gray-600 mb-4">{appointment.notes}</p>
                         )}
-                      <div className="flex items-center text-sm text-gray-500 mb-1">
-                        {/* Assuming patient/pet info is still available */}
+                        <div className="flex items-center text-sm text-gray-500 mb-1">
                           <User className="h-3.5 w-3.5 mr-1.5" />
                           <span>  
-                            {appointment.patientName || appointment.petName || "Unknown Patient"}
+                            {appointment.pet?.name || "Unknown Pet"}
                           </span>
                         </div>
                       </CardContent>
@@ -264,7 +464,7 @@ export default function TelemedicinePage() {
                       <CardFooter className="pt-1">
                         <Button 
                           className="w-full" 
-                          onClick={() => router.push(`/telemedicine/${appointment.id}`)}
+                          onClick={() => router.push(`/admin/telemedicine/call?appointmentId=${appointment.id}`)}
                         >
                           <Video className="h-4 w-4 mr-2" />
                           Join Call
@@ -277,9 +477,11 @@ export default function TelemedicinePage() {
             </TabsContent>
 
             <TabsContent value="completed" className="pt-4">
-              {isLoadingCompleted ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              {!userPracticeId || isLoadingCompleted ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <AppointmentCardSkeleton key={i} />
+                  ))}
                 </div>
               ) : completedError ? (
                 <Card>
@@ -335,7 +537,7 @@ export default function TelemedicinePage() {
                         <div className="flex items-center text-sm text-gray-500 mt-2">
                           <User className="h-3.5 w-3.5 mr-1.5" />  
                           <span>
-                            {appointment.patientName || appointment.petName || "Unknown Patient"}
+                            {appointment.pet?.name || "Unknown Pet"}
                           </span>
                         </div>
                       </CardContent>

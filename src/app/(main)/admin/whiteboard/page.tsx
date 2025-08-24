@@ -64,7 +64,7 @@ import {
   type UrgencyLevel
 } from "@/lib/appointment-workflow";
 import { WhiteboardItem, UserRoleEnum, WhiteboardNote } from "@/db/schema";
-import { connectWebSocket, sendMessage, registerMessageHandler } from "@/lib/websocket";
+import { whiteboardService, WebSocketStatus } from "@/lib/websocket";
 import WhiteboardItemCard from "@/components/whiteboard/WhiteboardItemCard";
 
 // Types
@@ -392,10 +392,8 @@ export default function WhiteboardPage() {
       
       // Notify other users via WebSocket about the new note
       try {
-        sendMessage({
-          type: "whiteboard_update",
+        whiteboardService.sendWhiteboardUpdate(practiceId, {
           action: "note_added",
-          practiceId: practiceId,
           date: selectedDate
         });
         console.log('Sent WebSocket message about new staff note');
@@ -449,33 +447,28 @@ export default function WhiteboardPage() {
   useEffect(() => {
     if (!user || !hasAccess) return;
 
-    let socket = null;
     let unregister = () => {};
     
     try {
-      // Create a WebSocket connection (optional feature)
-      socket = connectWebSocket();
+      // Connect to the whiteboard WebSocket service
+      whiteboardService.connect();
+      console.log('Whiteboard: Connected to WebSocket service');
       
-      if (socket) {
-        console.log('Whiteboard: WebSocket connection established');
-        
-        // Register handler for whiteboard updates
-        unregister = registerMessageHandler("whiteboard_update", (data) => {
-          try {
-            if (data && data.practiceId === practiceId) {
-              console.log('Whiteboard: Received update from WebSocket');
-              // Refresh whiteboard data when updates come in
-              queryClient.invalidateQueries({ queryKey: ["/api/whiteboard", selectedDate] });
-              queryClient.invalidateQueries({ queryKey: ["/api/appointments", selectedDate, practiceId] });
-              queryClient.invalidateQueries({ queryKey: ["/api/whiteboard-notes", selectedDate] });
-            }
-          } catch (err) {
-            console.error('Error handling whiteboard update:', err);
+      // Register handler for whiteboard updates
+      unregister = whiteboardService.onWhiteboardUpdate((data) => {
+        try {
+          if (data && data.practiceId === practiceId) {
+            console.log('Whiteboard: Received update from WebSocket');
+            // Refresh whiteboard data when updates come in
+            queryClient.invalidateQueries({ queryKey: ["/api/whiteboard", selectedDate] });
+            queryClient.invalidateQueries({ queryKey: ["/api/appointments", selectedDate, practiceId] });
+            queryClient.invalidateQueries({ queryKey: ["/api/whiteboard-notes", selectedDate] });
           }
-        });
-      } else {
-        console.log('Whiteboard: WebSocket not available, using polling for updates');
-      }
+        } catch (err) {
+          console.error('Error handling whiteboard update:', err);
+        }
+      });
+      
     } catch (error) {
       console.log('Whiteboard: WebSocket connection failed, continuing without real-time updates:', error);
     }
@@ -540,10 +533,8 @@ export default function WhiteboardPage() {
       
       // Notify other users via WebSocket about the change
       try {
-        sendMessage({
-          type: "whiteboard_update",
+        whiteboardService.sendWhiteboardUpdate(practiceId, {
           action: "status_change",
-          practiceId: practiceId,
           itemId,
           newStatus: targetStatus,
           isAppointment: item.isAppointment || false,
