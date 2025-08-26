@@ -824,7 +824,7 @@ export default function POSPage() {
         featureName="Point of Sale"
         featureId="point_of_sale"
         description="The Point of Sale system allows you to process transactions, manage inventory, and track sales in your practice. Purchase this add-on to enable a complete retail solution integrated with your practice management system."
-        addOnId="point-of-sale"
+        addOnId="financial-management-pro"
       >
         {posContent}
       </MarketplaceFeatureContainer>

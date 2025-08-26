@@ -8,8 +8,19 @@ export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser(request);
     
-    if (!user || user.role !== 'CLIENT') {
-      return NextResponse.json({ error: 'Unauthorized. Client access required.' }, { status: 401 });
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized. Authentication required.' }, { status: 401 });
+    }
+
+    const userRole = Array.isArray(user.role) ? user.role[0] : user.role;
+    const allowedRoles = ['ADMINISTRATOR', 'PRACTICE_ADMIN', 'PRACTICE_ADMINISTRATOR', 'CLIENT'];
+    
+    if (!allowedRoles.includes(userRole)) {
+      return NextResponse.json({ error: 'Unauthorized. Admin or client access required.' }, { status: 401 });
+    }
+
+    if (!user.practiceId) {
+      return NextResponse.json({ error: 'Practice ID not found. Please ensure you are associated with a practice.' }, { status: 400 });
     }
 
     console.log('Fetching subscriptions for practice:', user.practiceId);

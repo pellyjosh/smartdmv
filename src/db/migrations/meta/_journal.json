@@ -8,6 +8,13 @@
       "when": 1755966640332,
       "tag": "0000_friendly_nocturne",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1756084755063,
+      "tag": "0001_natural_starjammers",
+      "breakpoints": true
     }
   ]
 }

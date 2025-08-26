@@ -67,6 +67,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUser, type User as AppUserType } from "@/context/UserContext";
+import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -364,13 +365,13 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "Marketplace",
-        href: "/admin/marketplace",
+        href: "/marketplace",
         icon: ShoppingCart,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"]
       },
       {
         title: "Website Integration",
-        href: "/integration-settings",
+        href: "/admin/integration-settings",
         icon: Globe,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"],
         marketplaceAddOn: true
@@ -583,7 +584,7 @@ const menuGroups: MenuGroup[] = [
       },
       {
         title: "Marketplace Management",
-        href: "/admin/marketplace-management",
+        href: "/admin/marketplace",
         icon: ShoppingCart,
         roles: ["ADMINISTRATOR"]
       },
@@ -621,13 +622,59 @@ const menuGroups: MenuGroup[] = [
   }
 ];
 
+// Mapping of sidebar features to marketplace add-on slugs (moved outside component)
+const MARKETPLACE_FEATURE_MAPPING: Record<string, string> = {
+  "Website Requests": "client-portal-mobile-app", // Maps to Client Portal Mobile App
+  "Telemedicine": "enhanced-communication-suite", // Maps to Enhanced Communication Suite  
+  "Disease Reporting": "ai-powered-diagnosis-assistant", // Maps to AI-Powered Diagnosis Assistant
+  "Point of Sale": "financial-management-pro", // Maps to Financial Management Pro
+  "Website Integration": "client-portal-mobile-app", // Maps to Client Portal Mobile App
+};
+
 export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, isLoading: userIsLoading, initialAuthChecked } = useUser();
+  const { user, logout, isLoading: userIsLoading, initialAuthChecked, userPracticeId } = useUser();
   const [mobileSheetOpen, setMobileSheetOpen] = React.useState(false);
   const [expandedMenus, setExpandedMenus] = React.useState<Record<string, boolean>>({});
   const [searchTerm, setSearchTerm] = React.useState("");
+
+  // Fetch practice add-ons (user's subscriptions) to check marketplace access
+  const { data: practiceAddons } = useQuery({
+    queryKey: ["/api/marketplace/practice"],
+    queryFn: async () => {
+      const response = await fetch('/api/marketplace/practice');
+      if (!response.ok) throw new Error('Failed to fetch practice subscriptions');
+      return response.json();
+    },
+    enabled: !!user && !!userPracticeId,
+    refetchOnWindowFocus: false,
+  });
+
+  // Helper to check if practice has subscribed to a specific add-on
+  const hasMarketplaceSubscription = React.useCallback((featureTitle: string): boolean => {
+    // Super admins and administrators get full access
+    if (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMINISTRATOR') {
+      return true;
+    }
+
+    const addOnSlug = MARKETPLACE_FEATURE_MAPPING[featureTitle];
+    if (!addOnSlug || !practiceAddons) {
+      return false;
+    }
+
+    const hasActiveSubscription = (Array.isArray(practiceAddons) ? practiceAddons : []).some(
+      (subscription: any) => {
+        const addonMatches = subscription.addOn && (
+          subscription.addOn.slug === addOnSlug ||
+          subscription.addOn.name.toLowerCase().includes(featureTitle.toLowerCase())
+        );
+        return addonMatches && subscription.isActive;
+      }
+    );
+    
+    return hasActiveSubscription;
+  }, [user?.role, practiceAddons]);
 
   // Transform the menuGroups into the NavItem structure
   const allNavItems: NavItem[] = React.useMemo(() => {
@@ -677,7 +724,13 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
       href: group.href,
       keywords: group.keywords, // Use group's own keywords first
       roles: group.roles, // Use group's roles first
-      submenu: group.items?.map(item => ({
+      submenu: group.items?.filter(item => {
+        // Filter out marketplace add-ons that user doesn't have access to
+        if (item.marketplaceAddOn) {
+          return hasMarketplaceSubscription(item.title);
+        }
+        return true;
+      }).map(item => ({
         title: item.title,
         href: item.href,
         icon: item.icon,
@@ -700,7 +753,7 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
     });
 
     return combinedItems;
-  }, []);
+  }, [practiceAddons, user?.role, hasMarketplaceSubscription]);
 
   const filteredNavItems: NavItem[] = React.useMemo(() => {
     if (!user?.role && !userIsLoading && initialAuthChecked) {

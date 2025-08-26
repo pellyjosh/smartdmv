@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from "react";
+import { MarketplaceFeatureContainer } from "@/components/features/marketplace-feature-message";
 import {
   Card,
   CardContent,
@@ -240,7 +241,13 @@ export default function AppointmentRequestsPage() {
   // }
 
   return (
-    <div className="container mx-auto py-8">
+    <MarketplaceFeatureContainer
+      featureName="Website Requests"
+      featureId="website-requests"
+      addOnId="6"
+      description="Manage appointment requests from your website integration. This feature requires the Website Integration add-on."
+    >
+      <div className="container mx-auto py-8">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Appointment Requests</h1>
         <p className="text-gray-500">
@@ -555,6 +562,7 @@ export default function AppointmentRequestsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </MarketplaceFeatureContainer>
   );
 }

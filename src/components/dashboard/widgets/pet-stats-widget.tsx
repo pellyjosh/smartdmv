@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { WidgetConfig } from "@/hooks/use-dashboard-config";
-import { Pet } from "@/schemas/pet";
+import { Pet } from "@/db/schema";
 import { Loader2 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from "recharts";
 
@@ -11,6 +11,11 @@ interface PetStatsWidgetProps {
 export function PetStatsWidget({ widget }: PetStatsWidgetProps) {
   const { data: pets, isLoading } = useQuery<Pet[]>({
     queryKey: ['/api/pets'],
+    queryFn: async () => {
+      const response = await fetch('/api/pets');
+      if (!response.ok) throw new Error('Failed to fetch pets');
+      return response.json();
+    },
   });
 
   if (isLoading) {

@@ -55,6 +55,14 @@ import {
   vaccineTypesRelations,
   vaccinationsRelations
 } from './schemas/vaccinationsSchema';
+import {
+  integrationSettings,
+  widgetAnalytics,
+  integrationApiKeys,
+  integrationSettingsRelations,
+  widgetAnalyticsRelations,
+  integrationApiKeysRelations
+} from './schemas/integrationSettingsSchema';
 
 export const schema = {
   users,
@@ -112,7 +120,11 @@ export const schema = {
   treatmentChecklistTemplates,
   templateItems,
   assignedChecklists,
-  checklistItems
+  checklistItems,
+  // Integration settings tables
+  integrationSettings,
+  widgetAnalytics,
+  integrationApiKeys
 };
 
 // Re-export all tables and their relations for Drizzle to use
@@ -143,6 +155,7 @@ export * from './schemas/medicalImagingSchema';
 export * from './schemas/aiConfigSchema';
 export * from './schemas/vaccinationsSchema';
 export * from './schemas/checklistsSchema';
+export * from './schemas/integrationSettingsSchema';
 
 // You might also want to re-export the userRoleEnum if it's used elsewhere for typing
 export { UserRoleEnum };

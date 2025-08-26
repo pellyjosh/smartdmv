@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { WidgetConfig } from "@/hooks/use-dashboard-config"; // Assuming this path is correct
-import type { HealthPlan } from "@/schemas/health-plan";
+import type { HealthPlan } from "@/db/schema";
 import { Loader2, ClipboardCheck } from "lucide-react";
 import { Progress } from "@/components/ui/progress"; // Assuming shadcn/ui progress
 
@@ -13,8 +13,12 @@ interface HealthPlansWidgetProps {
 export function HealthPlansWidget({ widget }: HealthPlansWidgetProps) {
   // Fetch health plans
   const { data: healthPlans, isLoading: loadingPlans } = useQuery<HealthPlan[]>({
-    queryKey: ['/api/health-plans'], // TODO: Replace with actual API call
-    // queryFn: async () => { /* Fetch health plans */ }
+    queryKey: ['/api/health-plans'],
+    queryFn: async () => {
+      const response = await fetch('/api/health-plans');
+      if (!response.ok) throw new Error('Failed to fetch health plans');
+      return response.json();
+    },
   });
 
   const isLoading = loadingPlans;

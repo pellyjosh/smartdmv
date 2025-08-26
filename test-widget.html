@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartDVM Widget Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>SmartDVM Booking Widget Test</h1>
+
+    <div class="test-section">
+        <h2>Test Widget - Floating Right Position</h2>
+        <p>This widget will appear as a floating button on the right side. Look for a floating button on the
+            bottom-right corner.</p>
+
+        <!-- SmartDVM Appointment Widget -->
+        <script>
+            window.smartDVMConfig = {
+                "practiceId": 1,
+                "apiKey": "sk_06ab629143dea2ae3cb73f60c7661880572ec09b4fb4440d1e0bf5b931eae8a1",
+                "baseUrl": "http://localhost:9002"
+            };
+        </script>
+        <script src="http://localhost:9002/widget/booking-widget.js" async></script>
+        <div id="smartdvm-booking-widget"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Widget Features & Position Options</h2>
+        <ul>
+            <li>✅ <strong>Fully Dynamic</strong>: All settings fetched from API (no hardcoded values)</li>
+            <li>✅ <strong>Auto-Updates</strong>: Changes in admin panel automatically reflect in widget</li>
+            <li>✅ <strong>Minimal Embed Code</strong>: Only practiceId, apiKey, and baseUrl needed</li>
+            <li>✅ <strong>CORS Support</strong>: Works on external websites</li>
+            <li>✅ <strong>Position Options</strong>: Inline, floating-right, floating-left, modal</li>
+            <li>✅ Searchable appointment type dropdown</li>
+            <li>✅ Dynamic loading of practice data</li>
+            <li>✅ Live preview in admin interface</li>
+            <li>✅ Embed code display</li>
+            <li>✅ Error handling for empty states</li>
+            <li>✅ API key authentication</li>
+        </ul>
+
+        <h3>How the Dynamic System Works:</h3>
+        <ul>
+            <li><strong>Step 1:</strong> Admin configures settings in the dashboard</li>
+            <li><strong>Step 2:</strong> Settings are saved to database</li>
+            <li><strong>Step 3:</strong> Widget fetches latest settings from API</li>
+            <li><strong>Step 4:</strong> Widget renders with current settings</li>
+            <li><strong>Result:</strong> No need to update embed code when settings change!</li>
+        </ul>
+    </div>
+</body>
+
+</html>

@@ -1,5 +1,7 @@
-'use client';
+"use client";
+
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,29 +11,27 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, ShoppingCart, Star, StarHalf, Download, Check, Shield, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/UserContext";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AddonCategory } from "@/db/schema";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 
+const AddonCategory = {
+  CLIENT_PORTAL: "CLIENT_PORTAL",
+  AI: "AI", 
+  ADMINISTRATIVE: "ADMINISTRATIVE",
+  COMMUNICATION: "COMMUNICATION",
+  FINANCIAL: "FINANCIAL"
+};
+
 const MarketplacePage = () => {
+  const router = useRouter();
   const { toast } = useToast();
-  const { user } = useUser();
+  const { user, userPracticeId } = useUser();
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [selectedAddon, setSelectedAddon] = useState<number | null>(null);
   const [isSubscribeDialogOpen, setIsSubscribeDialogOpen] = useState(false);
   const [selectedBillingCycle, setSelectedBillingCycle] = useState<string>("monthly");
   const [addonToSubscribe, setAddonToSubscribe] = useState<any>(null);
-
-  // Get the practice ID similar to how it's done in UserContext
-  const userPracticeId = user ?
-    (user.role === 'CLIENT' || user.role === 'PRACTICE_ADMINISTRATOR' || user.role === 'VETERINARIAN' || user.role === 'PRACTICE_MANAGER' ?
-      ((user as any).practiceId && (user as any).practiceId.toString().trim() !== '' ? (user as any).practiceId : undefined) :
-      (user.role === 'ADMINISTRATOR' || user.role === 'SUPER_ADMIN' ? 
-        ((user as any).currentPracticeId && (user as any).currentPracticeId.toString().trim() !== '' ? (user as any).currentPracticeId : undefined) : 
-        undefined)
-    ) : undefined;
 
   // Fetch all add-ons
   const { data: addons, isLoading: addonsLoading } = useQuery({
@@ -56,29 +56,54 @@ const MarketplacePage = () => {
   });
 
   // Fetch practice add-ons (user's subscriptions)
-  const { data: practiceAddons, isLoading: practiceAddonsLoading } = useQuery({
+  const { data: practiceAddons, isLoading: practiceAddonsLoading, refetch: refetchPracticeAddons, error: practiceAddonsError } = useQuery({
     queryKey: ["/api/marketplace/practice"],
     queryFn: async () => {
+      console.log(`[Marketplace] Fetching practice addons for userPracticeId: ${userPracticeId}`);
       const response = await fetch('/api/marketplace/practice');
-      if (!response.ok) throw new Error('Failed to fetch practice subscriptions');
-      return response.json();
+      console.log(`[Marketplace] Practice addons response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Marketplace] Practice addons API error: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to fetch practice subscriptions: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log(`[Marketplace] Practice addons response data:`, data);
+      return data;
     },
-    enabled: !!user,
+    enabled: !!userPracticeId,
     refetchOnWindowFocus: false,
+    retry: (failureCount, error) => {
+      console.log(`[Marketplace] Practice addons query retry ${failureCount}:`, error);
+      return failureCount < 2; // Retry up to 2 times
+    },
   });
 
   // Helper to check if practice has subscribed to an add-on
   const hasSubscription = (addonId: number) => {
-    const hasActiveSubscription = Array.isArray(practiceAddons) ? practiceAddons.some(
-      (subscription: any) => subscription.addonId === addonId && subscription.isActive
-    ) : false;
+    console.log(`[Marketplace] Checking subscription for addon ID: ${addonId}`);
+    console.log(`[Marketplace] Available practice addons:`, practiceAddons);
     
-    // Log subscription status for debugging
-    console.log(`Checking subscription for addon ${addonId}: ${hasActiveSubscription}`);
-    if (hasActiveSubscription) {
-      console.log(`Active subscription found for addon ${addonId}`);
+    if (!practiceAddons || !Array.isArray(practiceAddons)) {
+      console.log(`[Marketplace] No practice addons data available`);
+      return false;
     }
     
+    const hasActiveSubscription = practiceAddons.some((subscription: any) => {
+      console.log(`[Marketplace] Checking subscription:`, subscription);
+      
+      // Check both possible field names (addonId and addOnId) for compatibility
+      const subscriptionAddonId = subscription.addonId || subscription.addOnId;
+      const isActive = subscription.isActive;
+      
+      console.log(`[Marketplace] Subscription addon ID: ${subscriptionAddonId}, looking for: ${addonId}, active: ${isActive}`);
+      
+      return subscriptionAddonId === addonId && isActive;
+    });
+    
+    console.log(`[Marketplace] Final result for addon ${addonId}: ${hasActiveSubscription}`);
     return hasActiveSubscription;
   };
 
@@ -88,17 +113,17 @@ const MarketplacePage = () => {
     
     let pricing = { monthly: "0.00", yearly: "0.00" };
     
-    // Check if addon has pricingTiers (new format)
-    if (addon.pricingTiers) {
+    // Check if addon has pricing_tiers (new format)
+    if (addon.pricing_tiers) {
       let pricingTiers;
-      if (typeof addon.pricingTiers === 'string') {
+      if (typeof addon.pricing_tiers === 'string') {
         try {
-          pricingTiers = JSON.parse(addon.pricingTiers);
+          pricingTiers = JSON.parse(addon.pricing_tiers);
         } catch (e) {
           pricingTiers = {};
         }
       } else {
-        pricingTiers = addon.pricingTiers;
+        pricingTiers = addon.pricing_tiers;
       }
       
       if (pricingTiers.STANDARD) {
@@ -151,21 +176,21 @@ const MarketplacePage = () => {
     setIsSubscribeDialogOpen(false);
 
     try {
-      await apiRequest("POST", `/api/marketplace/practice/${userPracticeId}/subscribe`, {
-        addonId: addonToSubscribe.id,
-        tier: "STANDARD",
-        billingCycle: selectedBillingCycle
+      const response = await fetch(`/api/marketplace/practice/${userPracticeId}/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          addonId: addonToSubscribe.id,
+          tier: "STANDARD",
+          billingCycle: selectedBillingCycle
+        })
       });
 
-      // Invalidate practice add-ons query to refresh the data
-      queryClient.invalidateQueries({
-        queryKey: ["/api/marketplace/practice"],
-      });
-      
-      // Also refresh all add-ons to update UI state
-      queryClient.invalidateQueries({
-        queryKey: ["/api/marketplace/addons"],
-      });
+      if (!response.ok) throw new Error('Failed to subscribe');
+
+      // Refresh the data
+      refetchPracticeAddons();
 
       toast({
         title: "Success",
@@ -192,19 +217,17 @@ const MarketplacePage = () => {
     setSelectedAddon(addonId);
 
     try {
-      await apiRequest("POST", `/api/marketplace/practice/${userPracticeId}/cancel`, {
-        addonId,
+      const response = await fetch(`/api/marketplace/practice/${userPracticeId}/subscribe`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ addonId: addonId })
       });
 
-      // Invalidate practice add-ons query to refresh the data
-      queryClient.invalidateQueries({
-        queryKey: ["/api/marketplace/practice"],
-      });
-      
-      // Also refresh all add-ons to update UI state
-      queryClient.invalidateQueries({
-        queryKey: ["/api/marketplace/addons"],
-      });
+      if (!response.ok) throw new Error('Failed to cancel subscription');
+
+      // Refresh the data
+      refetchPracticeAddons();
 
       toast({
         title: "Success",
@@ -240,13 +263,13 @@ const MarketplacePage = () => {
   };
 
   // Filter add-ons by category
-  const filteredAddons = Array.isArray(addons) ? addons.filter((addon: any) => {
+  const filteredAddons = addons?.filter((addon: any) => {
     if (activeCategory === "all") return true;
     if (activeCategory === "installed") {
       return hasSubscription(addon.id);
     }
     return addon.category === activeCategory;
-  }) : [];
+  });
 
   // Render stars for rating
   const renderRating = (rating: number) => {
@@ -273,7 +296,17 @@ const MarketplacePage = () => {
   if (addonsLoading || featuredLoading || practiceAddonsLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-sm text-muted-foreground">
+            Loading{addonsLoading ? ' addons' : ''}{featuredLoading ? ' featured' : ''}{practiceAddonsLoading ? ' subscriptions' : ''}...
+          </p>
+          {practiceAddonsError && (
+            <p className="text-sm text-red-500 mt-2">
+              Error loading subscriptions: {practiceAddonsError.message}
+            </p>
+          )}
+        </div>
       </div>
     );
   }
@@ -284,6 +317,27 @@ const MarketplacePage = () => {
       <p className="text-lg text-muted-foreground mb-8">
         Extend your SmartDVM experience with powerful add-ons and integrations
       </p>
+
+      {/* Debug Information */}
+      <div className="mb-6 p-4 bg-gray-100 rounded-lg">
+        <h3 className="font-semibold mb-2">Debug Info:</h3>
+        <p>User Practice ID: {userPracticeId || 'Not set'}</p>
+        <p>Practice Addons Loading: {practiceAddonsLoading ? 'Yes' : 'No'}</p>
+        <p>Practice Addons Error: {practiceAddonsError ? practiceAddonsError.message : 'None'}</p>
+        <p>Practice Addons Count: {practiceAddons ? practiceAddons.length : 'No data'}</p>
+        {practiceAddons && practiceAddons.length > 0 && (
+          <div className="mt-2">
+            <p className="font-medium">Active Subscriptions:</p>
+            <ul className="list-disc list-inside">
+              {practiceAddons.filter((sub: any) => sub.isActive).map((sub: any, i: number) => (
+                <li key={i}>
+                  Addon ID: {sub.addonId}, Name: {sub.addon?.name || 'Unknown'}, Active: {sub.isActive ? 'Yes' : 'No'}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
 
       {/* Featured Add-ons */}
       {featuredAddons && featuredAddons.length > 0 && (
@@ -336,11 +390,18 @@ const MarketplacePage = () => {
                       ))}
                     </div>
                   </CardContent>
-                  <CardFooter>
+                  <CardFooter className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="flex-1" 
+                      onClick={() => router.push(`/marketplace/${addon.slug}`)}
+                    >
+                      View Details
+                    </Button>
                     {hasSubscription(addon.id) ? (
                       <Button 
                         variant="outline" 
-                        className="w-full" 
+                        className="flex-1" 
                         disabled={true}
                       >
                         <Check className="mr-2 h-4 w-4" />
@@ -348,7 +409,7 @@ const MarketplacePage = () => {
                       </Button>
                     ) : (
                       <Button 
-                        className="w-full" 
+                        className="flex-1" 
                         onClick={() => openSubscribeDialog(addon)}
                         disabled={selectedAddon === addon.id}
                       >
@@ -428,7 +489,14 @@ const MarketplacePage = () => {
                         </div>
                       )}
                     </CardContent>
-                    <CardFooter>
+                    <CardFooter className="flex flex-col gap-2">
+                      <Button 
+                        variant="outline" 
+                        className="w-full" 
+                        onClick={() => router.push(`/marketplace/${addon.slug}`)}
+                      >
+                        View Details
+                      </Button>
                       {hasSubscription(addon.id) ? (
                         <Button 
                           variant="outline" 

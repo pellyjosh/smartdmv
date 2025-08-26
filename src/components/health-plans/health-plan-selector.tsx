@@ -28,6 +28,11 @@ export function HealthPlanSelector({ onSelect }: HealthPlanSelectorProps) {
 
   const { data: healthPlans, isLoading } = useQuery<HealthPlan[]>({
     queryKey: ["/api/health-plans"],
+    queryFn: async () => {
+      const response = await fetch('/api/health-plans');
+      if (!response.ok) throw new Error('Failed to fetch health plans');
+      return response.json();
+    },
   });
 
   const handleSelect = (plan: HealthPlan) => {

@@ -50,6 +50,11 @@ export function HealthPlanForm({ onSuccess }: HealthPlanFormProps) {
   // Fetch pets
   const { data: pets, isLoading: isPetsLoading } = useQuery<Pet[]>({
     queryKey: ["/api/pets"],
+    queryFn: async () => {
+      const response = await fetch('/api/pets');
+      if (!response.ok) throw new Error('Failed to fetch pets');
+      return response.json();
+    },
     enabled: !!user,
   });
 

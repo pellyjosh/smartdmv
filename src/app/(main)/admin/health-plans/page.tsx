@@ -24,18 +24,33 @@ export default function HealthPlansPage() {
   // Fetch health plans
   const { data: healthPlans, isLoading: isHealthPlansLoading } = useQuery<HealthPlan[]>({
     queryKey: ["/api/health-plans"],
+    queryFn: async () => {
+      const response = await fetch('/api/health-plans');
+      if (!response.ok) throw new Error('Failed to fetch health plans');
+      return response.json();
+    },
     enabled: !!user,
   });
 
   // Fetch pets
   const { data: pets, isLoading: isPetsLoading } = useQuery<Pet[]>({
     queryKey: ["/api/pets"],
+    queryFn: async () => {
+      const response = await fetch('/api/pets');
+      if (!response.ok) throw new Error('Failed to fetch pets');
+      return response.json();
+    },
     enabled: !!user,
   });
 
   // Fetch health plan milestones for the selected plan
   const { data: milestones, isLoading: isMilestonesLoading } = useQuery<HealthPlanMilestone[]>({
     queryKey: ["/api/health-plans", selectedPlanId, "milestones"],
+    queryFn: async () => {
+      const response = await fetch(`/api/health-plans/${selectedPlanId}/milestones`);
+      if (!response.ok) throw new Error('Failed to fetch health plan milestones');
+      return response.json();
+    },
     enabled: !!selectedPlanId,
   });
 

@@ -1,4 +1,5 @@
 'use client';
+import { MarketplaceFeatureContainer } from "@/components/features/marketplace-feature-message";
 import {
   Card,
   CardContent,
@@ -344,7 +345,13 @@ export default function TelemedicinePage() {
 
   // Show the actual feature UI for users with access or while loading
   return (
-    <div className="h-full">
+    <MarketplaceFeatureContainer
+      featureName="Telemedicine"
+      featureId="telemedicine"
+      addOnId="10"
+      description="Conduct virtual consultations with clients through video calls and messaging. This feature requires the Telemedicine Platform add-on."
+    >
+      <div className="h-full">
       <main className="flex-1 overflow-y-auto pb-16 md:pb-0 p-4 md:p-6">
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-4">
@@ -618,6 +625,7 @@ export default function TelemedicinePage() {
           </Tabs>
         </div>
       </main>
-    </div>
+      </div>
+    </MarketplaceFeatureContainer>
   );
 }

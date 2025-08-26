@@ -1,20 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { GalleryVerticalEnd, AlertCircle, Loader2, LogIn as LogInIcon, Eye, EyeOff } from "lucide-react"
+import { useUser } from "@/context/UserContext"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useState } from "react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import NextImage from "next/image"; // Renamed to avoid conflict with local Image variable
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { HeartPulse, PawPrint, LogIn as LogInIcon, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { useUser } from "@/context/UserContext";
 import { Checkbox } from "@/components/ui/checkbox";
-import { generateLoginImage } from '@/ai/flows/generate-login-image-flow';
-import { Alert, AlertDescription } from "@/components/ui/alert";
+
+// Custom background types
+type BackgroundImage = {
+  id: string;
+  path: string;
+  name: string;
+}
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -24,45 +29,12 @@ const loginFormSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
-export default function LoginPage() {
+function LoginForm() {
   const userContext = useUser();
-  const { user, login, isLoading: authIsLoading, initialAuthChecked } = userContext;
-
+  const { login, isLoading: authIsLoading } = userContext;
   const { toast } = useToast();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loginImage, setLoginImage] = useState<string>("https://placehold.co/800x1200.png");
-  const [imageLoading, setImageLoading] = useState(true);
-  const [imageError, setImageError] = useState<string | null>(null);
-
-  // Check for session expired error
-  const errorParam = searchParams.get('error');
-  const isSessionExpired = errorParam === 'session_expired';
-
-  useEffect(() => {
-    const fetchImage = async () => {
-      setImageLoading(true);
-      setImageError(null);
-      try {
-        const result = await generateLoginImage({ topic: "veterinary clinic environment" });
-        if (result.imageDataUri) {
-          setLoginImage(result.imageDataUri);
-        } else {
-          throw new Error("No image data URI returned");
-        }
-      } catch (err) {
-        console.error("Failed to generate login image:", err);
-        setImageError("Could not load background image.");
-        // Fallback to placeholder is already the default state of loginImage
-      } finally {
-        setImageLoading(false);
-      }
-    };
-    // fetchImage(); // Uncomment to enable AI image generation
-    setImageLoading(false); // Keeping placeholder for now to avoid API calls during testing
-  }, []);
 
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -77,7 +49,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       console.log('[LoginPage] onLoginSubmit called with:', data.email);
-      const loggedInUser = await login(data.email, data.password); // login from UserContext
+      const loggedInUser = await login(data.email, data.password);
       if (loggedInUser) {
         toast({
           title: "Login Successful",
@@ -85,7 +57,6 @@ export default function LoginPage() {
           variant: "default",
         });
         console.log('[LoginPage] Login successful for user:', loggedInUser.email);
-        // Navigation is handled by UserProvider's useEffect based on user state change
       } else {
          toast({
             title: "Login Failed",
@@ -106,9 +77,150 @@ export default function LoginPage() {
     }
   };
 
+  return (
+    <Form {...loginForm}>
+      <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-6">
+        <FormField
+          control={loginForm.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-sm font-medium text-foreground">Email</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="Enter your email"
+                  {...field}
+                  className="text-base md:text-sm"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={loginForm.control}
+          name="password"
+          render={({ field }) => (
+            <FormItem>
+               <FormLabel className="text-sm font-medium text-foreground">Password</FormLabel>
+              <FormControl>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    {...field}
+                    className="text-base md:text-sm pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="flex items-center justify-between">
+          <FormField
+            control={loginForm.control}
+            name="rememberMe"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                  />
+                </FormControl>
+                <FormLabel className="text-sm font-normal text-muted-foreground cursor-pointer">
+                  Remember me
+                </FormLabel>
+              </FormItem>
+            )}
+          />
+          <Button
+            variant="link"
+            className="p-0 h-auto text-sm font-normal text-primary hover:underline"
+            type="button"
+            onClick={() => toast({ title: "Forgot Password", description: "Password recovery is not yet implemented."})}
+          >
+            Forgot password?
+          </Button>
+        </div>
+
+        <Button
+          type="submit"
+          className="w-full py-3 bg-primary text-primary-foreground hover:bg-primary/90"
+          disabled={isSubmitting || authIsLoading}
+        >
+          {(isSubmitting || authIsLoading) ? (
+            <>
+              <LogInIcon className="mr-2 h-4 w-4 animate-spin" />
+              Signing in...
+            </>
+          ) : "Sign in"}
+        </Button>
+      </form>
+    </Form>
+  );
+}
+
+export default function LoginPage() {
+  // Redirect if already logged in
+  const userContext = useUser();
+  const { user, isLoading: authIsLoading, initialAuthChecked } = userContext;
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // State for the selected image
+  const [selectedImage, setSelectedImage] = useState<string>("/assets/img/bg/login-bg-1.png")
+  const [showImageSelector, setShowImageSelector] = useState<boolean>(false)
+  const [loginImages, setLoginImages] = useState<BackgroundImage[]>([
+    { 
+      id: "custom-background-1", 
+      path: "/assets/img/bg/login-bg-1.png", 
+      name: "Custom Background 1"
+    },
+     { 
+      id: "custom-background-2", 
+      path: "/assets/img/bg/login-bg-2.png", 
+      name: "Custom Background 2"
+    }
+  ])
+
+  // Check for session expired error
+  const errorParam = searchParams.get('error');
+  const isSessionExpired = errorParam === 'session_expired';
+  
+  // Try to get saved preference from localStorage if no default is set
+  useEffect(() => {
+    const savedImage = localStorage.getItem("login-image-preference")
+    if (savedImage && loginImages.length > 0) {
+      const imageObj = loginImages.find(img => img.id === savedImage)
+      if (imageObj) {
+        setSelectedImage(imageObj.path)
+      }
+    }
+  }, [loginImages])
+  
+  // Save preference to localStorage when changed
+  const handleImageSelect = (imagePath: string, imageId: string) => {
+    setSelectedImage(imagePath)
+    localStorage.setItem("login-image-preference", imageId)
+    setShowImageSelector(false)
+  }
+
   console.log('[LoginPage Render] Context State: authIsLoading:', authIsLoading, 'initialAuthChecked:', initialAuthChecked, 'user:', user ? user.email : null);
 
-  if (!initialAuthChecked || (authIsLoading && !user) ) { // Show loading if still checking or if loading and no user yet
+  if (!initialAuthChecked || (authIsLoading && !user) ) {
     console.log('[LoginPage Render] Initial auth not checked or auth is loading. Rendering loading message.');
     return (
       <div className="flex flex-col justify-center items-center h-screen bg-slate-100">
@@ -127,26 +239,25 @@ export default function LoginPage() {
       </div>
     );
   }
-
-  console.log('[LoginPage Render] Rendering login form.');
+  
   return (
-    <div className="min-h-screen flex flex-col bg-slate-100">
-      <header className="w-full p-4 flex justify-start items-center border-b border-border bg-card shadow-sm">
-        <div className="flex items-center">
-          <HeartPulse className="h-8 w-8 text-primary mr-2" />
-          <span className="font-bold text-xl text-foreground">Smart<span className="text-primary">DVM</span></span>
-        </div>
-      </header>
-      <main className="flex-1 flex flex-col md:flex-row">
-        <div className="w-full md:w-2/5 bg-card p-8 md:p-12 lg:p-16 flex flex-col justify-center">
-          <div className="max-w-md mx-auto w-full">
-            <div className="mb-10 text-left">
-              <h1 className="text-3xl font-bold text-foreground">Welcome back</h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Sign in to access your veterinary practice
-              </p>
+    <div className="grid min-h-svh lg:grid-cols-2">
+      <div className="flex flex-col gap-4 p-6 md:p-10">
+        <div className="flex justify-center gap-2 md:justify-start">
+          <a href="/" className="flex items-center gap-2 font-medium">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md text-white" style={{ backgroundColor: "#009EED" }}>
+              <GalleryVerticalEnd className="size-4" />
             </div>
-
+            <span className="text-xl font-semibold" style={{ color: "#009EED" }}>SmartDVM</span>
+          </a>
+        </div>
+        <div className="flex flex-1 items-center justify-center">
+          <div className="w-full max-w-md">
+            <div className="mb-8 text-center">
+              <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
+              <p className="mt-2 text-muted-foreground">Sign in to access your veterinary practice</p>
+            </div>
+            
             {isSessionExpired && (
               <Alert className="mb-6 border-orange-200 bg-orange-50">
                 <AlertCircle className="h-4 w-4 text-orange-600" />
@@ -155,136 +266,72 @@ export default function LoginPage() {
                 </AlertDescription>
               </Alert>
             )}
-
-            <Form {...loginForm}>
-              <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-6">
-                <FormField
-                  control={loginForm.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-foreground">Email</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Enter your email"
-                          {...field}
-                          className="text-base md:text-sm"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={loginForm.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                       <FormLabel className="text-sm font-medium text-foreground">Password</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input
-                            type={showPassword ? "text" : "password"}
-                            placeholder="Enter your password"
-                            {...field}
-                            className="text-base md:text-sm pr-10"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground"
-                            aria-label={showPassword ? "Hide password" : "Show password"}
-                          >
-                            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                          </button>
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="flex items-center justify-between">
-                  <FormField
-                    control={loginForm.control}
-                    name="rememberMe"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center space-x-2 space-y-0">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                          />
-                        </FormControl>
-                        <FormLabel className="text-sm font-normal text-muted-foreground cursor-pointer">
-                          Remember me
-                        </FormLabel>
-                      </FormItem>
-                    )}
-                  />
-                  <Button
-                    variant="link"
-                    className="p-0 h-auto text-sm font-normal text-primary hover:underline"
-                    type="button"
-                    onClick={() => toast({ title: "Forgot Password", description: "Password recovery is not yet implemented."})}
-                  >
-                    Forgot password?
-                  </Button>
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full py-3 bg-primary text-primary-foreground hover:bg-primary/90"
-                  disabled={isSubmitting || authIsLoading}
+            
+            <LoginForm />
+          </div>
+        </div>
+      </div>
+      <div className="relative hidden bg-muted lg:block">
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/20 to-primary/5 z-10"></div>
+        <img
+          src={selectedImage}
+          alt="Veterinary clinic illustration"
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={(e) => {
+            console.error("Background image failed to load:", selectedImage);
+            e.currentTarget.src = '/assets/img/bg/login-bg-1.png';
+          }}
+        />
+        
+        {/* Image Selector UI - Only visible when toggled */}
+        {showImageSelector && (
+          <div className="absolute top-6 right-6 z-20 rounded-lg bg-white/95 p-4 shadow-lg dark:bg-gray-900/90">
+            <h3 className="mb-3 text-lg font-medium">Change Background</h3>
+            <div className="grid grid-cols-1 gap-3">
+              {loginImages.map((image) => (
+                <div 
+                  key={image.id}
+                  className={`flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-primary/10 ${
+                    selectedImage === image.path ? 'bg-primary/20' : ''
+                  }`}
+                  onClick={() => handleImageSelect(image.path, image.id)}
                 >
-                  {(isSubmitting || authIsLoading) ? (
-                    <>
-                      <LogInIcon className="mr-2 h-4 w-4 animate-spin" />
-                      Signing in...
-                    </>
-                  ) : "Sign in"}
-                </Button>
-              </form>
-            </Form>
-          </div>
-        </div>
-
-        <div className="hidden md:flex md:w-3/5 relative">
-          {imageLoading && (
-            <div className="absolute inset-0 flex justify-center items-center bg-slate-200">
-              <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            </div>
-          )}
-          {!imageLoading && imageError && (
-            <div className="absolute inset-0 flex flex-col justify-center items-center bg-slate-200 p-4 text-center">
-              <p className="text-destructive mb-2">{imageError}</p>
-              <p className="text-sm text-muted-foreground">Displaying default image.</p>
-            </div>
-          )}
-          <NextImage
-            src={loginImage}
-            alt="Illustration of a veterinary clinic scene with pets and vets"
-            layout="fill"
-            objectFit="cover"
-            className="opacity-90"
-            data-ai-hint="veterinary clinic illustration"
-            priority
-            unoptimized={loginImage.startsWith('data:image')}
-          />
-          <div className="absolute inset-x-0 bottom-0 p-8 lg:p-12">
-            <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm p-6 rounded-lg shadow-md text-gray-800 dark:text-gray-200">
-              <h2 className="text-xl lg:text-2xl font-semibold mb-3 text-primary">
-                Complete Veterinary Management
-              </h2>
-              <p className="text-xs lg:text-sm leading-relaxed">
-                VetConnectPro provides a comprehensive solution for modern veterinary practices with appointment scheduling, medical records, lab integration, and AI-powered diagnostic assistance.
-              </p>
+                  <div className="relative w-12 h-12 overflow-hidden rounded border">
+                    <img 
+                      src={image.path} 
+                      alt={image.name}
+                      className="absolute inset-0 w-full h-full object-cover" 
+                    />
+                  </div>
+                  <span className="text-sm font-medium">{image.name}</span>
+                </div>
+              ))}
             </div>
           </div>
+        )}
+        
+        {/* Toggle button for image selector */}
+        <button 
+          onClick={() => setShowImageSelector(!showImageSelector)}
+          className="absolute top-6 right-6 z-20 p-2 rounded-full bg-white/50 hover:bg-white/80 transition-colors"
+          aria-label="Change background image"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z"></path>
+            <path d="M12 9v6"></path>
+            <path d="M9 12h6"></path>
+          </svg>
+        </button>
+        
+        <div className="absolute bottom-6 left-6 right-6 z-20 rounded-lg bg-white/95 p-6 shadow-lg dark:bg-gray-900/90">
+          <h2 className="mb-2 text-xl font-medium">Complete Veterinary Management</h2>
+          <p className="text-muted-foreground">
+            SmartDVM provides a comprehensive solution for modern veterinary practices with 
+            appointment scheduling, medical records, lab integration, and AI-powered 
+            diagnostic assistance.
+          </p>
         </div>
-      </main>
+      </div>
     </div>
-  );
+  )
 }
