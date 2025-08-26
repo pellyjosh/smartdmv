@@ -272,7 +272,7 @@ export default function LoginPage() {
         </div>
       </div>
       <div className="relative hidden bg-muted lg:block">
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/20 to-primary/5 z-10"></div>
+        <div className="absolute inset-0 bg-gradient-to-b z-10"></div>
         <img
           src={selectedImage}
           alt="Veterinary clinic illustration"
