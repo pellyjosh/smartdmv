@@ -193,27 +193,19 @@ export default function IntegrationSettingsPage() {
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
   const [practiceData, setPracticeData] = useState<any>(null);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
-  const [baseUrl, setBaseUrl] = useState<string>('http://localhost:9002');
-  
-  // Load base URL from environment
-  useQuery({
-    queryKey: ['/api/base-url'],
-    queryFn: async () => {
-      const response = await fetch('/api/base-url');
-      if (!response.ok) throw new Error('Failed to load base URL');
-      const data = await response.json();
-      setBaseUrl(data.baseUrl);
-      return data;
-    },
-  });
   
   // Load saved settings on component mount
-  useQuery({
+  const { data: settingsData, isLoading: settingsLoading, error: settingsError } = useQuery({
     queryKey: ['/api/integration-settings'],
     queryFn: async () => {
       const response = await fetch('/api/integration-settings');
-      if (!response.ok) throw new Error('Failed to load settings');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to load settings: ${response.status} ${errorText}`);
+      }
       const data = await response.json();
+      
+      console.log('Settings data loaded:', data);
       
       if (data.widgetSettings) setWidgetSettings(data.widgetSettings);
       if (data.apiSettings) {
@@ -230,37 +222,47 @@ export default function IntegrationSettingsPage() {
       
       return data;
     },
-    retry: false,
+    retry: 1,
   });
 
   // Load practice-specific data for widget configuration
-  useQuery({
+  const { data: practiceDataResponse, isLoading: practiceLoading, error: practiceError } = useQuery({
     queryKey: ['/api/integration-settings/practice-data'],
     queryFn: async () => {
       const response = await fetch('/api/integration-settings/practice-data');
-      if (!response.ok) throw new Error('Failed to load practice data');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to load practice data: ${response.status} ${errorText}`);
+      }
       const data = await response.json();
       setPracticeData(data);
       
-      // Update widget settings with practice-specific defaults if no existing appointment types
-      if ((widgetSettings.appointmentTypes || []).length === 0 && data.appointmentTypes) {
-        setWidgetSettings(prev => ({
-          ...prev,
-          appointmentTypes: data.appointmentTypes,
-          availableDays: data.defaultSettings?.availableDays || [1, 2, 3, 4, 5], // Default to weekdays
-          workingHours: data.defaultSettings?.workingHours || { start: '09:00', end: '17:00' },
-          customTexts: {
-            ...prev.customTexts,
-            headerTitle: `Book an Appointment at ${data.practice.name}`,
-            headerSubtitle: `Schedule your pet's visit with ${data.practice.name}`,
-          }
-        }));
-      }
+      console.log('Practice data loaded:', data);
       
       return data;
     },
-    retry: false,
+    retry: 1,
   });
+  
+  // Update widget settings when practice data loads
+  useEffect(() => {
+    if (practiceDataResponse && (!widgetSettings.appointmentTypes || widgetSettings.appointmentTypes.length === 0) && practiceDataResponse.appointmentTypes) {
+      console.log('Updating widget settings with practice data');
+      console.log('Practice appointment types:', practiceDataResponse.appointmentTypes);
+      console.log('Current widget appointment types:', widgetSettings.appointmentTypes);
+      setWidgetSettings(prev => ({
+        ...prev,
+        appointmentTypes: practiceDataResponse.appointmentTypes,
+        availableDays: practiceDataResponse.defaultSettings?.availableDays || [1, 2, 3, 4, 5],
+        workingHours: practiceDataResponse.defaultSettings?.workingHours || { start: '09:00', end: '17:00' },
+        customTexts: {
+          ...prev.customTexts,
+          headerTitle: `Book an Appointment at ${practiceDataResponse.practice.name}`,
+          headerSubtitle: `Schedule your pet's visit with ${practiceDataResponse.practice.name}`,
+        }
+      }));
+    }
+  }, [practiceDataResponse]);
   
   // Save settings mutation
   const saveSettingsMutation = useMutation({
@@ -1366,26 +1368,57 @@ export default function IntegrationSettingsPage() {
   return (
     <div className="h-full">
       <main className="flex-1 overflow-y-auto pb-16 md:pb-0 p-4 md:p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Website Integration</h1>
-          <Button 
-            onClick={() => saveSettingsMutation.mutate()}
-            disabled={saveSettingsMutation.isPending}
-            className="gap-2"
-          >
-            {saveSettingsMutation.isPending ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4" />
-                Save All Settings
-              </>
-            )}
-          </Button>
-        </div>
+        {/* Show loading screen until data is loaded */}
+        {(settingsLoading || practiceLoading) ? (
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="text-center">
+              <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
+              <h2 className="text-lg font-semibold mb-2">Loading Integration Settings</h2>
+              <p className="text-gray-600">Please wait while we load your configuration...</p>
+            </div>
+          </div>
+        ) : (settingsError || practiceError) ? (
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="text-center max-w-md">
+              <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-red-500" />
+              <h2 className="text-lg font-semibold mb-2">Failed to Load Settings</h2>
+              <p className="text-gray-600 mb-4">
+                {settingsError?.message || practiceError?.message}
+              </p>
+              <Button 
+                onClick={() => {
+                  queryClient.invalidateQueries({ queryKey: ['/api/integration-settings'] });
+                  queryClient.invalidateQueries({ queryKey: ['/api/integration-settings/practice-data'] });
+                }}
+                className="gap-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Retry Loading
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-6">
+              <h1 className="text-2xl font-bold">Website Integration</h1>
+              <Button 
+                onClick={() => saveSettingsMutation.mutate()}
+                disabled={saveSettingsMutation.isPending}
+                className="gap-2"
+              >
+                {saveSettingsMutation.isPending ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save All Settings
+                  </>
+                )}
+              </Button>
+            </div>
         
         <MarketplaceFeatureContainer
           featureId="WEBSITE_APPOINTMENT_INTEGRATION"
@@ -1888,6 +1921,13 @@ export default function IntegrationSettingsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  {/* Debug info */}
+                  <div className="mb-4 p-2 bg-gray-100 rounded text-xs">
+                    <strong>Debug:</strong> Widget appointment types: {JSON.stringify(widgetSettings.appointmentTypes?.length || 0)} | 
+                    Practice data loaded: {practiceData ? 'Yes' : 'No'} | 
+                    Practice appointment types: {practiceData?.appointmentTypes?.length || 0}
+                  </div>
+                  
                   {(widgetSettings.appointmentTypes || []).length === 0 ? (
                     <div className="text-center py-12">
                       <div className="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -2238,6 +2278,8 @@ export default function IntegrationSettingsPage() {
             </TabsContent>
           </Tabs>
         </MarketplaceFeatureContainer>
+          </>
+        )}
       </main>
     </div>
   );

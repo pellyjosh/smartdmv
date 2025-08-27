@@ -318,26 +318,7 @@ const MarketplacePage = () => {
         Extend your SmartDVM experience with powerful add-ons and integrations
       </p>
 
-      {/* Debug Information */}
-      <div className="mb-6 p-4 bg-gray-100 rounded-lg">
-        <h3 className="font-semibold mb-2">Debug Info:</h3>
-        <p>User Practice ID: {userPracticeId || 'Not set'}</p>
-        <p>Practice Addons Loading: {practiceAddonsLoading ? 'Yes' : 'No'}</p>
-        <p>Practice Addons Error: {practiceAddonsError ? practiceAddonsError.message : 'None'}</p>
-        <p>Practice Addons Count: {practiceAddons ? practiceAddons.length : 'No data'}</p>
-        {practiceAddons && practiceAddons.length > 0 && (
-          <div className="mt-2">
-            <p className="font-medium">Active Subscriptions:</p>
-            <ul className="list-disc list-inside">
-              {practiceAddons.filter((sub: any) => sub.isActive).map((sub: any, i: number) => (
-                <li key={i}>
-                  Addon ID: {sub.addonId}, Name: {sub.addon?.name || 'Unknown'}, Active: {sub.isActive ? 'Yes' : 'No'}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+ 
 
       {/* Featured Add-ons */}
       {featuredAddons && featuredAddons.length > 0 && (
