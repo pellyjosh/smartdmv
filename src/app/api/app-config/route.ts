@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // Get the base URL from environment variable or fallback to localhost
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+    // Get the base URL from environment variables with proper fallback hierarchy
+    const baseUrl = process.env.APP_BASE_URL || 
+                   process.env.NEXT_PUBLIC_APP_URL || 
                    (process.env.NODE_ENV === 'production' 
-                     ? 'https://your-domain.com' 
+                     ? 'https://version3demo.smartdvm.com' 
                      : 'http://localhost:9002');
 
     const config = {

@@ -44,6 +44,7 @@ import {
 import { MarketplaceFeatureContainer } from "@/components/features/marketplace-feature-message";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useUser } from "@/context/UserContext";
 
 // Widget configuration interfaces
 interface WidgetSettings {
@@ -181,6 +182,7 @@ const DEFAULT_API_SETTINGS: ApiSettings = {
 export default function IntegrationSettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+    const { userPracticeId } = useUser();
   
   // State management
   const [widgetSettings, setWidgetSettings] = useState<WidgetSettings>(DEFAULT_WIDGET_SETTINGS);
@@ -191,17 +193,17 @@ export default function IntegrationSettingsPage() {
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
   const [practiceData, setPracticeData] = useState<any>(null);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
-  const [appConfig, setAppConfig] = useState<{ baseUrl: string; environment: string } | null>(null);
+  const [baseUrl, setBaseUrl] = useState<string>('http://localhost:9002');
   
-  // Load app configuration
+  // Load base URL from environment
   useQuery({
-    queryKey: ['/api/app-config'],
+    queryKey: ['/api/base-url'],
     queryFn: async () => {
-      const response = await fetch('/api/app-config');
-      if (!response.ok) throw new Error('Failed to load app config');
-      const config = await response.json();
-      setAppConfig(config);
-      return config;
+      const response = await fetch('/api/base-url');
+      if (!response.ok) throw new Error('Failed to load base URL');
+      const data = await response.json();
+      setBaseUrl(data.baseUrl);
+      return data;
     },
   });
   
@@ -245,8 +247,8 @@ export default function IntegrationSettingsPage() {
         setWidgetSettings(prev => ({
           ...prev,
           appointmentTypes: data.appointmentTypes,
-          availableDays: data.defaultSettings.availableDays,
-          workingHours: data.defaultSettings.workingHours,
+          availableDays: data.defaultSettings?.availableDays || [1, 2, 3, 4, 5], // Default to weekdays
+          workingHours: data.defaultSettings?.workingHours || { start: '09:00', end: '17:00' },
           customTexts: {
             ...prev.customTexts,
             headerTitle: `Book an Appointment at ${data.practice.name}`,
@@ -365,14 +367,15 @@ export default function IntegrationSettingsPage() {
   
   // Helper function to get consistent base URL
   const getBaseUrl = () => {
-    return appConfig?.baseUrl || 
-           (process.env.NODE_ENV === 'production' 
-             ? 'https://your-domain.com' 
-             : 'http://localhost:9002');
+    return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
   };
   
   const generateEmbedCode = () => {
-    const practiceId = practiceData?.practice?.id || 'YOUR_PRACTICE_ID';
+    if (!practiceData?.practice?.id) {
+      return `<!-- Loading practice data... Please wait -->`;
+    }
+    
+    const practiceId = practiceData.practice.id;
     const apiKey = apiSettings.apiKey || 'YOUR_API_KEY';
     const baseUrl = getBaseUrl();
     

@@ -28,8 +28,12 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      widgetSettings: existingSettings.widgetSettings ? JSON.parse(existingSettings.widgetSettings) : null,
-      apiSettings: existingSettings.apiSettings ? JSON.parse(existingSettings.apiSettings) : null,
+      widgetSettings: typeof existingSettings.widgetSettings === 'string'
+        ? JSON.parse(existingSettings.widgetSettings)
+        : null,
+      apiSettings: typeof existingSettings.apiSettings === 'string'
+        ? JSON.parse(existingSettings.apiSettings)
+        : null,
       websiteUrl: existingSettings.websiteUrl || '',
       isVerified: existingSettings.isVerified || false
     });

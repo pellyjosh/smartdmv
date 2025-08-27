@@ -3,78 +3,18 @@ import { db } from '@/db';
 import { customFieldGroups, customFieldValues } from '@/db/schemas/customFieldsSchema';
 import { practices, integrationApiKeys } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { getUserPractice } from '@/lib/auth-utils';
 
-// Handle CORS preflight
-export async function OPTIONS(request: NextRequest) {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
-}
-
-// Simple API key validation
-async function validateApiKeySimple(apiKey: string, practiceId: number): Promise<boolean> {
-  try {
-    const keyRecord = await db.query.integrationApiKeys.findFirst({
-      where: and(
-        eq(integrationApiKeys.practiceId, practiceId),
-        eq(integrationApiKeys.keyHash, apiKey), // Assuming the key is stored as hash
-        eq(integrationApiKeys.isActive, true)
-      )
-    });
-    
-    return !!keyRecord;
-  } catch (error) {
-    console.error('API key validation error:', error);
-    return false;
-  }
-}
-
-// GET /api/integration-settings/practice-data?practiceId=1 - Get practice-specific data for widget configuration
+// GET /api/integration-settings/practice-data - Get practice-specific data for widget configuration (Admin route)
 export async function GET(request: NextRequest) {
   try {
-    // Add CORS headers to response
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    };
-
-    // Get practiceId from query params
-    const url = new URL(request.url);
-    const practiceIdParam = url.searchParams.get('practiceId');
-    
-    if (!practiceIdParam) {
-      return NextResponse.json({ error: 'Practice ID is required' }, { 
-        status: 400,
-        headers: corsHeaders 
-      });
+    // Use admin authentication instead of API key validation
+    const userPractice = await getUserPractice(request);
+    if (!userPractice) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const practiceId = parseInt(practiceIdParam);
-
-    // Validate API key
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'API key required' }, { 
-        status: 401,
-        headers: corsHeaders 
-      });
-    }
-
-    const apiKey = authHeader.substring(7);
-    const isValidKey = await validateApiKeySimple(apiKey, practiceId);
-    
-    if (!isValidKey) {
-      return NextResponse.json({ error: 'Invalid API key' }, { 
-        status: 401,
-        headers: corsHeaders 
-      });
-    }
+    const practiceId = parseInt(userPractice.practiceId);
 
     // Get appointment types from custom fields
     const appointmentTypesGroup = await db.query.customFieldGroups.findFirst({
@@ -158,18 +98,11 @@ export async function GET(request: NextRequest) {
       settings: null
     };
 
-    return NextResponse.json(practiceData, {
-      headers: corsHeaders
-    });
+    return NextResponse.json(practiceData);
   } catch (error) {
     console.error('Error fetching practice data:', error);
     return NextResponse.json({ error: 'Internal server error' }, { 
-      status: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
+      status: 500
     });
   }
 }
