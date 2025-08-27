@@ -377,6 +377,218 @@ export default function IntegrationSettingsPage() {
   const WidgetPreview = ({ previewDevice = 'desktop' }: { previewDevice?: 'desktop' | 'mobile' }) => {
     const appointmentTypes = (widgetSettings.appointmentTypes || []).filter(type => type.enabled);
     
+    // Business hours and availability configuration
+    const businessConfig = {
+      workingDays: [1, 2, 3, 4, 5], // Monday to Friday (0 = Sunday, 1 = Monday, etc.)
+      workingHours: {
+        start: '09:00',
+        end: '17:00',
+        timeSlots: [
+          '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+          '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', 
+          '15:00', '15:30', '16:00', '16:30'
+        ]
+      },
+      // This will be populated from API with real booking data
+      bookedSlots: [] as string[],
+      maxMonthsAhead: 3 // Allow booking up to 3 months ahead
+    };
+
+    // Load real availability data
+    const [availabilityLoaded, setAvailabilityLoaded] = useState(false);
+    
+    useEffect(() => {
+      const loadAvailability = async () => {
+        try {
+          // Include past month to show historical bookings correctly
+          const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 1 month ago
+          const endDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 3 months ahead
+          
+          const response = await fetch(`/api/widget/availability?practiceId=${practiceData?.practice?.id}&startDate=${startDate}&endDate=${endDate}`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+              businessConfig.bookedSlots = data.bookedSlots || [];
+              console.log('Preview loaded availability data:', data.bookedSlots.length, 'booked slots');
+              console.log('Preview booked slots:', data.bookedSlots);
+              setAvailabilityLoaded(true);
+            }
+          }
+        } catch (error) {
+          console.warn('Error loading availability data in preview:', error);
+          setAvailabilityLoaded(true); // Continue with empty slots
+        }
+      };
+
+      if (practiceData?.practice?.id) {
+        loadAvailability();
+      }
+    }, [practiceData?.practice?.id]);
+
+    // Calendar state
+    const [calendarState, setCalendarState] = useState({
+      currentMonth: new Date().getMonth(),
+      currentYear: new Date().getFullYear()
+    });
+
+    // Helper functions for date/time management
+    const isWorkingDay = (date: string) => {
+      const dayOfWeek = new Date(date).getDay();
+      return businessConfig.workingDays.includes(dayOfWeek);
+    };
+
+    const isAvailableDate = (date: string) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selectedDate = new Date(date);
+      selectedDate.setHours(0, 0, 0, 0);
+      
+      const maxDate = new Date();
+      maxDate.setMonth(maxDate.getMonth() + businessConfig.maxMonthsAhead);
+      
+      return selectedDate >= today && 
+             selectedDate <= maxDate && 
+             isWorkingDay(date);
+    };
+
+    const isAvailableTime = (date: string, time: string) => {
+      if (!date || !time) return false;
+      
+      const dateTime = `${date}T${time}`;
+      const selectedDateTime = new Date(dateTime);
+      const now = new Date();
+      
+      // Check if it's in the future
+      if (selectedDateTime <= now) return false;
+      
+      // Check if it's a working day
+      if (!isWorkingDay(date)) return false;
+      
+      // Check if time is within business hours
+      if (!businessConfig.workingHours.timeSlots.includes(time)) return false;
+      
+      // Check if slot is not booked
+      const slotKey = `${date}_${time}`;
+      return !businessConfig.bookedSlots.includes(slotKey);
+    };
+
+    const hasAvailableSlots = (date: string) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selectedDate = new Date(date);
+      selectedDate.setHours(0, 0, 0, 0);
+      
+      // If date is in the past, it's closed (not fully booked)
+      if (selectedDate < today) return false;
+      
+      // If it's not a working day, it's closed
+      if (!isWorkingDay(date)) return false;
+      
+      // If it's beyond our booking window, it's closed
+      const maxDate = new Date();
+      maxDate.setMonth(maxDate.getMonth() + businessConfig.maxMonthsAhead);
+      if (selectedDate > maxDate) return false;
+      
+      // Check if any time slot is available for this date
+      return businessConfig.workingHours.timeSlots.some(time => 
+        isAvailableTime(date, time)
+      );
+    };
+
+    const generateCalendarMonth = (month: number, year: number) => {
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const startDate = new Date(firstDay);
+      startDate.setDate(startDate.getDate() - firstDay.getDay()); // Start from Sunday
+      
+      const days = [];
+      const current = new Date(startDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Generate 6 weeks (42 days) to fill calendar grid
+      for (let i = 0; i < 42; i++) {
+        const dateString = current.toISOString().split('T')[0];
+        const isCurrentMonth = current.getMonth() === month;
+        const isToday = current.toDateString() === new Date().toDateString();
+        const currentDateObj = new Date(current);
+        currentDateObj.setHours(0, 0, 0, 0);
+        
+        let dayStatus = 'unavailable'; // Default for non-working days or past dates
+        
+        if (isCurrentMonth) {
+          if (currentDateObj < today) {
+            // Past dates are closed
+            dayStatus = 'unavailable';
+          } else if (!isWorkingDay(dateString)) {
+            // Weekends are closed
+            dayStatus = 'unavailable';
+          } else if (hasAvailableSlots(dateString)) {
+            // Working day with available slots
+            dayStatus = 'available';
+          } else {
+            // Working day but fully booked
+            dayStatus = 'working-no-slots';
+          }
+        }
+        
+        days.push({
+          date: dateString,
+          dayNumber: current.getDate(),
+          isCurrentMonth,
+          isToday,
+          isAvailable: dayStatus === 'available',
+          isWorkingDay: isWorkingDay(dateString) && currentDateObj >= today,
+          status: dayStatus
+        });
+        
+        current.setDate(current.getDate() + 1);
+      }
+      
+      return days;
+    };
+
+    const getMonthName = (month: number, year: number) => {
+      return new Date(year, month).toLocaleDateString('en-US', { 
+        month: 'long', 
+        year: 'numeric' 
+      });
+    };
+
+    const navigateMonth = (direction: 'prev' | 'next') => {
+      const today = new Date();
+      const maxDate = new Date();
+      maxDate.setMonth(maxDate.getMonth() + businessConfig.maxMonthsAhead);
+      
+      setCalendarState(prev => {
+        if (direction === 'prev') {
+          if (prev.currentYear > today.getFullYear() || 
+             (prev.currentYear === today.getFullYear() && prev.currentMonth > today.getMonth())) {
+            let newMonth = prev.currentMonth - 1;
+            let newYear = prev.currentYear;
+            if (newMonth < 0) {
+              newMonth = 11;
+              newYear--;
+            }
+            return { currentMonth: newMonth, currentYear: newYear };
+          }
+        } else if (direction === 'next') {
+          if (prev.currentYear < maxDate.getFullYear() || 
+             (prev.currentYear === maxDate.getFullYear() && prev.currentMonth < maxDate.getMonth())) {
+            let newMonth = prev.currentMonth + 1;
+            let newYear = prev.currentYear;
+            if (newMonth > 11) {
+              newMonth = 0;
+              newYear++;
+            }
+            return { currentMonth: newMonth, currentYear: newYear };
+          }
+        }
+        return prev;
+      });
+    };
+    
     // Interactive preview state
     const [previewState, setPreviewState] = useState({
       selectedType: '',
@@ -431,11 +643,19 @@ export default function IntegrationSettingsPage() {
     };
 
     const handleDateSelect = (date: string) => {
-      setPreviewState(prev => ({ ...prev, selectedDate: date }));
+      if (isAvailableDate(date)) {
+        setPreviewState(prev => ({ 
+          ...prev, 
+          selectedDate: date,
+          selectedTime: '' // Reset time when date changes
+        }));
+      }
     };
 
     const handleTimeSelect = (time: string) => {
-      setPreviewState(prev => ({ ...prev, selectedTime: time }));
+      if (isAvailableTime(previewState.selectedDate, time)) {
+        setPreviewState(prev => ({ ...prev, selectedTime: time }));
+      }
     };
 
     const handleFormChange = (field: string, value: string) => {
@@ -596,86 +816,209 @@ export default function IntegrationSettingsPage() {
 
             {/* Interactive Date/Time Selection */}
             {previewState.selectedType && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <h3 className="font-semibold text-lg">Select Date & Time</h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {['Today', 'Tomorrow', 'Wed 27'].map((date) => (
+                
+                {/* Calendar Widget */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <label className="block text-sm font-medium text-gray-700 mb-2 px-4 pt-4">Preferred Date *</label>
+                  
+                  {/* Calendar Header */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 border-b">
                     <button
-                      key={date}
                       type="button"
-                      className={`p-3 rounded border text-sm transition-colors ${
-                        previewState.selectedDate === date 
-                          ? 'border-blue-500 bg-blue-50 text-blue-600' 
-                          : 'border-gray-300 hover:border-gray-400'
-                      }`}
-                      style={{ borderRadius: `${widgetSettings.borderRadius}px` }}
-                      onClick={() => handleDateSelect(date)}
+                      onClick={() => navigateMonth('prev')}
+                      className="p-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 transition-colors"
                     >
-                      {date}
+                      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path fillRule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+                      </svg>
                     </button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-4 gap-2 mt-3">
-                  {['9:00 AM', '10:30 AM', '2:00 PM', '3:30 PM'].map((time) => (
+                    <h4 className="text-lg font-semibold text-gray-900">
+                      {getMonthName(calendarState.currentMonth, calendarState.currentYear)}
+                    </h4>
                     <button
-                      key={time}
                       type="button"
-                      className={`p-2 rounded border text-sm transition-colors ${
-                        !previewState.selectedDate 
-                          ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                          : previewState.selectedTime === time 
-                            ? 'border-blue-500 bg-blue-50 text-blue-600' 
-                            : 'border-gray-300 hover:border-gray-400'
-                      }`}
-                      style={{ borderRadius: `${widgetSettings.borderRadius}px` }}
-                      onClick={() => previewState.selectedDate && handleTimeSelect(time)}
-                      disabled={!previewState.selectedDate}
+                      onClick={() => navigateMonth('next')}
+                      className="p-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 transition-colors"
                     >
-                      {time}
+                      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path fillRule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+                      </svg>
                     </button>
-                  ))}
+                  </div>
+                  
+                  {/* Calendar Days Header */}
+                  <div className="grid grid-cols-7 bg-gray-100">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                      <div key={day} className="p-3 text-center text-sm font-semibold text-gray-600 border-r border-gray-200 last:border-r-0">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Calendar Days Grid */}
+                  <div className="grid grid-cols-7">
+                    {generateCalendarMonth(calendarState.currentMonth, calendarState.currentYear).map((day, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        className={`relative p-3 text-center border-r border-b border-gray-200 last:border-r-0 min-h-[48px] transition-all ${
+                          !day.isCurrentMonth
+                            ? 'text-gray-300 bg-gray-50 cursor-not-allowed'
+                            : day.status === 'available'
+                            ? previewState.selectedDate === day.date
+                              ? 'bg-blue-500 text-white font-semibold'
+                              : 'bg-white text-green-600 hover:bg-green-50 hover:scale-105'
+                            : day.status === 'working-no-slots'
+                            ? 'bg-yellow-50 text-yellow-600'
+                            : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                        } ${day.isToday ? 'font-bold' : ''}`}
+                        style={{ borderRadius: `${widgetSettings.borderRadius}px` }}
+                        onClick={() => day.isAvailable && day.isCurrentMonth && handleDateSelect(day.date)}
+                        disabled={!day.isAvailable || !day.isCurrentMonth}
+                        title={
+                          !day.isCurrentMonth ? '' :
+                          day.status === 'available' ? `Available: ${new Date(day.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` : 
+                          day.status === 'working-no-slots' ? 'Fully booked' : 'Closed'
+                        }
+                      >
+                        {day.dayNumber}
+                        {day.isToday && (
+                          <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                        )}
+                        {day.isCurrentMonth && (
+                          <div className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${
+                            day.status === 'available' ? 'bg-green-400' : day.status === 'working-no-slots' ? 'bg-yellow-400' : 'bg-gray-300'
+                          }`}></div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {/* Calendar Legend */}
+                  <div className="flex justify-center gap-4 p-3 bg-gray-50 text-xs text-gray-600">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                      <span>Available</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                      <span>Fully Booked</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
+                      <span>Closed</span>
+                    </div>
+                  </div>
                 </div>
-                {!previewState.selectedDate && (
-                  <p className="text-sm text-gray-500 text-center mt-2">
-                    Please select a date first to choose a time slot
-                  </p>
-                )}
+
+                {/* Time Slots */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">Preferred Time *</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {businessConfig.workingHours.timeSlots.map((time) => {
+                      const isAvailable = isAvailableTime(previewState.selectedDate, time);
+                      const isSelected = previewState.selectedTime === time;
+                      return (
+                        <button
+                          key={time}
+                          type="button"
+                          className={`p-3 text-center border-2 rounded transition-all ${
+                            isAvailable 
+                              ? isSelected
+                                ? 'border-blue-500 bg-blue-50 text-blue-600'
+                                : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                              : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-60'
+                          }`}
+                          style={{ borderRadius: `${widgetSettings.borderRadius}px` }}
+                          onClick={() => isAvailable && handleTimeSelect(time)}
+                          disabled={!isAvailable}
+                          title={isAvailable ? time : 'Not available'}
+                        >
+                          {time}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {!previewState.selectedDate && (
+                    <p className="text-sm text-gray-500 text-center">Please select a date first</p>
+                  )}
+                  <p className="text-sm text-gray-500 text-center">Business Hours: 9:00 AM - 5:00 PM • Monday - Friday</p>
+                </div>
               </div>
             )}
 
             {/* Always show date/time section when no service selected */}
             {!previewState.selectedType && (
-              <div className="space-y-3 opacity-60">
+              <div className="space-y-4 opacity-60">
                 <h3 className="font-semibold text-lg text-gray-400">Select Date & Time</h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {['Today', 'Tomorrow', 'Wed 27'].map((date) => (
-                    <button
-                      key={date}
-                      type="button"
-                      className="p-3 rounded border text-sm border-gray-200 text-gray-400 cursor-not-allowed"
-                      style={{ borderRadius: `${widgetSettings.borderRadius}px` }}
-                      disabled
-                    >
-                      {date}
+                
+                {/* Disabled Calendar */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <label className="block text-sm font-medium text-gray-400 mb-2 px-4 pt-4">Preferred Date *</label>
+                  
+                  {/* Disabled Calendar Header */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 border-b">
+                    <button type="button" disabled className="p-2 border border-gray-300 rounded-md bg-gray-100 text-gray-400 cursor-not-allowed">
+                      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path fillRule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+                      </svg>
                     </button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-4 gap-2 mt-3">
-                  {['9:00 AM', '10:30 AM', '2:00 PM', '3:30 PM'].map((time) => (
-                    <button
-                      key={time}
-                      type="button"
-                      className="p-2 rounded border text-sm border-gray-200 text-gray-400 cursor-not-allowed"
-                      style={{ borderRadius: `${widgetSettings.borderRadius}px` }}
-                      disabled
-                    >
-                      {time}
+                    <h4 className="text-lg font-semibold text-gray-400">
+                      {getMonthName(calendarState.currentMonth, calendarState.currentYear)}
+                    </h4>
+                    <button type="button" disabled className="p-2 border border-gray-300 rounded-md bg-gray-100 text-gray-400 cursor-not-allowed">
+                      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path fillRule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+                      </svg>
                     </button>
-                  ))}
+                  </div>
+                  
+                  {/* Disabled Calendar Days Header */}
+                  <div className="grid grid-cols-7 bg-gray-100">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                      <div key={day} className="p-3 text-center text-sm font-semibold text-gray-400 border-r border-gray-200 last:border-r-0">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Disabled Calendar Days */}
+                  <div className="grid grid-cols-7">
+                    {generateCalendarMonth(calendarState.currentMonth, calendarState.currentYear).slice(0, 14).map((day, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        className="p-3 text-center border-r border-b border-gray-200 last:border-r-0 min-h-[48px] bg-gray-50 text-gray-400 cursor-not-allowed"
+                        disabled
+                      >
+                        {day.dayNumber}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <p className="text-sm text-gray-500 text-center mt-2">
-                  Select a service first to choose date and time
-                </p>
+
+                {/* Disabled Time Slots */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-400">Preferred Time *</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {businessConfig.workingHours.timeSlots.slice(0, 8).map((time, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        className="p-3 text-center border-2 border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-60 rounded"
+                        style={{ borderRadius: `${widgetSettings.borderRadius}px` }}
+                        disabled
+                      >
+                        {time}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-sm text-gray-500 text-center">
+                    Select a service first to choose date and time
+                  </p>
+                </div>
               </div>
             )}
 
@@ -1348,24 +1691,6 @@ export default function IntegrationSettingsPage() {
                           value={widgetSettings.borderRadius}
                           onChange={(e) => updateWidgetSetting('borderRadius', parseInt(e.target.value))}
                         />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label>Widget Position</Label>
-                        <Select 
-                          value={widgetSettings.position}
-                          onValueChange={(value) => updateWidgetSetting('position', value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="inline">Inline</SelectItem>
-                            <SelectItem value="floating-right">Floating Right</SelectItem>
-                            <SelectItem value="floating-left">Floating Left</SelectItem>
-                            <SelectItem value="modal">Modal Popup</SelectItem>
-                          </SelectContent>
-                        </Select>
                       </div>
                     </div>
                     

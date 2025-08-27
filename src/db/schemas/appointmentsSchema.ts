@@ -19,6 +19,11 @@ export const appointmentStatusEnum = [
   'no_show'            // Patient didn't arrive
 ] as const;
 
+export const appointmentSourceEnum = [
+  'internal',          // Booked from admin panel or internal system
+  'external'           // Booked from external website widget
+] as const;
+
 export const appointments = dbTable('appointments', {
   id: primaryKeyId(),
   title: text('title').notNull(),
@@ -32,6 +37,7 @@ export const appointments = dbTable('appointments', {
   type: text('type'),
   practitionerId: foreignKeyInt('practitioner_id').references(() => users.id, { onDelete: 'set null' }),
   practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id, { onDelete: 'cascade' }),
+  source: text('source', { enum: appointmentSourceEnum }).notNull().default(sql`'internal'`),
   
   // Telemedicine specific fields
   roomId: text('room_id'), // Unique room ID for WebRTC sessions

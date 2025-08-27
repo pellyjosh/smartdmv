@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Widget Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Simple Widget Test</h1>
+
+        <!-- Widget Container -->
+        <div id="smartdvm-booking-widget"></div>
+
+        <!-- SmartDVM Configuration -->
+        <script>
+            window.smartDVMConfig = {
+                "practiceId": 1,
+                "apiKey": "sk_06ab629143dea2ae3cb73f60c7661880572ec09b4fb4440d1e0bf5b931eae8a1",
+                "baseUrl": "http://localhost:9002"
+            };
+        </script>
+
+        <!-- Load Widget Script -->
+        <script src="./widget/booking-widget.js"></script>
+    </div>
+</body>
+
+</html>

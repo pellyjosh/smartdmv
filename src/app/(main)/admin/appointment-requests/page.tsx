@@ -35,6 +35,7 @@ import { Loader2, Calendar, Clock, User, PenBox, Check, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input"; // Input is not used, can be removed if not needed elsewhere in future
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/context/UserContext";
 import { apiRequest } from "@/lib/queryClient";
@@ -74,17 +75,19 @@ export default function AppointmentRequestsPage() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [activeTab, setActiveTab] = useState("pending");
+  const [sourceFilter, setSourceFilter] = useState("all"); // Add source filter state
   
   // Fetch appointment requests
   const { data: requests, isLoading } = useQuery<AppointmentRequest[]>({
-    queryKey: ['appointment-requests', userPracticeId, activeTab], // Changed queryKey to remove leading slash for consistency
+    queryKey: ['appointment-requests', userPracticeId, activeTab, sourceFilter], // Add sourceFilter to queryKey
     enabled: !!userPracticeId,
     queryFn: async () => {
       // Ensure status is uppercase for API if needed, and handle 'all'
       const statusParam = activeTab === "all" ? "" : `&status=${activeTab.toLowerCase()}`;
+      const sourceParam = sourceFilter === "all" ? "" : `&source=${sourceFilter}`;
       const res = await apiRequest(
         "GET", 
-        `/api/appointment-requests?practiceId=${userPracticeId}${statusParam}`
+        `/api/appointment-requests?practiceId=${userPracticeId}${statusParam}${sourceParam}`
       );
       // It's good practice to ensure the response is OK before parsing
       if (!res.ok) {
@@ -221,13 +224,24 @@ export default function AppointmentRequestsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "PENDING_APPROVAL":
-        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
+        return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-50 font-medium">Pending</Badge>;
       case "APPROVED":
-        return <Badge variant="outline" className="bg-green-100 text-green-800 hover:bg-green-100">Approved</Badge>;
+        return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50 font-medium">Approved</Badge>;
       case "REJECTED":
-        return <Badge variant="outline" className="bg-red-100 text-red-800 hover:bg-red-100">Rejected</Badge>;
+        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 hover:bg-red-50 font-medium">Rejected</Badge>;
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return <Badge variant="outline" className="font-medium">{status}</Badge>;
+    }
+  };
+
+  const getSourceBadge = (source: string) => {
+    switch (source) {
+      case "internal":
+        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50 font-medium">Internal</Badge>;
+      case "external":
+        return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-50 font-medium">External</Badge>;
+      default:
+        return <Badge variant="outline" className="font-medium">{source}</Badge>;
     }
   };
   
@@ -248,32 +262,68 @@ export default function AppointmentRequestsPage() {
       description="Manage appointment requests from your website integration. This feature requires the Website Integration add-on."
     >
       <div className="container mx-auto py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Appointment Requests</h1>
-        <p className="text-gray-500">
-          Manage appointment requests from your website
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Appointment Requests</h1>
+        <p className="text-gray-600 text-lg">
+          Manage appointment requests from your website and internal bookings
         </p>
       </div>
       
-      <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab} className="mb-6">
-        <TabsList>
-          <TabsTrigger value="pending">Pending</TabsTrigger>
-          <TabsTrigger value="approved">Approved</TabsTrigger>
-          <TabsTrigger value="rejected">Rejected</TabsTrigger>
-          <TabsTrigger value="all">All</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <div className="mb-6 flex items-center justify-between">
+        <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="pending">Pending</TabsTrigger>
+            <TabsTrigger value="approved">Approved</TabsTrigger>
+            <TabsTrigger value="rejected">Rejected</TabsTrigger>
+            <TabsTrigger value="all">All</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-gray-700">Source:</span>
+          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <SelectTrigger className="w-36 h-9 bg-white border-gray-200 hover:border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary transition-colors">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="min-w-36">
+              <SelectItem value="all" className="cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-gray-400"></div>
+                  All Sources
+                </div>
+              </SelectItem>
+              <SelectItem value="internal" className="cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                  Internal
+                </div>
+              </SelectItem>
+              <SelectItem value="external" className="cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                  External
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
       
-      <Card>
-        <CardHeader>
-          <CardTitle>
+      <Card className="shadow-sm border-gray-200">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-2xl font-semibold text-gray-900">
             {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Appointment Requests
           </CardTitle>
-          <CardDescription>
-            {activeTab === "pending" && "Review and process incoming appointment requests from your website."}
+          <CardDescription className="text-gray-600">
+            {activeTab === "pending" && "Review and process incoming appointment requests from your website and internal bookings."}
             {activeTab === "approved" && "View appointment requests that have been approved and added to your schedule."}
             {activeTab === "rejected" && "View appointment requests that have been rejected."}
             {activeTab === "all" && "View all appointment requests regardless of status."}
+            {sourceFilter !== "all" && (
+              <span className="block mt-2 text-sm font-medium text-primary">
+                Filtered by {sourceFilter} requests
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -283,19 +333,27 @@ export default function AppointmentRequestsPage() {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : requests && requests.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {requests.map((request) => (
-                <Card key={request.id} className="overflow-hidden">
-                  <div className="bg-primary/10 p-4 flex items-center justify-between">
-                    <div className="flex items-center">
-                      {getStatusBadge(request.status)}
-                      <span className="ml-2 text-sm text-gray-500">
-                        {new Date(request.createdAt).toLocaleDateString()}
-                      </span>
+                <Card key={request.id} className="overflow-hidden hover:shadow-md transition-shadow duration-200">
+                  <div className="bg-gradient-to-r from-primary/5 to-primary/10 p-4 border-b border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {getStatusBadge(request.status)}
+                        {getSourceBadge(request.source)}
+                        <div className="h-4 w-px bg-gray-300"></div>
+                        <span className="text-sm text-gray-600 font-medium">
+                          {new Date(request.createdAt).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            year: new Date(request.createdAt).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+                          })}
+                        </span>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => handleView(request)} className="h-8 w-8 p-0 hover:bg-white/80">
+                        <PenBox className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => handleView(request)}>
-                      <PenBox className="h-4 w-4" />
-                    </Button>
                   </div>
                   <CardContent className="p-4">
                     <div className="space-y-2">
@@ -371,8 +429,17 @@ export default function AppointmentRequestsPage() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-500">No {activeTab} appointment requests found.</p>
+            <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+              <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <Calendar className="h-6 w-6 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No requests found</h3>
+              <p className="text-gray-500 max-w-sm mx-auto">
+                {sourceFilter !== "all" 
+                  ? `No ${activeTab} ${sourceFilter} appointment requests found.`
+                  : `No ${activeTab} appointment requests found.`
+                }
+              </p>
             </div>
           )}
         </CardContent>
@@ -464,7 +531,7 @@ export default function AppointmentRequestsPage() {
                 </div>
                 <div>
                   <Label>Source</Label>
-                  <div className="mt-1 text-sm">{selectedRequest.source}</div>
+                  <div className="mt-1">{getSourceBadge(selectedRequest.source)}</div>
                 </div>
               </div>
               

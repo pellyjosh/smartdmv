@@ -15,6 +15,13 @@
       "when": 1756084755063,
       "tag": "0001_natural_starjammers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1756255611463,
+      "tag": "0002_furry_reptil",
+      "breakpoints": true
     }
   ]
 }

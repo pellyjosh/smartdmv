@@ -11,6 +11,8 @@ const getAppointmentsSchema = z.object({
   practiceId: z.string().nonempty("Practice ID is required."),
   // Map frontend 'pending', 'approved', 'rejected', 'all' to backend status
   status: z.enum(['pending', 'approved', 'rejected', 'all']).optional(),
+  // Add source filter for internal vs external requests
+  source: z.enum(['internal', 'external', 'all']).optional(),
 });
 
 // Zod schema for POST request body (for a new appointment submission)
@@ -49,7 +51,7 @@ export async function GET(req: Request) {
       );
     }
 
-    const { practiceId, status } = validationResult.data;
+    const { practiceId, status, source } = validationResult.data;
 
     const conditions = [eq(appointments.practiceId, parseInt(practiceId))];
 
@@ -62,6 +64,14 @@ export async function GET(req: Request) {
       conditions.push(eq(appointments.status, 'rejected')); // Assuming 'cancelled' is your rejected state
     }
     // If status is 'all', no status condition is added.
+
+    // Add source filter condition
+    if (source === 'internal') {
+      conditions.push(eq(appointments.source, 'internal'));
+    } else if (source === 'external') {
+      conditions.push(eq(appointments.source, 'external'));
+    }
+    // If source is 'all' or undefined, no source condition is added.
 
     const fetchedAppointments = await db.query.appointments.findMany({
       where: and(...conditions),
@@ -91,7 +101,7 @@ export async function GET(req: Request) {
         time: format(appt.date, 'HH:mm'), // Format time back to string for frontend
         requestNotes: appt.description, // Use description for notes
         preferredDoctor: appt.practitioner?.name || null,
-        source: 'website', // Assuming all these come from 'website' for now
+        source: appt.source || 'internal', // Use actual source from database
         status: appt.status === 'pending' ? 'PENDING_APPROVAL' : // Map DB status back to frontend string
                 appt.status === 'approved' || appt.status === 'confirmed' ? 'APPROVED' :
                 appt.status === 'rejected' ? 'REJECTED' : 'PENDING_APPROVAL', // Default to pending if unknown
