@@ -191,6 +191,19 @@ export default function IntegrationSettingsPage() {
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
   const [practiceData, setPracticeData] = useState<any>(null);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
+  const [appConfig, setAppConfig] = useState<{ baseUrl: string; environment: string } | null>(null);
+  
+  // Load app configuration
+  useQuery({
+    queryKey: ['/api/app-config'],
+    queryFn: async () => {
+      const response = await fetch('/api/app-config');
+      if (!response.ok) throw new Error('Failed to load app config');
+      const config = await response.json();
+      setAppConfig(config);
+      return config;
+    },
+  });
   
   // Load saved settings on component mount
   useQuery({
@@ -350,12 +363,18 @@ export default function IntegrationSettingsPage() {
     }
   };
   
+  // Helper function to get consistent base URL
+  const getBaseUrl = () => {
+    return appConfig?.baseUrl || 
+           (process.env.NODE_ENV === 'production' 
+             ? 'https://your-domain.com' 
+             : 'http://localhost:9002');
+  };
+  
   const generateEmbedCode = () => {
     const practiceId = practiceData?.practice?.id || 'YOUR_PRACTICE_ID';
     const apiKey = apiSettings.apiKey || 'YOUR_API_KEY';
-    const baseUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://your-domain.com' 
-      : 'http://localhost:3000';
+    const baseUrl = getBaseUrl();
     
     // Minimal configuration - everything else will be fetched dynamically
     const config = {
@@ -1995,14 +2014,14 @@ export default function IntegrationSettingsPage() {
                       <div className="flex gap-2">
                         <Input
                           readOnly
-                          value={`${process.env.NODE_ENV === 'production' ? 'https://your-domain.com' : 'http://localhost:3000'}/widget/booking?practice=${practiceData?.practice?.id || 'YOUR_PRACTICE_ID'}`}
+                          value={`${getBaseUrl()}/widget/booking?practice=${practiceData?.practice?.id || 'YOUR_PRACTICE_ID'}`}
                           className="font-mono text-sm"
                         />
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => copyToClipboard(
-                            `${process.env.NODE_ENV === 'production' ? 'https://your-domain.com' : 'http://localhost:3000'}/widget/booking?practice=${practiceData?.practice?.id || 'YOUR_PRACTICE_ID'}`,
+                            `${getBaseUrl()}/widget/booking?practice=${practiceData?.practice?.id || 'YOUR_PRACTICE_ID'}`,
                             'Widget URL'
                           )}
                         >
