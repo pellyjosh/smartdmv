@@ -426,7 +426,7 @@ export default function IntegrationSettingsPage() {
           const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 1 month ago
           const endDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 3 months ahead
           
-          const response = await fetch(`/api/widget/availability?practiceId=${practiceData?.practice?.id}&startDate=${startDate}&endDate=${endDate}`);
+          const response = await fetch(`/api/widget/availability?practiceId=${practiceData?.practice?.id}&apiKey=${apiSettings.apiKey}&startDate=${startDate}&endDate=${endDate}`);
           
           if (response.ok) {
             const data = await response.json();
@@ -443,10 +443,10 @@ export default function IntegrationSettingsPage() {
         }
       };
 
-      if (practiceData?.practice?.id) {
+      if (practiceData?.practice?.id && apiSettings.apiKey) {
         loadAvailability();
       }
-    }, [practiceData?.practice?.id]);
+    }, [practiceData?.practice?.id, apiSettings.apiKey]);
 
     // Calendar state
     const [calendarState, setCalendarState] = useState({
