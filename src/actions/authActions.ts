@@ -84,8 +84,21 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
           practiceId: dbUser.practiceId.toString(),
           companyId: 'default-company', // TODO: Get from actual company context
         };
+      } else if (['VETERINARIAN', 'TECHNICIAN', 'RECEPTIONIST', 'PRACTICE_MANAGER', 'ACCOUNTANT', 'CASHIER', 'OFFICE_MANAGER'].includes(dbUser.role)) {
+        // Handle practice-based staff roles
+        if (!dbUser.practiceId) {
+          throw new Error(`${dbUser.role} is not associated with a practice.`);
+        }
+        userData = {
+          id: dbUser.id.toString(),
+          email: dbUser.email,
+          name: dbUser.name || undefined,
+          role: dbUser.role as any, // Cast to the specific role type
+          practiceId: dbUser.practiceId.toString(),
+          companyId: 'default-company', // TODO: Get from actual company context
+        };
       } else {
-        throw new Error('Unknown user role.');
+        throw new Error(`Unknown user role: ${dbUser.role}.`);
       }
 
       // Log successful login audit

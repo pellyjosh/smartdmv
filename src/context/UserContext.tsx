@@ -50,6 +50,36 @@ export interface PracticeManagerUser extends BaseUser {
   companyId: string; // Required for tenant users
 }
 
+export interface TechnicianUser extends BaseUser {
+  role: 'TECHNICIAN';
+  practiceId: string;
+  companyId: string; // Required for tenant users
+}
+
+export interface ReceptionistUser extends BaseUser {
+  role: 'RECEPTIONIST';
+  practiceId: string;
+  companyId: string; // Required for tenant users
+}
+
+export interface AccountantUser extends BaseUser {
+  role: 'ACCOUNTANT';
+  practiceId: string;
+  companyId: string; // Required for tenant users
+}
+
+export interface CashierUser extends BaseUser {
+  role: 'CASHIER';
+  practiceId: string;
+  companyId: string; // Required for tenant users
+}
+
+export interface OfficeManagerUser extends BaseUser {
+  role: 'OFFICE_MANAGER';
+  practiceId: string;
+  companyId: string; // Required for tenant users
+}
+
 export interface AdministratorUser extends BaseUser {
   role: 'ADMINISTRATOR';
   accessiblePracticeIds: string[];
@@ -75,7 +105,7 @@ export interface CompanyAdminUser extends BaseUser {
   companyId: string; // Company they manage
 }
 
-export type User = ClientUser | PracticeAdminUser | AdministratorUser | SuperAdminUser | VeterinarianUser | PracticeManagerUser | OwnerUser | CompanyAdminUser;
+export type User = ClientUser | PracticeAdminUser | AdministratorUser | SuperAdminUser | VeterinarianUser | PracticeManagerUser | TechnicianUser | ReceptionistUser | AccountantUser | CashierUser | OfficeManagerUser | OwnerUser | CompanyAdminUser;
 
 const AUTH_PAGE = '/auth/login';
 
