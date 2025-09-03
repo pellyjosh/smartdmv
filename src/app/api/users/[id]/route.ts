@@ -73,6 +73,20 @@ export async function PATCH(request: NextRequest) {
       updateData.practiceId = practiceIdInt as number;
     }
 
+    // Remove any date fields that might be passed in - let Drizzle handle updatedAt automatically
+    delete updateData.createdAt;
+    delete updateData.updatedAt;
+    delete updateData.lastLogin;
+    delete updateData.id; // Don't allow updating the ID
+
+    // Also handle any Date objects that might have been passed
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] instanceof Date) {
+        console.warn(`Removing Date object field: ${key}`);
+        delete updateData[key];
+      }
+    });
+
     const [updated] = await db
       .update(users)
       .set(updateData)
@@ -90,6 +104,11 @@ export async function PATCH(request: NextRequest) {
     }
     return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
   }
+}
+
+// PUT: Update a user by ID (alias for PATCH for compatibility)
+export async function PUT(request: NextRequest) {
+  return PATCH(request);
 }
 
 // DELETE: Remove a user by ID

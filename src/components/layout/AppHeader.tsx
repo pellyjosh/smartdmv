@@ -18,6 +18,7 @@ import { Building2, ChevronDown, LogOut, User as UserIcon, Settings, UserCog } f
 import Link from "next/link";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useRoles } from "@/hooks/use-roles";
 
 interface Practice {
   id: number;
@@ -62,6 +63,7 @@ export function AppHeader({}: AppHeaderProps) {
         const response = await fetch('/api/practices');
         if (response.ok) {
           const practicesData = await response.json();
+          console.log('[AppHeader] Fetched practices data:', practicesData);
           setPractices(practicesData);
         } else {
           console.error('Failed to fetch practices:', response.statusText);
@@ -77,9 +79,17 @@ export function AppHeader({}: AppHeaderProps) {
   }, [user]);
 
   // Helper function to get practice name by ID
-  const getPracticeName = (practiceId: string): string => {
-    const practice = practices.find(p => p.id.toString() === practiceId);
-    return practice?.name || practiceId;
+  const practiceId = (user as any)?.practiceId || (user as any)?.currentPracticeId;
+  const { isPracticeAdmin, isClient } = useRoles(practiceId);
+
+  const getPracticeName = (practiceId: string | number): string => {
+    console.log('[AppHeader] getPracticeName called with:', practiceId);
+    console.log('[AppHeader] Available practices:', practices);
+    const practice = practices.find(p => p.id.toString() === practiceId.toString());
+    console.log('[AppHeader] Found practice:', practice);
+    const result = practice?.name || `Practice ${practiceId}`;
+    console.log('[AppHeader] Returning practice name:', result);
+    return result;
   };
 
   const adminUser = user?.role === 'ADMINISTRATOR' ? user as AdministratorUser : null;
@@ -93,9 +103,9 @@ export function AppHeader({}: AppHeaderProps) {
   };
 
   const currentPracticeName =
-    (adminUser?.currentPracticeId && typeof adminUser.currentPracticeId === 'string' ? adminUser.currentPracticeId.replace('practice_', '') : adminUser?.currentPracticeId) ||
-    (user?.role === 'PRACTICE_ADMINISTRATOR' && (user as PracticeAdminUser).practiceId && typeof (user as PracticeAdminUser).practiceId === 'string' ? (user as PracticeAdminUser).practiceId.replace('practice_', '') : (user as PracticeAdminUser)?.practiceId) ||
-    (user?.role === 'CLIENT' && (user as ClientUser).practiceId && typeof (user as ClientUser).practiceId === 'string' ? (user as ClientUser).practiceId.replace('practice_', '') : (user as ClientUser)?.practiceId) ||
+    adminUser?.currentPracticeId ||
+    (isPracticeAdmin(user?.role || '') && (user as PracticeAdminUser).practiceId) ||
+    (isClient(user?.role || '') && (user as ClientUser).practiceId) ||
     'N/A';
 
   // Log currentPracticeId for debugging
@@ -211,7 +221,7 @@ export function AppHeader({}: AppHeaderProps) {
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  {user.role === 'PRACTICE_ADMINISTRATOR' && (
+                  {isPracticeAdmin(user?.role || '') && (
                      <DropdownMenuItem asChild>
                       <Link href="/practice-administrator" className="flex w-full cursor-pointer items-center text-sm">
                         <UserCog className="mr-2 h-4 w-4" />

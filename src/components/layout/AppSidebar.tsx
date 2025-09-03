@@ -73,6 +73,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from '@/components/ui/badge';
 import { useRouter } from 'next/navigation';
+import { useRoles } from "@/hooks/use-roles";
 
 // --- Type Definitions ---
 type AppUserRole =
@@ -384,9 +385,10 @@ const menuGroups: MenuGroup[] = [
       },
       {
         title: "Users & Permissions",
-        href: "/users-and-permissions",
+        href: "/admin/users-and-permissions",
         icon: User,
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"]
+        // Include both legacy and canonical practice admin role names so the link appears for either
+        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_ADMINISTRATOR"]
       },
       {
         title: "Custom Fields",
@@ -438,13 +440,13 @@ const menuGroups: MenuGroup[] = [
       },
       {
         title: "Audit Logs",
-        href: "/audit-logs",
+        href: "/admin/audit-logs",
         icon: ShieldAlert,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"]
       },
       {
         title: "Audit Reports",
-        href: "/audit-reports",
+        href: "/admin/audit-reports",
         icon: BarChart3,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"]
       }
@@ -653,7 +655,7 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
 
   // Helper to check if practice has subscribed to a specific add-on
   const hasMarketplaceSubscription = React.useCallback((featureTitle: string): boolean => {
-    // Super admins and administrators get full access
+    // Super admins and administrators get full access - using hardcoded check for now as this is a fallback
     if (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMINISTRATOR') {
       return true;
     }

@@ -1,8 +1,9 @@
 import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
-import { db } from '@/db';
-import { users as usersTable, sessions as sessionsTable } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { db } from "@/db"
+import { users as usersTable, sessions as sessionsTable } from "@/db/schema"
+import { eq } from "drizzle-orm"
+import { hasAnyRole } from "./rbac/dynamic-roles"
 import { HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
 import type { User } from '@/context/UserContext';
 
@@ -15,14 +16,21 @@ export interface UserPracticeInfo {
 }
 
 // Server-side version of UserContext getUserPracticeId logic
-function getUserPracticeId(user: User): string | undefined {
+async function getUserPracticeId(user: User): Promise<string | undefined> {
   if (!user) return undefined;
-  if (user.role === 'CLIENT' || user.role === 'PRACTICE_ADMINISTRATOR' || user.role === 'VETERINARIAN' || user.role === 'PRACTICE_MANAGER') {
+  
+  // Check if user has practice-specific roles
+  const hasPracticeRole = await hasAnyRole(user.role, ['CLIENT', 'PRACTICE_ADMINISTRATOR', 'VETERINARIAN', 'PRACTICE_MANAGER']);
+  if (hasPracticeRole) {
     return user.practiceId;
   }
-  if (user.role === 'ADMINISTRATOR' || user.role === 'SUPER_ADMIN') {
+  
+  // Check if user has system admin roles
+  const hasAdminRole = await hasAnyRole(user.role, ['ADMINISTRATOR', 'SUPER_ADMIN']);
+  if (hasAdminRole) {
     return user.currentPracticeId;
   }
+  
   return undefined;
 }
 
@@ -121,7 +129,7 @@ export async function getUserPractice(request: NextRequest): Promise<UserPractic
     }
 
     // Use the same logic as UserContext
-    const practiceId = getUserPracticeId(userData);
+    const practiceId = await getUserPracticeId(userData);
 
     if (!practiceId) {
       return null;

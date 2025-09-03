@@ -51,7 +51,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { UserRoleEnum } from '@/db/schema';
+import { UserRoleEnum } from '@/lib/db-types';
 import { useUser } from '@/context/UserContext';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';

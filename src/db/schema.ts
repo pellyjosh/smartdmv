@@ -1,5 +1,5 @@
 // src/db/schema.ts
-import { users, administratorAccessiblePractices, UserRoleEnum } from './schemas/usersSchema';
+import { users, administratorAccessiblePractices, usersRelations, administratorAccessiblePracticesRelations, UserRoleEnum } from './schemas/usersSchema';
 import { practices } from './schemas/practicesSchema';
 import { sessions } from './schemas/sessionsSchema';
 import { appointments } from './schemas/appointmentsSchema';
@@ -49,6 +49,10 @@ import {
   aiConfigs,
   aiConfigsRelations
 } from './schemas/aiConfigSchema';
+import { auditLogs, auditLogsRelations } from './schemas/auditLogsSchema';
+import { permissionOverrides } from './schemas/permissionOverridesSchema';
+import { roles, rolesRelations } from './schemas/rolesSchema';
+import { userRoles, userRolesRelations } from './schemas/userRolesSchema';
 import {
   vaccineTypes,
   vaccinations,
@@ -66,18 +70,21 @@ import {
 
 export const schema = {
   users,
+  usersRelations,
   pets,
   healthPlans,
   practices,
   sessions,
   appointments,
   administratorAccessiblePractices,
+  administratorAccessiblePracticesRelations,
   admissions,
   rooms,
   customFieldCategories,
   customFieldGroups,
   customFieldValues,
   soapNotes,
+  soapNotesRelations,
   soapTemplates,
   prescriptions,
   prescriptionHistory,
@@ -85,18 +92,31 @@ export const schema = {
   referrals,
   referralAttachments,
   referralNotes,
+  referralsRelations,
+  referralAttachmentsRelations,
+  referralNotesRelations,
   addons,
   practiceAddons,
   addonReviews,
   AddonCategory,
   dashboardConfigs,
+  dashboardConfigsRelations,
   notifications,
+  notificationsRelations,
   // Lab tables
   labProviderSettings, 
+  labProviderSettingsRelations,
   labTestCatalog, 
+  labTestCatalogRelations,
   labOrders, 
+  labOrdersRelations,
   labOrderTests, 
+  labOrderTestsRelations,
   labResults,
+  labResultsRelations,
+  permissionOverrides,
+  roles,
+  userRoles,
   // Boarding tables
   kennels,
   boardingStays,
@@ -111,11 +131,16 @@ export const schema = {
   imagingMeasurements,
   medicalRecordAttachments,
   electronicSignatures,
+  rolesRelations,
+  userRolesRelations,
   // AI Configuration tables
   aiConfigs,
+  aiConfigsRelations,
   // Vaccination tables
   vaccineTypes,
+  vaccineTypesRelations,
   vaccinations,
+  vaccinationsRelations,
   // Checklists tables
   treatmentChecklistTemplates,
   templateItems,
@@ -123,8 +148,14 @@ export const schema = {
   checklistItems,
   // Integration settings tables
   integrationSettings,
+  integrationSettingsRelations,
   widgetAnalytics,
-  integrationApiKeys
+  widgetAnalyticsRelations,
+  integrationApiKeys,
+  integrationApiKeysRelations,
+  // Audit logs
+  auditLogs,
+  auditLogsRelations,
 };
 
 // Re-export all tables and their relations for Drizzle to use
@@ -156,6 +187,10 @@ export * from './schemas/aiConfigSchema';
 export * from './schemas/vaccinationsSchema';
 export * from './schemas/checklistsSchema';
 export * from './schemas/integrationSettingsSchema';
+export * from './schemas/auditLogsSchema';
+export * from './schemas/permissionOverridesSchema';
+export * from './schemas/rolesSchema';
+export * from './schemas/userRolesSchema';
 
 // You might also want to re-export the userRoleEnum if it's used elsewhere for typing
 export { UserRoleEnum };

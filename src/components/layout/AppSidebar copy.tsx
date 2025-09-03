@@ -696,13 +696,6 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
         roles: ['CLIENT']
       },
       {
-        title: "Favorites",
-        href: "/favorites",
-        icon: Heart,
-        keywords: ["saved", "bookmarked", "liked", "pets"],
-        roles: ['CLIENT']
-      },
-      {
         title: "Symptom Checker",
         href: "/symptom-checker",
         icon: Sparkles,

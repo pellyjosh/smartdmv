@@ -68,7 +68,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { UserRoleEnum } from '@/db/schema';
+import { UserRoleEnum } from '@/lib/db-types';
 
 // Define the form schema for template items
 const templateItemSchema = z.object({

@@ -32,7 +32,7 @@ import { MoreHorizontal, FilePenLine, Trash2, Eye, Copy } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import EditTemplateDialog from './edit-template-dialog';
 import ViewTemplateDialog from './view-template-dialog';
-import { UserRoleEnum } from '@/db/schema';
+import { canEditTemplates, canDeleteTemplates } from '@/lib/rbac-helpers';
 import { useUser } from '@/context/UserContext';
 
 export default function TemplatesList() {
@@ -60,12 +60,8 @@ export default function TemplatesList() {
     staleTime: 60000, // 1 minute
   });
 
-  const canEditTemplates = user?.role === UserRoleEnum.PRACTICE_ADMINISTRATOR || 
-                          user?.role === UserRoleEnum.PRACTICE_MANAGER || 
-                          user?.role === UserRoleEnum.VETERINARIAN || user?.role === UserRoleEnum.ADMINISTRATOR;
-                          
-  const canDeleteTemplates = user?.role === UserRoleEnum.PRACTICE_ADMINISTRATOR || 
-                            user?.role === UserRoleEnum.PRACTICE_MANAGER || user?.role === UserRoleEnum.ADMINISTRATOR;
+  const canEditTemplatesPermission = canEditTemplates(user);
+  const canDeleteTemplatesPermission = canDeleteTemplates(user);
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -159,7 +155,7 @@ export default function TemplatesList() {
                       <Eye className="mr-2 h-4 w-4" />
                       View Details
                     </DropdownMenuItem>
-                    {canEditTemplates && (
+                    {canEditTemplatesPermission && (
                       <DropdownMenuItem onClick={() => setTemplateToEdit(template)}>
                         <FilePenLine className="mr-2 h-4 w-4" />
                         Edit Template
@@ -169,7 +165,7 @@ export default function TemplatesList() {
                       <Copy className="mr-2 h-4 w-4" />
                       Duplicate
                     </DropdownMenuItem>
-                    {canDeleteTemplates && (
+                    {canDeleteTemplatesPermission && (
                       <DropdownMenuItem 
                         className="text-destructive"
                         onClick={() => setTemplateToDelete(template)}

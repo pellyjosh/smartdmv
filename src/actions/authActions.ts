@@ -7,6 +7,9 @@ import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import type { User, AdministratorUser } from '@/context/UserContext'; // Use User types from UserContext
 import { analyzeError, retryWithBackoff } from '@/lib/network-utils';
+import { createAuditLog, SYSTEM_USER_ID } from '@/lib/audit-logger';
+import { isSuperAdmin, isPracticeAdmin, isAdmin, ROLE_NAMES } from '@/lib/rbac/dynamic-roles';
+import { createUserContext } from '@/lib/auth-context';
 
 export async function loginUserAction(emailInput: string, passwordInput: string): Promise<User> {
   try {
@@ -25,7 +28,12 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
 
       let userData: User;
 
-      if (dbUser.role === 'ADMINISTRATOR' || dbUser.role === 'SUPER_ADMIN') {
+      // Check if user is admin (super admin or administrator)
+      const isAdminUser = await isAdmin(dbUser.role);
+      const isSuperAdminUser = await isSuperAdmin(dbUser.role);
+      const isPracticeAdminUser = await isPracticeAdmin(dbUser.role);
+
+      if (isAdminUser && !isPracticeAdminUser) {
         const adminPractices = await (db as any).select({ practiceId: adminPracticesTable.practiceId })
           .from(adminPracticesTable)
           .where(eq(adminPracticesTable.administratorId, dbUser.id));
@@ -47,12 +55,12 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
           id: dbUser.id.toString(),
           email: dbUser.email,
           name: dbUser.name || undefined,
-          role: dbUser.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'ADMINISTRATOR',
+          role: isSuperAdminUser ? ROLE_NAMES.SUPER_ADMIN : ROLE_NAMES.ADMINISTRATOR,
           accessiblePracticeIds,
           currentPracticeId: currentPracticeId!,
           companyId: 'default-company', // TODO: Get from actual company context
         };
-      } else if (dbUser.role === 'PRACTICE_ADMINISTRATOR') {
+      } else if (isPracticeAdminUser) {
         if (!dbUser.practiceId) {
           throw new Error('Practice Administrator is not associated with a practice.');
         }
@@ -79,9 +87,44 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
       } else {
         throw new Error('Unknown user role.');
       }
+
+      // Log successful login audit
+  await createAuditLog({
+        action: 'ASSIGN',
+        recordType: 'USER',
+        recordId: userData.id,
+        description: `Successful login for user ${userData.email}`,
+        userId: userData.id,
+        practiceId: 'practiceId' in userData ? userData.practiceId : 
+                   'currentPracticeId' in userData ? userData.currentPracticeId : undefined,
+        metadata: {
+          userRole: userData.role,
+          loginMethod: 'password',
+          loginTimestamp: new Date().toISOString()
+        }
+      });
+
       return userData;
     }, 2, 1500); // 2 retries with 1.5 second base delay
   } catch (error) {
+    // Log failed login attempt
+    try {
+      await createAuditLog({
+        action: 'ASSIGN',
+        recordType: 'USER',
+        recordId: 'unknown',
+        description: `Failed login attempt for email ${emailInput}`,
+        userId: SYSTEM_USER_ID,
+        metadata: {
+          email: emailInput,
+          failureReason: (error as Error).message,
+          attemptTimestamp: new Date().toISOString()
+        }
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit event for failed login:', auditError);
+    }
+
     const networkError = analyzeError(error);
     console.error('[AuthAction loginUserAction] Login failed:', {
       isNetworkError: networkError.isNetworkError,
@@ -125,7 +168,10 @@ export async function switchPracticeAction(userId: string, newPracticeId: string
         .where(eq(usersTable.id, userIdInt));
 
       // For administrators, verify they have access to this practice
-      if (dbUser.role === 'ADMINISTRATOR' || dbUser.role === 'SUPER_ADMIN') {
+      const isAdminUser2 = await isAdmin(dbUser.role);
+      const isSuperAdminUser2 = await isSuperAdmin(dbUser.role);
+      
+      if (isAdminUser2) {
         const adminPractices = await (db as any).select({ practiceId: adminPracticesTable.practiceId })
           .from(adminPracticesTable)
           .where(eq(adminPracticesTable.administratorId, dbUser.id));
@@ -137,7 +183,7 @@ export async function switchPracticeAction(userId: string, newPracticeId: string
           id: dbUser.id.toString(),
           email: dbUser.email,
           name: dbUser.name || undefined,
-          role: dbUser.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'ADMINISTRATOR',
+          role: isSuperAdminUser2 ? ROLE_NAMES.SUPER_ADMIN : ROLE_NAMES.ADMINISTRATOR,
           accessiblePracticeIds,
           currentPracticeId: newPracticeId,
           companyId: 'default-company',

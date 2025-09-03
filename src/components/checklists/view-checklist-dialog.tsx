@@ -45,7 +45,7 @@ import {
 import { formatDistanceToNow, format, isPast, differenceInDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { getInitials, getAvatarColorFromName } from '@/lib/utils';
-import { UserRoleEnum } from '@/db/schema';
+import { UserRoleEnum } from '@/lib/db-types';
 import { useUser } from '@/context/UserContext';
 
 interface ViewChecklistDialogProps {

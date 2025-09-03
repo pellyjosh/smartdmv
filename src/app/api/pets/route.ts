@@ -3,6 +3,8 @@ import { db } from "@/db/index";
 import { pets, appointments } from "@/db/schema";
 import { eq, and, or, inArray } from "drizzle-orm";
 import { withNetworkErrorHandlingAndRetry } from "@/lib/api-middleware";
+import { logView, logCreate } from '@/lib/audit-logger';
+import { getUserContextFromRequest } from '@/lib/auth-context';
 
 const getHandler = async (request: NextRequest) => {
   const url = new URL(request.url);

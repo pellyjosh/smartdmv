@@ -12,7 +12,7 @@ import CreateTemplateDialog from '@/components/checklists/create-template-dialog
 import CreateChecklistDialog from '@/components/checklists/create-checklist-dialog';
 import { StaffTasksView } from '@/components/checklists/staff-tasks-view';
 import { useUser } from '@/context/UserContext';
-import { UserRoleEnum } from '@/db/schema';
+import { UserRoleEnum } from '@/lib/db-types';
 
 export default function ChecklistsPage() {
   const { user } = useUser();

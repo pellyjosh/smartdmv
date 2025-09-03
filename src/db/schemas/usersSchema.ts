@@ -5,6 +5,8 @@ import { relations, sql } from 'drizzle-orm';
 import { practices } from './practicesSchema';
 import { sessions } from './sessionsSchema';
 
+// Note: userRoles import will be added later to avoid circular dependency
+
 export enum UserRoleEnum {
   CLIENT = 'CLIENT',
   PRACTICE_ADMINISTRATOR = 'PRACTICE_ADMINISTRATOR',
@@ -70,6 +72,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   accessiblePractices: many(administratorAccessiblePractices),
   sessions: many(sessions),
+  // Note: userRoles relation will be defined in userRolesSchema to avoid circular imports
 }));
 
 export const administratorAccessiblePracticesRelations = relations(administratorAccessiblePractices, ({ one }) => ({

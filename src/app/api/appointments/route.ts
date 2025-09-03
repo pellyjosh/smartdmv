@@ -8,6 +8,8 @@ import {
   isValidStatusTransition,
   shouldAppearOnWhiteboard 
 } from '@/lib/appointment-workflow';
+import { logCreate, logView } from '@/lib/audit-logger';
+import { getUserContextFromStandardRequest } from '@/lib/auth-context';
 
 // Define a Zod schema for the incoming request body
 // This schema strictly defines what the API expects from the frontend.
@@ -102,6 +104,35 @@ export async function POST(req: Request) {
       throw new Error('Failed to create appointment in database.');
     }
 
+    // Log appointment creation audit
+    const auditUserContext = await getUserContextFromStandardRequest(req);
+    if (auditUserContext) {
+      await logCreate(
+        req,
+        'APPOINTMENT',
+        createdAppointment.id.toString(),
+        {
+          title: createdAppointment.title,
+          type: createdAppointment.type,
+          date: createdAppointment.date,
+          status: createdAppointment.status,
+          petId: createdAppointment.petId,
+          clientId: createdAppointment.clientId,
+          practitionerId: createdAppointment.practitionerId,
+          practiceId: createdAppointment.practiceId
+        },
+        auditUserContext.userId,
+        createdAppointment.practiceId?.toString(),
+        undefined,
+        {
+          appointmentType: createdAppointment.type,
+          petId: createdAppointment.petId,
+          clientId: createdAppointment.clientId,
+          createdBy: auditUserContext.name || auditUserContext.email
+        }
+      );
+    }
+
     console.log('Appointment created successfully:', createdAppointment);
     return NextResponse.json(createdAppointment, { status: 201 }); // 201 Created
   } catch (error) {
@@ -161,6 +192,26 @@ export async function GET(req: Request) {
       });
 
       // console.log('[DEBUG API] Date-based results:', result.length);
+
+      // Log audit for viewing appointments
+      const auditUserContext = await getUserContextFromStandardRequest(req);
+      if (auditUserContext) {
+        await logView(
+          req,
+          'APPOINTMENT',
+          'list',
+          auditUserContext.userId,
+          auditUserContext.practiceId,
+          {
+            viewType: 'date_filtered',
+            filterDate: date,
+            clientId,
+            practiceId,
+            resultCount: result.length
+          }
+        );
+      }
+
       return NextResponse.json(result);
     }
 
@@ -210,6 +261,24 @@ export async function GET(req: Request) {
       // Log all appointment types
       const types = [...new Set(result.map(r => r.type).filter(Boolean))];
       // console.log('[DEBUG API] All types found:', types);
+    }
+
+    // Log audit for viewing appointments
+    const auditUserContext = await getUserContextFromStandardRequest(req);
+    if (auditUserContext) {
+      await logView(
+        req,
+        'APPOINTMENT',
+        'list',
+        auditUserContext.userId,
+        auditUserContext.practiceId,
+        {
+          viewType: 'filtered',
+          clientId,
+          practiceId,
+          resultCount: result.length
+        }
+      );
     }
 
     return NextResponse.json(result);

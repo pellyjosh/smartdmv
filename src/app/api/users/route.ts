@@ -4,10 +4,13 @@ import { db } from '@/db';
 import { users, UserRoleEnum } from '@/db/schema'; // Import UserRoleEnum
 import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
+import { logView, logCreate } from '@/lib/audit-logger';
+import { getUserContextFromRequest } from '@/lib/auth-context';
 
 // GET all users, users by practiceId, or a specific user by ID
 export async function GET(request: NextRequest) {
   const { searchParams, pathname } = request.nextUrl;
+  const selectParam = searchParams.get('select');
   const practiceIdParam = searchParams.get('practiceId');
   const userIdParam = pathname.split('/').pop(); // Extract user ID from the URL path if present
   const practiceId = practiceIdParam ? parseInt(practiceIdParam, 10) : undefined;
@@ -15,26 +18,81 @@ export async function GET(request: NextRequest) {
 
   console.log('Pathname:', pathname);
   console.log('Extracted User ID:', userId);
+  console.log('Query select param:', selectParam);
+  console.log('Query practiceId param:', practiceIdParam);
 
   try {
+    console.log('Request URL:', (request as any).url ?? (request as any).nextUrl?.href);
+    // log minimal headers info to help debug auth-related fallbacks
+    try {
+      const headersObj = (request as any).headers ? Object.fromEntries((request as any).headers.entries()) : {};
+      console.log('Request headers keys:', Object.keys(headersObj).slice(0, 20));
+    } catch (hErr) {
+      // ignore header logging errors
+    }
+    // Log audit for viewing sensitive user data
+    const auditUserContext = await getUserContextFromRequest(request);
+
     if (Number.isFinite(userId as number)) {
-      const userData = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      const userData = await db.select().from(users).where(eq(users.id, userId as number)).limit(1);
       if (userData.length === 0) {
         console.log('User not found for ID:', userId);
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
       }
+
+      // Log viewing individual user data
+      if (auditUserContext) {
+        await logView(
+          request as any,
+          'USER',
+          userId!.toString(),
+          auditUserContext.userId,
+          auditUserContext.practiceId,
+          { viewType: 'individual', targetUserId: userId }
+        );
+      }
+
       return NextResponse.json(userData[0], { status: 200 });
     }
 
     let usersData;
-    if (Number.isFinite(practiceId as number)) {
-      usersData = await db.select().from(users).where(eq(users.practiceId, practiceId as number));
+    // support a simple `select` query param for common fields to reduce payloads
+    const allowedFields = ['id', 'name', 'email', 'role'];
+    if (selectParam) {
+      const fields = selectParam.split(',').map(s => s.trim()).filter(f => allowedFields.includes(f));
+      if (fields.length > 0) {
+        // build a simple select object mapping
+        const selectObj: Record<string, any> = {};
+        for (const f of fields) {
+          selectObj[f] = (users as any)[f];
+        }
+        try {
+          usersData = Number.isFinite(practiceId as number)
+            ? await db.select(selectObj).from(users).where(eq(users.practiceId, practiceId as number))
+            : await db.select(selectObj).from(users);
+        } catch (selectErr) {
+          console.error('Failed to apply select projection, falling back to full select. selectParam:', selectParam, 'selectObj:', selectObj, 'error:', selectErr);
+          usersData = Number.isFinite(practiceId as number)
+            ? await db.select().from(users).where(eq(users.practiceId, practiceId as number))
+            : await db.select().from(users);
+        }
+      } else {
+        usersData = Number.isFinite(practiceId as number)
+          ? await db.select().from(users).where(eq(users.practiceId, practiceId as number))
+          : await db.select().from(users);
+      }
     } else {
-      usersData = await db.select().from(users);
+      usersData = Number.isFinite(practiceId as number)
+        ? await db.select().from(users).where(eq(users.practiceId, practiceId as number))
+        : await db.select().from(users);
     }
+
+  // (Removed automatic audit logging for listing users to avoid noisy logs on page refresh)
+
     return NextResponse.json(usersData, { status: 200 });
   } catch (error) {
-    console.error('Error fetching users:', error);
+  console.error('Error fetching users:', error instanceof Error ? error.message : error);
+  if (error instanceof Error && (error as any).stack) console.error((error as any).stack);
     return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
   }
 }
@@ -49,7 +107,7 @@ export async function POST(req: NextRequest) {
       username: z.string().min(3),
       password: z.string().min(6),
       role: z.enum([UserRoleEnum.CLIENT, UserRoleEnum.ADMINISTRATOR, UserRoleEnum.PRACTICE_ADMINISTRATOR]).default(UserRoleEnum.CLIENT), // Use the enum
-      practiceId: z.string(),
+      practiceId: z.coerce.number(), // Convert string to number
       phone: z.string().optional(),
       address: z.string().optional(),
       city: z.string().optional(),
@@ -76,6 +134,30 @@ export async function POST(req: NextRequest) {
     }
 
     const [newUser] = await db.insert(users).values(validatedData).returning();
+
+    // Log user creation audit
+    const auditUserContext = await getUserContextFromRequest(req);
+    if (auditUserContext) {
+      await logCreate(
+        req as any,
+        'USER',
+        newUser.id.toString(),
+        {
+          name: newUser.name,
+          email: newUser.email,
+          role: newUser.role,
+          practiceId: newUser.practiceId
+        },
+        auditUserContext.userId,
+        newUser.practiceId?.toString(),
+        undefined,
+        {
+          createdBy: auditUserContext.name || auditUserContext.email,
+          registrationMethod: 'api'
+        }
+      );
+    }
+
     return NextResponse.json(newUser, { status: 201 });
   } catch (error) {
     console.error('Error creating user:', error);

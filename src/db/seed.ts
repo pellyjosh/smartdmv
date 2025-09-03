@@ -32,6 +32,7 @@ import {
   checklistItems,
 } from './schema';
 import { seedMarketplaceData } from './seedMarketplaceData';
+import { seedSystemRoles } from './seedRoles';
 
 // PostgreSQL-only database operations (node-postgres Drizzle DB)
 const pgDb = db as unknown as NodePgDatabase<typeof import('./schema')>;
@@ -85,6 +86,10 @@ async function insertWithReturning<T>(table: any, data: T[], tableName: string, 
 
 async function seed() {
   console.log('🌱 Starting database seeding for PostgreSQL...');
+
+  // Step 0: Seed system roles first (they don't depend on anything)
+  console.log('🔐 Seeding system roles...');
+  await seedSystemRoles();
 
   const password = await bcrypt.hash("password", 10);
 

@@ -29,9 +29,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useUser } from "@/context/UserContext";
+import { useRoles } from "@/hooks/use-roles";
 
 const PetVaccinations = ({ petId }: { petId: string }) => {
   const { user } = useUser();
+  const { isPracticeAdmin, isSuperAdmin, isVeterinarian } = useRoles(user?.practiceId);
   const [expanded, setExpanded] = useState(true);
   
   // Fetch vaccinations for the pet
@@ -118,10 +120,10 @@ const PetVaccinations = ({ petId }: { petId: string }) => {
     };
   };
 
-  const isPracticeAdmin = user?.role === "PRACTICE_ADMINISTRATOR";
-  const isSuperAdmin = user?.role === "SUPER_ADMIN";
-  const isVet = user?.role === "VETERINARIAN";
-  const canManageVaccinations = isPracticeAdmin || isSuperAdmin || isVet;
+  const isPracticeAdminRole = isPracticeAdmin(user?.role || '');
+  const isSuperAdminRole = isSuperAdmin(user?.role || '');
+  const isVetRole = isVeterinarian(user?.role || '');
+  const canManageVaccinations = isPracticeAdminRole || isSuperAdminRole || isVetRole;
 
   return (
     <Card className="mt-6">

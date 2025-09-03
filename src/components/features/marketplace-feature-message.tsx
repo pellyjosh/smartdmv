@@ -6,6 +6,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/context/UserContext";
 import { useQuery } from "@tanstack/react-query";
+import { useRoles } from "@/hooks/use-roles";
 
 // Hook to fetch addon slug dynamically from the database
 const useAddonSlug = (addOnId: string | undefined) => {
@@ -124,14 +125,30 @@ export function MarketplaceFeatureContainer({
 }: MarketplaceFeatureContainerProps) {
   const { user } = useUser();
   
+  // Get practiceId for the hook
+  const practiceId = (user as any)?.practiceId || (user as any)?.currentPracticeId;
+  const { isClient, isPracticeAdmin, isVeterinarian, isSuperAdmin } = useRoles(practiceId);
+  
   // Fetch the correct slug for navigation
   const { data: addonSlug, isLoading: isLoadingSlug } = useAddonSlug(addOnId);
   
-  // Get the practice ID similar to how it's done in UserContext
+  // Get the practice ID using dynamic role checks
+  const hasPracticeRole = user ? (
+    isClient(user.role) || 
+    isPracticeAdmin(user.role) || 
+    isVeterinarian(user.role) || 
+    user.role === 'PRACTICE_MANAGER' // Fallback for now as this role check isn't in hook yet
+  ) : false;
+  
+  const hasAdminRole = user ? (
+    user.role === 'ADMINISTRATOR' || // Fallback for now as this role check isn't in hook yet
+    isSuperAdmin(user.role)
+  ) : false;
+  
   const userPracticeId = user ?
-    (user.role === 'CLIENT' || user.role === 'PRACTICE_ADMINISTRATOR' || user.role === 'VETERINARIAN' || user.role === 'PRACTICE_MANAGER' ?
+    (hasPracticeRole ?
       ((user as any).practiceId && (user as any).practiceId.toString().trim() !== '' ? (user as any).practiceId : undefined) :
-      (user.role === 'ADMINISTRATOR' || user.role === 'SUPER_ADMIN' ? 
+      (hasAdminRole ? 
         ((user as any).currentPracticeId && (user as any).currentPracticeId.toString().trim() !== '' ? (user as any).currentPracticeId : undefined) : 
         undefined)
     ) : undefined;

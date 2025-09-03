@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/db/index";
 import { soapNotes } from "@/db/schemas/soapNoteSchema";
 import { z } from "zod";
+import { logCreate, logView } from '@/lib/audit-logger';
+import { getUserContextFromStandardRequest } from '@/lib/auth-context';
 
 // Define the schema for SOAP note validation using Zod
 const soapNoteSchema = z.object({
@@ -146,6 +148,30 @@ export async function GET(request: Request) {
     }
 
   const notes = await db.query.soapNotes.findMany(queryOptions);
+
+  // Log audit for viewing sensitive medical data
+  const auditUserContext = await getUserContextFromStandardRequest(request);
+  if (auditUserContext) {
+    await logView(
+      request,
+      'SOAP_NOTE',
+      'list',
+      auditUserContext.userId,
+      auditUserContext.practiceId,
+      {
+        viewType: 'soap_notes_query',
+        filters: {
+          petId: petId,
+          practitionerId: practitionerId,
+          recent: recent,
+          search: search,
+          limit: limit
+        },
+        resultCount: notes.length
+      }
+    );
+  }
+
   return NextResponse.json(notes);
   } catch (error) {
     console.error("Error fetching SOAP notes:", error);
@@ -185,6 +211,33 @@ export async function POST(request: Request) {
       assessment: validatedData.assessment,
       plan: validatedData.plan,
     }).returning();
+    
+    // Log audit for SOAP note creation
+    const auditUserContext = await getUserContextFromStandardRequest(request);
+    if (auditUserContext) {
+      await logCreate(
+        request,
+        'SOAP_NOTE',
+        newSoapNote.id.toString(),
+        {
+          petId: newSoapNote.petId,
+          practitionerId: newSoapNote.practitionerId,
+          appointmentId: newSoapNote.appointmentId,
+          subjective: 'REDACTED', // Don't log sensitive medical content
+          objective: 'REDACTED',
+          assessment: 'REDACTED', 
+          plan: 'REDACTED'
+        },
+        auditUserContext.userId,
+        auditUserContext.practiceId,
+        undefined,
+        {
+          createdBy: auditUserContext.name || auditUserContext.email,
+          medicalRecord: true,
+          petId: newSoapNote.petId
+        }
+      );
+    }
     
     return NextResponse.json(
       { 

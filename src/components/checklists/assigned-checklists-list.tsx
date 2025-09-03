@@ -34,7 +34,7 @@ import { MoreHorizontal, FilePenLine, Trash2, SquareCheck, Calendar, User, Eye }
 import { formatDistanceToNow, isPast, differenceInDays } from 'date-fns';
 import EditChecklistDialog from './edit-checklist-dialog';
 import ViewChecklistDialog from './view-checklist-dialog';
-import { UserRoleEnum } from '@/db/schema';
+import { UserRoleEnum } from '@/lib/db-types';
 import { useUser } from '@/context/UserContext';
 import { getInitials, getAvatarColorFromName } from '@/lib/utils';
 

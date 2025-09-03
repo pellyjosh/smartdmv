@@ -1,60 +1,132 @@
-import type { VetService } from './types';
+// Real data interfaces for veterinary services
+import { db } from '@/db';
+import { appointments, treatmentTemplates, treatments } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
+export interface VetService {
+  id: string;
+  name: string;
+  description: string;
+  price?: number;
+  category: string;
+  duration: number;
+  type: 'appointment' | 'treatment_template';
+}
+
+// Fetch real services from appointments and treatment templates
+export async function getVetServices(): Promise<VetService[]> {
+  try {
+    // Get unique appointment types as services
+    const appointmentTypes = await db
+      .selectDistinct({
+        id: appointments.id,
+        title: appointments.title,
+        description: appointments.description,
+        durationMinutes: appointments.durationMinutes,
+        type: appointments.type
+      })
+      .from(appointments)
+      .where(eq(appointments.status, 'approved'));
+
+    // Get treatment templates as services
+    const treatmentTemplateServices = await db
+      .select({
+        id: treatmentTemplates.id,
+        name: treatmentTemplates.name,
+        description: treatmentTemplates.description,
+        category: treatmentTemplates.category
+      })
+      .from(treatmentTemplates)
+      .where(eq(treatmentTemplates.isActive, true));
+
+    // Convert appointments to services
+    const appointmentServices: VetService[] = appointmentTypes.map(apt => ({
+      id: `apt_${apt.id}`,
+      name: Array.isArray(apt.title) ? apt.title[0] : (apt.title || 'Veterinary Service'),
+      description: Array.isArray(apt.description) ? apt.description[0] : (apt.description || 'Professional veterinary care'),
+      category: Array.isArray(apt.type) ? apt.type[0] : (apt.type || 'General'),
+      duration: parseInt(Array.isArray(apt.durationMinutes) ? apt.durationMinutes[0] : (apt.durationMinutes || '30')),
+      type: 'appointment' as const
+    }));
+
+    // Convert treatment templates to services  
+    const templateServices: VetService[] = treatmentTemplateServices.map(template => ({
+      id: `tpl_${template.id}`,
+      name: Array.isArray(template.name) ? template.name[0] : template.name,
+      description: Array.isArray(template.description) ? template.description[0] : (template.description || 'Professional treatment'),
+      category: Array.isArray(template.category) ? template.category[0] : (template.category || 'Treatment'),
+      duration: 30, // Default duration for treatments
+      type: 'treatment_template' as const
+    }));
+
+    return [...appointmentServices, ...templateServices];
+  } catch (error) {
+    console.error('Error fetching vet services:', error);
+    // Fallback to static data if database fails
+    return [
+      {
+        id: '1',
+        name: 'General Checkup',
+        description: 'Comprehensive health examination',
+        price: 50,
+        category: 'General',
+        duration: 30,
+        type: 'appointment'
+      },
+      {
+        id: '2',
+        name: 'Vaccination',
+        description: 'Standard vaccination package',
+        price: 35,
+        category: 'Preventive',
+        duration: 15,
+        type: 'appointment'
+      },
+      {
+        id: '3',
+        name: 'Dental Cleaning',
+        description: 'Professional dental cleaning',
+        price: 120,
+        category: 'Dental',
+        duration: 60,
+        type: 'treatment_template'
+      }
+    ];
+  }
+}
+
+export async function getServiceById(id: string): Promise<VetService | undefined> {
+  const services = await getVetServices();
+  return services.find(service => service.id === id);
+}
+
+// Legacy sync function for backward compatibility (deprecated)
 export const mockVetServices: VetService[] = [
   {
     id: '1',
-    name: 'Paws & Claws Clinic',
-    shortDescription: 'Comprehensive care for your beloved pets.',
-    fullDescription: 'Paws & Claws Clinic offers a wide range of veterinary services, from routine check-ups and vaccinations to advanced surgical procedures. Our compassionate team is dedicated to providing the highest quality care for your furry, scaled, or feathered friends.',
-    imageUrl: 'https://placehold.co/600x400.png',
-    address: '123 Pet Lane, Pawtown, CA 90210',
-    phone: '555-1234',
-    website: 'https://example.com/pawsandclaws',
-    openingHours: 'Mon-Fri: 8am - 6pm, Sat: 9am - 1pm',
-    servicesOffered: ['Vaccinations', 'Wellness Exams', 'Surgery', 'Dental Care', 'Emergency Services'],
-    rating: 4.5,
+    name: 'General Checkup',
+    description: 'Comprehensive health examination',
+    price: 50,
+    category: 'General',
+    duration: 30,
+    type: 'appointment'
   },
   {
     id: '2',
-    name: 'Happy Tails Hospital',
-    shortDescription: 'Your pet\'s health and happiness is our priority.',
-    fullDescription: 'At Happy Tails Hospital, we believe that a healthy pet is a happy pet. We provide state-of-the-art medical care in a friendly and welcoming environment. Our services include diagnostics, internal medicine, and behavioral counseling.',
-    imageUrl: 'https://placehold.co/600x400.png',
-    address: '456 Woof Street, Tailville, TX 75001',
-    phone: '555-5678',
-    website: 'https://example.com/happytails',
-    openingHours: 'Mon-Sat: 9am - 7pm',
-    servicesOffered: ['Diagnostics', 'Internal Medicine', 'Behavioral Counseling', 'Nutrition Advice'],
-    rating: 4.8,
+    name: 'Vaccination',
+    description: 'Standard vaccination package',
+    price: 35,
+    category: 'Preventive',
+    duration: 15,
+    type: 'appointment'
   },
   {
     id: '3',
-    name: 'The Vet Connect',
-    shortDescription: 'Connecting pets with expert veterinary care.',
-    fullDescription: 'The Vet Connect is a modern veterinary practice focused on preventative care and owner education. We strive to build lasting relationships with our clients and their pets, offering personalized treatment plans.',
-    imageUrl: 'https://placehold.co/600x400.png',
-    address: '789 Bark Avenue, Meowburg, FL 33001',
-    phone: '555-9012',
-    website: 'https://example.com/thevetconnect',
-    openingHours: 'Mon-Fri: 9am - 5pm, By appointment',
-    servicesOffered: ['Preventative Care', 'Microchipping', 'Senior Pet Care', 'Pharmacy'],
-    rating: 4.2,
-  },
-  {
-    id: '4',
-    name: 'Critter Care Center',
-    shortDescription: 'Specialized care for exotic pets and small animals.',
-    fullDescription: 'Critter Care Center provides expert veterinary services for a wide range of animals, including birds, reptiles, and small mammals. Our experienced vets understand the unique needs of exotic pets.',
-    imageUrl: 'https://placehold.co/600x400.png',
-    address: '101 Feather Way, Critter City, NY 10001',
-    phone: '555-3456',
-    website: 'https://example.com/crittercare',
-    openingHours: 'Tue-Sat: 10am - 6pm',
-    servicesOffered: ['Exotic Pet Care', 'Avian Medicine', 'Reptile Health', 'Small Mammal Surgery'],
-    rating: 4.9,
-  },
+    name: 'Dental Cleaning',
+    description: 'Professional dental cleaning',
+    price: 120,
+    category: 'Dental',
+    duration: 60,
+    type: 'treatment_template'
+  }
 ];
-
-export const getServiceById = (id: string): VetService | undefined => {
-  return mockVetServices.find(service => service.id === id);
-};

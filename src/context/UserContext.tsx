@@ -84,7 +84,6 @@ const PROTECTED_PATHS = [
   '/client',
   '/administrator',
   '/practice-administrator',
-  '/favorites',
   '/symptom-checker',
   '/owner', // Add owner management paths
   '/company-management',

@@ -13,7 +13,7 @@ const PRACTICE_ADMIN_DASHBOARD = '/practice-administrator';
 const OWNER_DASHBOARD = '/owner';
 
 // Other protected routes (relevant for access control, not initial login redirect)
-const OTHER_CLIENT_PROTECTED_ROUTES = ['/favorites', '/symptom-checker'];
+const OTHER_CLIENT_PROTECTED_ROUTES = ['/symptom-checker'];
 const ADMIN_PROTECTED_ROUTES = ['/admin'];
 const OWNER_PROTECTED_ROUTES = ['/owner', '/company-management'];
 

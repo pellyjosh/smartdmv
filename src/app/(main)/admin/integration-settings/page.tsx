@@ -246,13 +246,36 @@ export default function IntegrationSettingsPage() {
   
   // Update widget settings when practice data loads
   useEffect(() => {
-    if (practiceDataResponse && (!widgetSettings.appointmentTypes || widgetSettings.appointmentTypes.length === 0) && practiceDataResponse.appointmentTypes) {
+    if (practiceDataResponse && (!widgetSettings.appointmentTypes || widgetSettings.appointmentTypes.length === 0)) {
       console.log('Updating widget settings with practice data');
       console.log('Practice appointment types:', practiceDataResponse.appointmentTypes);
       console.log('Current widget appointment types:', widgetSettings.appointmentTypes);
+      
+      // Use practice appointment types if available, otherwise create default ones
+      const appointmentTypes = practiceDataResponse.appointmentTypes && practiceDataResponse.appointmentTypes.length > 0 
+        ? practiceDataResponse.appointmentTypes 
+        : [
+            {
+              id: 'checkup',
+              name: 'General Checkup',
+              duration: 30,
+              description: 'Routine health examination',
+              color: '#3b82f6',
+              enabled: true
+            },
+            {
+              id: 'vaccination',
+              name: 'Vaccination',
+              duration: 15,
+              description: 'Pet vaccination service',
+              color: '#10b981',
+              enabled: true
+            }
+          ];
+      
       setWidgetSettings(prev => ({
         ...prev,
-        appointmentTypes: practiceDataResponse.appointmentTypes,
+        appointmentTypes: appointmentTypes,
         availableDays: practiceDataResponse.defaultSettings?.availableDays || [1, 2, 3, 4, 5],
         workingHours: practiceDataResponse.defaultSettings?.workingHours || { start: '09:00', end: '17:00' },
         customTexts: {
