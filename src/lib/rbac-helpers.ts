@@ -28,18 +28,42 @@ export function hasPermission(
   action: string,
   resource: string = '*'
 ): boolean {
-  if (!user || !user.roles) {
-    return false;
+  // New permission model semantics:
+  // - Users may have multiple roles, each with permission entries.
+  // - A permission entry has `granted: boolean` which can be used to explicitly allow or deny.
+  // - Explicit grants should override explicit denies (i.e. any grant -> allow).
+  // - We support wildcard permission.resource === '*' and wildcard permission.action === '*'.
+  if (!user || !user.roles) return false;
+
+  const roles = user.roles || [];
+
+  // Normalize matches helper
+  const matches = (permissionAction: string, permissionResource: string) => {
+    const actionMatch = permissionAction === action || permissionAction === '*';
+    const resourceMatch = permissionResource === resource || permissionResource === '*';
+    return actionMatch && resourceMatch;
+  };
+
+  // If any role explicitly grants the permission -> allow immediately
+  for (const role of roles) {
+    for (const permission of role.permissions || []) {
+      if (permission.granted && matches(permission.action, permission.resource)) {
+        return true;
+      }
+    }
   }
 
-  // Check if any of the user's roles has the required permission
-  return user.roles.some(role => 
-    role.permissions.some(permission => 
-      permission.granted &&
-      permission.action === action &&
-      (permission.resource === resource || permission.resource === '*')
-    )
-  );
+  // If no explicit grant found, but there is an explicit deny -> deny
+  for (const role of roles) {
+    for (const permission of role.permissions || []) {
+      if (permission.granted === false && matches(permission.action, permission.resource)) {
+        return false;
+      }
+    }
+  }
+
+  // No explicit grant or deny found -> default deny
+  return false;
 }
 
 // Check if user has any admin role
@@ -97,11 +121,21 @@ export function canCreate(user: UserWithRoles | null | undefined, resource: stri
 
 // Role-based checks for backward compatibility with enum-based system
 export function hasRole(user: UserWithRoles | null | undefined, roleName: string): boolean {
-  if (!user || !user.roles) return false;
-  return user.roles.some(role => 
-    role.name.toLowerCase() === roleName.toLowerCase() ||
-    role.displayName.toLowerCase() === roleName.toLowerCase()
-  );
+  if (!user) return false;
+
+  // Preferred: check roles array (new system where a user can have multiple roles)
+  if (user.roles && user.roles.length > 0) {
+    return user.roles.some(role =>
+      (role.name || '').toLowerCase() === roleName.toLowerCase() ||
+      (role.displayName || '').toLowerCase() === roleName.toLowerCase()
+    );
+  }
+
+  // No roles array present -> do NOT fallback to legacy single-enum checks.
+  // This enforces the new roles & permissions model. Callers that still rely on
+  // `user.role` should migrate to populate `user.roles` or map legacy users
+  // to roles before calling these helpers.
+  return false;
 }
 
 // Common role checks

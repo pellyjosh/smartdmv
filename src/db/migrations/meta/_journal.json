@@ -57,6 +57,13 @@
       "when": 1756852098493,
       "tag": "0007_living_betty_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1757415321409,
+      "tag": "0008_chief_jack_flag",
+      "breakpoints": true
     }
   ]
 }

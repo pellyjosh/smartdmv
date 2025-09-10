@@ -14,6 +14,7 @@ import {
   CreateSignatureParams 
 } from "@/hooks/use-electronic-signatures";
 import { useUser } from "@/context/UserContext";
+import { isPracticeAdministrator, isPracticeAdministrator as isPracticeAdminHelper, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
 import { usePractice } from "@/hooks/use-practice";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -174,18 +175,16 @@ export default function ProfilePage() {
     // Save the signature
     const getPracticeIdFromUser = (): number => {
       if (!user) return 0;
-      switch (user.role) {
-        case 'ADMINISTRATOR':
-        case 'SUPER_ADMIN':
-          return user.currentPracticeId ? parseInt(String(user.currentPracticeId), 10) : 0;
-        case 'CLIENT':
-        case 'PRACTICE_ADMINISTRATOR':
-        case 'VETERINARIAN':
-        case 'PRACTICE_MANAGER':
-          return user.practiceId ? parseInt(String(user.practiceId), 10) : 0;
-        default:
-          return practice?.id || 0;
+      if (!user) return practice?.id || 0;
+      if (isAdmin(user as any)) {
+        const u: any = user;
+        return u.currentPracticeId ? parseInt(String(u.currentPracticeId), 10) : 0;
       }
+      if (isPracticeAdminHelper(user as any) || isVeterinarian(user as any) || (user as any).role === 'CLIENT' || (user as any).role === 'PRACTICE_MANAGER') {
+        const u: any = user;
+        return u.practiceId ? parseInt(String(u.practiceId), 10) : 0;
+      }
+      return practice?.id || 0;
     };
     const practiceIdNum = getPracticeIdFromUser();
     const userIdNum = user?.id ? parseInt(String(user.id), 10) : 0;
@@ -218,13 +217,12 @@ export default function ProfilePage() {
   
   // Ensure practice staff users have access to org-related features
   const isPracticeStaff = !!user && (
-    user.role === 'PRACTICE_ADMINISTRATOR' ||
-    user.role === 'PRACTICE_MANAGER' ||
-    user.role === 'VETERINARIAN' ||
-    user.role === 'ADMINISTRATOR' ||
-    user.role === 'SUPER_ADMIN'
+    isPracticeAdminHelper(user as any) ||
+    (user as any).role === 'PRACTICE_MANAGER' ||
+    isVeterinarian(user as any) ||
+    isAdmin(user as any)
   );
-  const isPracticeAdmin = !!user && user.role === 'PRACTICE_ADMINISTRATOR';
+  const isPracticeAdmin = !!user && isPracticeAdminHelper(user as any);
   
   return (
     <div className="container mx-auto py-6">

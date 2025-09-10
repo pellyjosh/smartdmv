@@ -21,7 +21,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { userId } = params;
+    const { userId } = await params;
     const practiceId = userPractice.practiceId ? parseInt(userPractice.practiceId) : undefined;
 
     if (!practiceId) {
@@ -36,13 +36,10 @@ export async function GET(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    const overrides = await getUserPermissionOverrides(userId, practiceId);
+  const overrides = await getUserPermissionOverrides(userId, practiceId);
 
-    return NextResponse.json({
-      userId,
-      practiceId,
-      overrides
-    });
+  // Return the overrides array directly (client hooks expect an array)
+  return NextResponse.json(overrides);
 
   } catch (error) {
     console.error('Error fetching permission overrides:', error);
@@ -61,7 +58,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { userId } = params;
+    const { userId } = await params;
     const practiceId = userPractice.practiceId ? parseInt(userPractice.practiceId) : undefined;
 
     if (!practiceId) {
@@ -137,7 +134,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { userId } = params;
+    const { userId } = await params;
     const practiceId = userPractice.practiceId ? parseInt(userPractice.practiceId) : undefined;
 
     if (!practiceId) {

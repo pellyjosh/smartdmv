@@ -8,7 +8,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-
   if (!id) {
     return NextResponse.json(
       { error: 'Medication schedule ID is required' }, 
@@ -16,9 +15,18 @@ export async function GET(
     );
   }
 
+  // coerce id param to number for integer primary keys
+  const idNum = typeof id === 'string' ? parseInt(id, 10) : id;
+  if (Number.isNaN(idNum)) {
+    return NextResponse.json(
+      { error: 'Invalid medication schedule ID format' },
+      { status: 400 }
+    );
+  }
+
   try {
     const medicationSchedule = await db.query.medicationSchedules.findFirst({
-      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, id),
+      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, idNum),
       with: {
         stay: {
           with: {
@@ -57,6 +65,14 @@ export async function PUT(
       { status: 400 }
     );
   }
+  // coerce id param to number for integer primary keys
+  const idNum = typeof id === 'string' ? parseInt(id, 10) : id;
+  if (Number.isNaN(idNum)) {
+    return NextResponse.json(
+      { error: 'Invalid medication schedule ID format' },
+      { status: 400 }
+    );
+  }
 
   try {
     const body = await request.json();
@@ -72,7 +88,7 @@ export async function PUT(
 
     // Check if the medication schedule exists
     const existingSchedule = await db.query.medicationSchedules.findFirst({
-      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, id)
+      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, idNum)
     });
 
     if (!existingSchedule) {
@@ -92,12 +108,12 @@ export async function PUT(
         ...(nextDueDate !== undefined && { nextDueDate: nextDueDate ? new Date(nextDueDate) : null }),
         ...(isCompleted !== undefined && { isCompleted })
       })
-      .where(eq(medicationSchedules.id, id))
+      .where(eq(medicationSchedules.id, idNum))
       .returning();
 
     // Fetch the complete updated medication schedule data with relations
     const completeMedicationSchedule = await db.query.medicationSchedules.findFirst({
-      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, id),
+      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, idNum),
       with: {
         stay: {
           with: {
@@ -129,11 +145,19 @@ export async function DELETE(
       { status: 400 }
     );
   }
+  // coerce id param to number for integer primary keys
+  const idNum = typeof id === 'string' ? parseInt(id, 10) : id;
+  if (Number.isNaN(idNum)) {
+    return NextResponse.json(
+      { error: 'Invalid medication schedule ID format' },
+      { status: 400 }
+    );
+  }
 
   try {
     // Check if the medication schedule exists
     const existingSchedule = await db.query.medicationSchedules.findFirst({
-      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, id)
+      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, idNum)
     });
 
     if (!existingSchedule) {
@@ -144,7 +168,7 @@ export async function DELETE(
     }
 
     await (db as any).delete(medicationSchedules)
-      .where(eq(medicationSchedules.id, id));
+      .where(eq(medicationSchedules.id, idNum));
 
     return NextResponse.json(
       { message: 'Medication schedule deleted successfully' },

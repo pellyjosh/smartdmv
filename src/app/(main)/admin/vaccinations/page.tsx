@@ -1,4 +1,4 @@
-'use client'
+ 'use client'
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
@@ -40,8 +40,9 @@ import {
 } from "@/components/ui/pagination";
 import { Loader2, Plus, Search, Filter, Calendar, AlertTriangle, Clock, CheckCircle } from "lucide-react";
 import { useUser } from "@/context/UserContext";
+import { isPracticeAdministrator, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
 import { format } from "date-fns";
-import { UserRoleEnum } from "@/db/schema";
+
 
 const VaccinationsPage = () => {
   const { user, isLoading, userPracticeId } = useUser();
@@ -282,11 +283,10 @@ const VaccinationsPage = () => {
     );
   }
 
-  const isPracticeAdmin = user?.role === UserRoleEnum.PRACTICE_ADMINISTRATOR;
-  const isSuperAdmin = user?.role === UserRoleEnum.SUPER_ADMIN;
-  const isVet = user?.role === UserRoleEnum.VETERINARIAN;
-  const isAdministrator = user?.role === UserRoleEnum.ADMINISTRATOR;
-  const canManageVaccinations = isPracticeAdmin || isSuperAdmin || isVet || isAdministrator;
+  const canManageVaccinations =
+    isPracticeAdministrator(user as any) ||
+    isVeterinarian(user as any) ||
+    isAdmin(user as any);
 
   return (
     <>

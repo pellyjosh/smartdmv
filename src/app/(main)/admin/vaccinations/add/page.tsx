@@ -10,6 +10,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, ArrowLeft, Calendar } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/hooks/use-toast";
+import { isPracticeAdministrator, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
 
 import { Button } from "@/components/ui/button";
 import {
@@ -91,7 +92,11 @@ const AddVaccinationPage = () => {
   // Authorization check
   useEffect(() => {
     if (!isUserLoading && user) {
-      const canAddVaccinations = user.role === "PRACTICE_ADMINISTRATOR" || user.role === "SUPER_ADMIN" || user.role === "VETERINARIAN";
+      // Allow practice admins, super admins, veterinarians and administrators to add vaccinations
+      const canAddVaccinations =
+        isPracticeAdministrator(user as any) ||
+        isVeterinarian(user as any) ||
+        isAdmin(user as any);
       if (!canAddVaccinations) {
         toast({
           title: "Access Denied",

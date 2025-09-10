@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { db } from "@/db"
-import { users as usersTable, sessions as sessionsTable } from "@/db/schema"
+import { users as usersTable, sessions as sessionsTable, UserRoleEnum } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { hasAnyRole } from "./rbac/dynamic-roles"
+import { getUserRolePermissions } from "./rbac/utils"
 import { HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
 import type { User } from '@/context/UserContext';
 
@@ -75,38 +76,94 @@ export async function getUserPractice(request: NextRequest): Promise<UserPractic
     let userData: User;
     
     if (userRecord.role === 'CLIENT') {
+      const permissions = getUserRolePermissions(UserRoleEnum.CLIENT);
       userData = {
         id: userRecord.id,
         email: userRecord.email,
         name: userRecord.name,
         role: 'CLIENT',
         practiceId: userRecord.currentPracticeId || '',
-      };
+        // Populate a minimal roles array for compatibility with new RBAC
+        // helpers that expect `user.roles`.
+        // Permissions will be resolved elsewhere if dynamic role data exists.
+        roles: [
+          { 
+            id: `legacy-CLIENT`, 
+            name: 'CLIENT', 
+            displayName: 'Client', 
+            permissions: permissions.map(p => ({
+              resource: p.resource,
+              action: p.action,
+              granted: p.granted
+            }))
+          }
+        ],
+      } as any;
     } else if (userRecord.role === 'PRACTICE_ADMINISTRATOR') {
+      const permissions = getUserRolePermissions(UserRoleEnum.PRACTICE_ADMINISTRATOR);
       userData = {
         id: userRecord.id,
         email: userRecord.email,
         name: userRecord.name,
         role: 'PRACTICE_ADMINISTRATOR',
         practiceId: userRecord.currentPracticeId || '',
-      };
+        roles: [
+          { 
+            id: `legacy-PRACTICE_ADMINISTRATOR`, 
+            name: 'PRACTICE_ADMINISTRATOR', 
+            displayName: 'Practice Administrator', 
+            permissions: permissions.map(p => ({
+              resource: p.resource,
+              action: p.action,
+              granted: p.granted
+            }))
+          }
+        ],
+      } as any;
     } else if (userRecord.role === 'VETERINARIAN') {
+      const permissions = getUserRolePermissions(UserRoleEnum.VETERINARIAN);
       userData = {
         id: userRecord.id,
         email: userRecord.email,
         name: userRecord.name,
         role: 'VETERINARIAN',
         practiceId: userRecord.currentPracticeId || '',
-      };
+        roles: [
+          { 
+            id: `legacy-VETERINARIAN`, 
+            name: 'VETERINARIAN', 
+            displayName: 'Veterinarian', 
+            permissions: permissions.map(p => ({
+              resource: p.resource,
+              action: p.action,
+              granted: p.granted
+            }))
+          }
+        ],
+      } as any;
     } else if (userRecord.role === 'PRACTICE_MANAGER') {
+      const permissions = getUserRolePermissions(UserRoleEnum.PRACTICE_MANAGER);
       userData = {
         id: userRecord.id,
         email: userRecord.email,
         name: userRecord.name,
         role: 'PRACTICE_MANAGER',
         practiceId: userRecord.currentPracticeId || '',
-      };
+        roles: [
+          { 
+            id: `legacy-PRACTICE_MANAGER`, 
+            name: 'PRACTICE_MANAGER', 
+            displayName: 'Practice Manager', 
+            permissions: permissions.map(p => ({
+              resource: p.resource,
+              action: p.action,
+              granted: p.granted
+            }))
+          }
+        ],
+      } as any;
     } else if (userRecord.role === 'ADMINISTRATOR') {
+      const permissions = getUserRolePermissions(UserRoleEnum.ADMINISTRATOR);
       userData = {
         id: userRecord.id,
         email: userRecord.email,
@@ -114,8 +171,21 @@ export async function getUserPractice(request: NextRequest): Promise<UserPractic
         role: 'ADMINISTRATOR',
         accessiblePracticeIds: [], // Would need to query admin practices table
         currentPracticeId: userRecord.currentPracticeId || '',
-      };
+        roles: [
+          { 
+            id: `legacy-ADMINISTRATOR`, 
+            name: 'ADMINISTRATOR', 
+            displayName: 'Administrator', 
+            permissions: permissions.map(p => ({
+              resource: p.resource,
+              action: p.action,
+              granted: p.granted
+            }))
+          }
+        ],
+      } as any;
     } else if (userRecord.role === 'SUPER_ADMIN') {
+      const permissions = getUserRolePermissions(UserRoleEnum.SUPER_ADMIN);
       userData = {
         id: userRecord.id,
         email: userRecord.email,
@@ -123,7 +193,19 @@ export async function getUserPractice(request: NextRequest): Promise<UserPractic
         role: 'SUPER_ADMIN',
         accessiblePracticeIds: [], // Would need to query admin practices table
         currentPracticeId: userRecord.currentPracticeId || '',
-      };
+        roles: [
+          { 
+            id: `legacy-SUPER_ADMIN`, 
+            name: 'SUPER_ADMIN', 
+            displayName: 'Super Admin', 
+            permissions: permissions.map(p => ({
+              resource: p.resource,
+              action: p.action,
+              granted: p.granted
+            }))
+          }
+        ],
+      } as any;
     } else {
       return null; // Unknown role
     }

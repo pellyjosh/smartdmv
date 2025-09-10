@@ -7,30 +7,78 @@ import { z } from 'zod';
 
 // Helpers
 const parseDateInput = (input: unknown): Date | null => {
-  if (!input) return null;
+  // Tolerant date parsing: accept Date, string, number (ms or ISO), and several common object shapes.
+  if (input === undefined || input === null) return null;
+
+  // Already a Date
   if (input instanceof Date) return isNaN(input.getTime()) ? null : input;
+
+  // Number (timestamp in ms or seconds)
+  if (typeof input === 'number' && !isNaN(input)) {
+    // if it's likely seconds (10 digits), convert to ms
+    const maybeMs = input < 1e12 ? input * 1000 : input;
+    const d = new Date(maybeMs);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // String
   if (typeof input === 'string') {
     const s = input.trim();
     if (!s) return null;
     const d = new Date(s);
     return isNaN(d.getTime()) ? null : d;
   }
+
+  // Objects: try common shapes
+  if (typeof input === 'object') {
+    try {
+      const anyInput: any = input;
+      // If it's a luxon/moment-like object with toISOString
+      if (typeof anyInput.toISOString === 'function') {
+        const d = new Date(anyInput.toISOString());
+        if (!isNaN(d.getTime())) return d;
+      }
+
+      // If it has epochMillis / epoch / value / valueOf
+      if (typeof anyInput.epochMillis === 'number') {
+        const d = new Date(anyInput.epochMillis);
+        if (!isNaN(d.getTime())) return d;
+      }
+      if (typeof anyInput.epoch === 'number') {
+        const maybeMs = anyInput.epoch < 1e12 ? anyInput.epoch * 1000 : anyInput.epoch;
+        const d = new Date(maybeMs);
+        if (!isNaN(d.getTime())) return d;
+      }
+      if (typeof anyInput.valueOf === 'function') {
+        const v = anyInput.valueOf();
+        if (typeof v === 'number' && !isNaN(v)) {
+          const d = new Date(v < 1e12 ? v * 1000 : v);
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+
+      // If it looks like { year, month, day }
+      if (
+        typeof anyInput.year === 'number' &&
+        typeof anyInput.month === 'number' &&
+        typeof anyInput.day === 'number'
+      ) {
+        // month in JS Date is 0-indexed
+        const d = new Date(anyInput.year, anyInput.month - 1, anyInput.day);
+        if (!isNaN(d.getTime())) return d;
+      }
+
+      // Fallback: stringify and try
+      const str = JSON.stringify(anyInput);
+      const d = new Date(str);
+      return isNaN(d.getTime()) ? null : d;
+    } catch (e) {
+      return null;
+    }
+  }
+
   return null;
 };
-
-const toIsoOrNull = (d: unknown): string | null => {
-  if (!d) return null;
-  const date = d instanceof Date ? d : new Date(d as any);
-  return isNaN(date.getTime()) ? null : date.toISOString();
-};
-
-const serializeOrder = (order: any) => ({
-  ...order,
-  orderDate: toIsoOrNull(order.orderDate),
-  sampleCollectionDate: toIsoOrNull(order.sampleCollectionDate),
-  createdAt: toIsoOrNull(order.createdAt),
-  updatedAt: toIsoOrNull(order.updatedAt),
-});
 
 const toNumberOrNull = (v: unknown): number | null => {
   if (v === null || v === undefined) return null;
@@ -94,7 +142,7 @@ export async function GET(request: NextRequest) {
       where: eq(labOrders.practiceId, Number(userPractice.practiceId)),
     });
 
-  return NextResponse.json(orders.map(serializeOrder));
+  return NextResponse.json(orders);
   } catch (error) {
     console.error('Error fetching lab orders:', error);
     return NextResponse.json(
@@ -152,7 +200,7 @@ export async function POST(request: NextRequest) {
       await (db as any).insert(labOrderTests).values(orderTests);
     }
 
-  return NextResponse.json(serializeOrder(order), { status: 201 });
+  return NextResponse.json(order, { status: 201 });
   } catch (error) {
     console.error('Error creating lab order:', error);
     return NextResponse.json(
@@ -188,7 +236,24 @@ export async function PUT(request: NextRequest) {
   if (!id || isNaN(idNum)) {
         return NextResponse.json({ error: 'Each update must include a valid numeric id' }, { status: 400 });
       }
-  const sampleDate = validated.sampleCollectionDate === undefined ? undefined : parseDateInput(validated.sampleCollectionDate);
+  // Normalize sampleCollectionDate safely
+  const rawSample = validated.sampleCollectionDate as any;
+  let sampleDate: Date | null | undefined;
+  if (rawSample === undefined) {
+    sampleDate = undefined;
+  } else if (rawSample === null) {
+    sampleDate = null;
+  } else if (Array.isArray(rawSample) && rawSample.length > 0) {
+    sampleDate = parseDateInput(rawSample[0]);
+  } else {
+    sampleDate = parseDateInput(rawSample);
+  }
+
+  if (rawSample !== undefined && rawSample !== null && sampleDate === null) {
+    // Don't fail the entire batch for a malformed date. Log and ignore the sample date for this update.
+    console.warn(`PUT /api/lab/orders - invalid sampleCollectionDate for id=${id}; ignoring value.`, { rawSample });
+    sampleDate = undefined;
+  }
 
       // Build update payload with only valid labOrders columns
       const updatePayload: any = {
@@ -206,18 +271,24 @@ export async function PUT(request: NextRequest) {
         sampleCollectionDate: sampleDate,
       };
 
-  const [updatedOrder] = await (db as any)
-        .update(labOrders)
-        .set(updatePayload)
-        .where(eq(labOrders.id, idNum))
-        .returning();
+  try {
+    console.debug('PUT /api/lab/orders - performing update', { id: idNum, updatePayload });
+    const [updatedOrder] = await (db as any)
+      .update(labOrders)
+      .set(updatePayload)
+      .where(eq(labOrders.id, idNum))
+      .returning();
 
-      results.push(updatedOrder);
+    results.push(updatedOrder);
+  } catch (e) {
+    console.error('DB error updating lab order (PUT) for id=' + idNum + ':', e, { updatePayload });
+    throw e;
+  }
     }
 
-  return NextResponse.json(results.map(serializeOrder));
+  return NextResponse.json(results);
   } catch (error) {
-    console.error('Error updating lab orders:', error);
+    console.error('Error updatinggg lab orders:', error);
     return NextResponse.json(
       { error: 'Failed to update lab orders' },
       { status: 500 }
@@ -243,29 +314,67 @@ export async function PATCH(request: NextRequest) {
     
   const validated: UpdateOrderInput = updateOrderSchema.parse(updateData);
 
+    // Normalize sampleCollectionDate safely (handle strings, Date, arrays, objects)
+    const rawSample = validated.sampleCollectionDate as any;
+    let sampleDateNormalized: Date | null | undefined;
+    if (rawSample === undefined) {
+      sampleDateNormalized = undefined;
+    } else if (rawSample === null) {
+      sampleDateNormalized = null;
+    } else if (Array.isArray(rawSample) && rawSample.length > 0) {
+      // if an array was sent accidentally, try the first element
+      sampleDateNormalized = parseDateInput(rawSample[0]);
+    } else {
+      sampleDateNormalized = parseDateInput(rawSample);
+    }
+
+    // If the caller provided a value but we couldn't parse it, log and ignore it rather than failing
+    if (rawSample !== undefined && rawSample !== null && sampleDateNormalized === null) {
+      console.warn('PATCH /api/lab/orders - invalid sampleCollectionDate; ignoring value.', { id: idNum, rawSample });
+      sampleDateNormalized = undefined;
+    }
+
+    // Small diagnostic log if input types are unexpected (helps trace toISOString issues)
+    console.debug('PATCH /api/lab/orders - date-normalization', {
+      id: idNum,
+      rawSampleType: Array.isArray(rawSample) ? 'array' : typeof rawSample,
+      rawSampleValue: Array.isArray(rawSample) ? rawSample.slice(0,3) : rawSample,
+      sampleDateNormalized
+    });
+
     // Update the order
     if (!id || isNaN(idNum)) {
       return NextResponse.json({ error: 'Order ID must be a valid number' }, { status: 400 });
     }
 
-    const [updatedOrder] = await (db as any)
-      .update(labOrders)
-      .set({
-        provider: validated.provider,
-        status: validated.status,
-        sampleType: validated.sampleType,
-        priority: validated.priority,
-        notes: validated.notes,
-        isManualEntry: validated.isManualEntry,
-        totalPrice: validated.totalPrice,
-        externalOrderId: validated.externalOrderId,
-        externalReference: validated.externalReference,
-        petId: toNumberOrUndefined(validated.petId),
-        soapNoteId: toNumberOrUndefined(validated.soapNoteId),
-        sampleCollectionDate: validated.sampleCollectionDate === undefined ? undefined : parseDateInput(validated.sampleCollectionDate),
-      })
-      .where(and(eq(labOrders.id, idNum), eq(labOrders.practiceId, Number(userPractice.practiceId))))
-      .returning();
+    let updatedOrder: any;
+    const changesToApply: any = {
+      provider: validated.provider,
+      status: validated.status,
+      sampleType: validated.sampleType,
+      priority: validated.priority,
+      notes: validated.notes,
+      isManualEntry: validated.isManualEntry,
+      totalPrice: validated.totalPrice,
+      externalOrderId: validated.externalOrderId,
+      externalReference: validated.externalReference,
+      petId: toNumberOrUndefined(validated.petId),
+      soapNoteId: toNumberOrUndefined(validated.soapNoteId),
+      sampleCollectionDate: sampleDateNormalized === undefined ? undefined : sampleDateNormalized,
+    };
+
+    try {
+      console.debug('PATCH /api/lab/orders - applying update', { id: idNum, changesToApply });
+      const [res] = await (db as any)
+        .update(labOrders)
+        .set(changesToApply)
+        .where(and(eq(labOrders.id, idNum), eq(labOrders.practiceId, Number(userPractice.practiceId))))
+        .returning();
+      updatedOrder = res;
+    } catch (err) {
+      console.error('DB error updating lab order (PATCH):', err, { id: idNum, changesToApply });
+      return new Response(JSON.stringify({ error: 'partial_failure', id: idNum, message: 'Failed to apply some changes; see server logs' }), { status: 207 });
+    }
 
     if (!updatedOrder) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
@@ -274,23 +383,23 @@ export async function PATCH(request: NextRequest) {
     // Handle test updates if provided
     if (Array.isArray(validated.tests)) {
       // Remove existing tests
-  await (db as any).delete(labOrderTests).where(eq(labOrderTests.labOrderId, idNum));
-      
-      // Add new tests
-      if (validated.tests.length > 0) {
-        const orderTests = (validated.tests as number[]).map((testId: number) => ({
-          labOrderId: idNum,
-          testCatalogId: testId,
-          status: 'ordered' as const,
-        }));
+    await (db as any).delete(labOrderTests).where(eq(labOrderTests.labOrderId, idNum));
+        
+        // Add new tests
+        if (validated.tests.length > 0) {
+          const orderTests = (validated.tests as number[]).map((testId: number) => ({
+            labOrderId: idNum,
+            testCatalogId: testId,
+            status: 'ordered' as const,
+          }));
 
-  await (db as any).insert(labOrderTests).values(orderTests);
+    await (db as any).insert(labOrderTests).values(orderTests);
+        }
       }
-    }
 
-  return NextResponse.json(serializeOrder(updatedOrder));
+    return NextResponse.json(updatedOrder);
   } catch (error) {
-    console.error('Error updating lab order:', error);
+    console.error('Error updatinggggg lab order:', error);
     return NextResponse.json(
       { error: 'Failed to update lab order' },
       { status: 500 }

@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/UserContext";
+import { isAdmin } from '@/lib/rbac-helpers';
 import {
   Card,
   CardContent,
@@ -211,8 +212,11 @@ const LabIntegrationPage = () => {
   // Get practice ID from user context
   const getPracticeId = () => {
     if (!user) return null;
-    if (user.role === 'ADMINISTRATOR') {
-      return user.currentPracticeId;
+    if (isAdmin(user as any)) {
+      // For admin users, check if they have currentPracticeId
+      if ('currentPracticeId' in user) {
+        return (user as any).currentPracticeId;
+      }
     }
     if ('practiceId' in user) {
       return user.practiceId;
@@ -288,6 +292,24 @@ const LabIntegrationPage = () => {
     retry: false,
     enabled: true,
   });
+
+  // Diagnostic: log labOrders when they change and highlight missing petName
+  useEffect(() => {
+    try {
+      if (!labOrders) return;
+      console.debug('[LabIntegration] received labOrders count=', labOrders.length);
+      const missingName = labOrders.filter((o: any) => !o.petName && (o.petId || o.petId === 0));
+      if (missingName.length > 0) {
+        console.warn('[LabIntegration] orders missing petName:', missingName.map((o: any) => ({ id: o.id, petId: o.petId })));
+      }
+      const missingPetId = labOrders.filter((o: any) => !o.petId && o.petName == null);
+      if (missingPetId.length > 0) {
+        console.warn('[LabIntegration] orders missing petId and petName:', missingPetId.map((o: any) => ({ id: o.id })));
+      }
+    } catch (e) {
+      console.error('[LabIntegration] error logging labOrders diagnostic', e);
+    }
+  }, [labOrders]);
   
   // Fetch lab results
   const {
@@ -349,6 +371,21 @@ const LabIntegrationPage = () => {
       species: pet.species
     }));
   }, [pets]);
+
+  // Derive lab orders with petName filled in from pets list when missing
+  const labOrdersWithPetName = useMemo(() => {
+    if (!labOrders || labOrders.length === 0) return [];
+    const petById = new Map<number, any>((pets || []).map((p: any) => [p.id, p]));
+    return labOrders.map((order: any) => {
+      if ((!order.petName || order.petName === '') && order.petId != null) {
+        const pet = petById.get(Number(order.petId));
+        if (pet) {
+          return { ...order, petName: pet.name };
+        }
+      }
+      return order;
+    });
+  }, [labOrders, pets]);
 
   // Define extended provider schema with conditional validation
   const extendedProviderSchema = z.object({
@@ -508,11 +545,11 @@ const LabIntegrationPage = () => {
     mutationFn: async (data: TestCatalog) => {
       try {
         if (selectedTest) {
-          // Update existing test
+          // Update existing test - include ID in request body
           const response = await apiRequest(
             "PUT",
-            `/api/lab/test-catalog/${selectedTest.id}`,
-            data
+            "/api/lab/test-catalog",
+            { ...data, id: selectedTest.id }
           );
           return await response.json();
         } else {
@@ -583,7 +620,7 @@ const LabIntegrationPage = () => {
   const deleteTestMutation = useMutation({
     mutationFn: async (id: number) => {
       try {
-        const response = await apiRequest("DELETE", `/api/lab/test-catalog/${id}`);
+        const response = await apiRequest("DELETE", "/api/lab/test-catalog", { id });
         return await response.json();
       } catch (error: any) {
         if (error.status === 401) {
@@ -769,10 +806,21 @@ const LabIntegrationPage = () => {
       });
       return;
     }
+
+    // Validate that a patient was selected
+    if (!data.petId || String(data.petId).trim() === "") {
+      toast({
+        title: "Validation Error",
+        description: "Please select a patient for the lab order.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Transform frontend data to API format
     const apiData = {
-      petId: data.petId,
+      // API expects a numeric petId; convert from form string if necessary
+      petId: Number(data.petId),
       provider: data.provider,
       status: data.status,
       priority: data.priority,
@@ -901,7 +949,8 @@ const LabIntegrationPage = () => {
     if (selectedOrder) {
       labOrderForm.reset({
         provider: selectedOrder.provider,
-        petId: selectedOrder.petId,
+        // ensure petId is a string for the form (useForm stores select values as strings)
+        petId: selectedOrder.petId != null ? String(selectedOrder.petId) : "",
         status: selectedOrder.status,
         sampleType: selectedOrder.sampleType || "",
         sampleCollection: selectedOrder.sampleCollection || "",
@@ -1835,9 +1884,13 @@ const LabIntegrationPage = () => {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Patient</FormLabel>
+                          {selectedOrder && (
+                            <p className="text-sm text-muted-foreground mb-2">Patient cannot be changed for existing orders.</p>
+                          )}
                           <Select
                             onValueChange={(value) => field.onChange(value)}
                             value={field.value}
+                            disabled={!!selectedOrder}
                           >
                             <FormControl>
                               <SelectTrigger>
@@ -2268,7 +2321,7 @@ const LabIntegrationPage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {labOrders.map((order: any) => (
+                    {labOrdersWithPetName.map((order: any) => (
                       <TableRow key={order.id}>
                         <TableCell className="font-medium">#{order.id}</TableCell>
                         <TableCell>{order.petName || "Unknown"}</TableCell>

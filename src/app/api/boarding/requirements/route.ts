@@ -2,18 +2,21 @@ import { NextResponse, NextRequest } from "next/server";
 import { db } from "@/db/index";
 import { boardingRequirements } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { randomUUID } from "crypto";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const stayId = searchParams.get('stayId');
+    const stayIdParam = searchParams.get('stayId');
 
     let requirementsList;
 
-    if (stayId) {
+    if (stayIdParam) {
+      const stayIdNum = parseInt(stayIdParam, 10);
+      if (Number.isNaN(stayIdNum)) {
+        return NextResponse.json([], { status: 200 });
+      }
       requirementsList = await db.query.boardingRequirements.findMany({
-        where: (boardingRequirements, { eq }) => eq(boardingRequirements.stayId, stayId),
+        where: (boardingRequirements, { eq }) => eq(boardingRequirements.stayId, stayIdNum),
         with: {
           stay: {
             with: {
@@ -47,7 +50,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { 
+    let { 
       stayId, 
       requirementType, 
       requirementDescription, 
@@ -56,8 +59,11 @@ export async function POST(request: NextRequest) {
       practiceId 
     } = body;
 
+    const stayIdNum = typeof stayId === 'string' ? parseInt(stayId, 10) : stayId;
+    const practiceIdNum = typeof practiceId === 'string' ? parseInt(practiceId, 10) : practiceId;
+
     // Validate required fields
-    if (!stayId || !requirementType || !requirementDescription || !practiceId) {
+    if (!stayIdNum || !requirementType || !requirementDescription || !practiceIdNum) {
       return NextResponse.json(
         { error: 'Missing required fields: stayId, requirementType, requirementDescription, and practiceId are required' },
         { status: 400 }
@@ -66,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     // Check if the boarding stay exists
     const existingStay = await db.query.boardingStays.findFirst({
-      where: (boardingStays, { eq }) => eq(boardingStays.id, stayId)
+      where: (boardingStays, { eq }) => eq(boardingStays.id, stayIdNum)
     });
 
     if (!existingStay) {
@@ -76,12 +82,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const requirementId = randomUUID();
-
     const newRequirement = await (db as any).insert(boardingRequirements)
       .values({
-        id: requirementId,
-        stayId,
+        stayId: stayIdNum,
         requirementType,
         requirementDescription,
         isMandatory,
@@ -89,13 +92,15 @@ export async function POST(request: NextRequest) {
         completedDate: null,
         completedById: null,
         notes: notes || null,
-        practiceId
+        practiceId: practiceIdNum
       })
       .returning();
 
     // Fetch the complete requirement data with relations
+    const insertedId = Array.isArray(newRequirement) && newRequirement[0] ? newRequirement[0].id : (newRequirement as any).id;
+
     const completeRequirement = await db.query.boardingRequirements.findFirst({
-      where: (boardingRequirements, { eq }) => eq(boardingRequirements.id, requirementId),
+      where: (boardingRequirements, { eq }) => eq(boardingRequirements.id, insertedId),
       with: {
         stay: {
           with: {

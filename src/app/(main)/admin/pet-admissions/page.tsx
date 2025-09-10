@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { hasRole } from '@/lib/rbac-helpers';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -566,7 +567,7 @@ const PetAdmissionPage = () => {
                         </FormControl>
                         <SelectContent>
                         {users
-                          .filter(user => user.role === "VETERINARIAN")
+                          .filter(u => hasRole(u as any, 'VETERINARIAN'))
                           .map(user => (
                             <SelectItem key={user.id} value={user.id.toString()}>
                               {user.username} ({user.email})

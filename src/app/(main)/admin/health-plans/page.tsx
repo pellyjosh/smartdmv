@@ -12,7 +12,9 @@ import { Progress } from "@/components/ui/progress";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { HealthPlan, HealthPlanMilestone, Pet, UserRoleEnum } from "@/db/schema";
+import { HealthPlan, HealthPlanMilestone, Pet } from "@/db/schema";
+import { isPracticeAdministrator, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
+import { RequirePermission, PermissionButton } from '@/lib/rbac/components';
 import { Loader2, PlusCircle, CalendarIcon, CheckCircle2, XCircle, HeartPulse } from "lucide-react";
 
 export default function HealthPlansPage() {
@@ -98,17 +100,18 @@ export default function HealthPlansPage() {
   
   // Handle milestone toggle
   const handleToggleMilestone = (milestoneId: number) => {
-    // Only staff and admins can toggle milestones
-    if (user && (user.role === UserRoleEnum.PRACTICE_STAFF || user.role === UserRoleEnum.PRACTICE_ADMIN)) {
+  // Only staff and admins can toggle milestones
+  if (user && (isPracticeAdministrator(user as any) || isVeterinarian(user as any) || isAdmin(user as any))) {
       toggleMilestoneMutation.mutate(milestoneId);
     }
   };
   
   const isLoading = isHealthPlansLoading || isPetsLoading;
-  const canCreateHealthPlan = user && (user.role === UserRoleEnum.PRACTICE_STAFF || user.role === UserRoleEnum.PRACTICE_ADMIN);
+  const canCreateHealthPlan = user && (isPracticeAdministrator(user as any) || isVeterinarian(user as any));
 
   return (
-    <div className="h-full">
+    <RequirePermission resource={"health_plans" as any} action={"READ" as any}>
+      <div className="h-full">
       <div className="flex-1 flex flex-col">
         
         <main className="flex-1 overflow-y-auto pb-16 md:pb-0 p-4 md:p-6">
@@ -121,10 +124,10 @@ export default function HealthPlansPage() {
                   {canCreateHealthPlan && (
                     <Dialog open={isHealthPlanDialogOpen} onOpenChange={setIsHealthPlanDialogOpen}>
                       <DialogTrigger asChild>
-                        <Button size="sm">
+                        <PermissionButton resource={"health_plans" as any} action={"CREATE" as any} className="inline-flex items-center" onClick={() => setIsHealthPlanDialogOpen(true)}>
                           <PlusCircle className="h-4 w-4 mr-2" />
                           Create Plan
-                        </Button>
+                        </PermissionButton>
                       </DialogTrigger>
                       <DialogContent className="sm:max-w-[600px]">
                         <DialogHeader>
@@ -243,10 +246,10 @@ export default function HealthPlansPage() {
                         </Button>
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button size="sm">
+                            <PermissionButton resource={"health_plans" as any} action={"UPDATE" as any} className="inline-flex items-center">
                               <PlusCircle className="h-4 w-4 mr-2" />
                               Add Milestone
-                            </Button>
+                            </PermissionButton>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
@@ -415,7 +418,7 @@ export default function HealthPlansPage() {
                             <div>
                               <p className="text-sm text-slate-500">Created By</p>
                               <p className="font-medium">
-                                Staff ID: {selectedPlan.createdById}
+                                Staff ID: {typeof (selectedPlan as any)?.createdById !== 'undefined' ? (selectedPlan as any).createdById : 'Unknown'}
                               </p>
                             </div>
                           </div>
@@ -424,10 +427,10 @@ export default function HealthPlansPage() {
                       
                       <TabsContent value="notes">
                         <div className="rounded-lg border border-slate-200 p-4 space-y-4">
-                          {selectedPlan.notes ? (
+                          {(selectedPlan as any)?.notes ? (
                             <div>
                               <p className="text-sm text-slate-700 whitespace-pre-line">
-                                {selectedPlan.notes}
+                                {(selectedPlan as any).notes}
                               </p>
                             </div>
                           ) : (
@@ -477,6 +480,7 @@ export default function HealthPlansPage() {
           </div>
         </main>
       </div>
-    </div>
+      </div>
+    </RequirePermission>
   );
 }

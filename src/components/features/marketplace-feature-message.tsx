@@ -125,24 +125,27 @@ export function MarketplaceFeatureContainer({
 }: MarketplaceFeatureContainerProps) {
   const { user } = useUser();
   
-  // Get practiceId for the hook
-  const practiceId = (user as any)?.practiceId || (user as any)?.currentPracticeId;
-  const { isClient, isPracticeAdmin, isVeterinarian, isSuperAdmin } = useRoles(practiceId);
+  // Get practiceId for the hook (coerce to number)
+  const practiceId = Number((user as any)?.practiceId || (user as any)?.currentPracticeId || 0) || 0;
+  const { isClient, isPracticeAdmin, isVeterinarian, isSuperAdminAssigned, isPracticeAdminAssigned } = useRoles(practiceId);
   
   // Fetch the correct slug for navigation
   const { data: addonSlug, isLoading: isLoadingSlug } = useAddonSlug(addOnId);
   
   // Get the practice ID using dynamic role checks
+  const assignedRoles = user && 'roles' in user ? (user as any).roles : undefined;
+
   const hasPracticeRole = user ? (
-    isClient(user.role) || 
-    isPracticeAdmin(user.role) || 
-    isVeterinarian(user.role) || 
-    user.role === 'PRACTICE_MANAGER' // Fallback for now as this role check isn't in hook yet
+    isClient((user as any).role) || 
+    isPracticeAdmin((user as any).role) || 
+    isPracticeAdminAssigned(assignedRoles) || 
+    isVeterinarian((user as any).role) || 
+    (user as any).role === 'PRACTICE_MANAGER' // Fallback for now as this role check isn't in hook yet
   ) : false;
   
   const hasAdminRole = user ? (
-    user.role === 'ADMINISTRATOR' || // Fallback for now as this role check isn't in hook yet
-    isSuperAdmin(user.role)
+    (user as any).role === 'ADMINISTRATOR' || // Fallback for now as this role check isn't in hook yet
+    isSuperAdminAssigned(assignedRoles)
   ) : false;
   
   const userPracticeId = user ?

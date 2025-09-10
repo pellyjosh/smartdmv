@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     // Fetch practitioners (veterinarians) from the same practice
     const practitionersData = await db.query.users.findMany({
       where: and(
-        eq(users.practiceId, user.practiceId),
+        eq(users.practiceId, Number(user.practiceId)),
         eq(users.role, 'VETERINARIAN')
       ),
       columns: {

@@ -62,7 +62,8 @@ import {
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/context/UserContext";
-import { UserRoleEnum, type User, type Pet } from "@/db/schema";
+import { type User, type Pet } from "@/db/schema";
+import { isPracticeAdministrator, isAdmin, hasRole } from '@/lib/rbac-helpers';
 import { getPetAvatarColors, formatDate } from "@/lib/utils";
 import { SimpleCustomFieldSelect } from "@/components/form/simple-custom-field-select";
 import { 
@@ -505,7 +506,7 @@ export default function ClientsPage() {
   // Fetch clients (users with CLIENT role)
   const { data: clients, isLoading: isClientsLoading, refetch: refetchClients } = useQuery<User[]>({
     queryKey: ["/api/users/clients", userPracticeId],
-    enabled: !!user && user.role !== UserRoleEnum.CLIENT && !!userPracticeId && userPracticeId.toString().trim() !== '',
+  enabled: !!user && !hasRole(user as any, 'CLIENT') && !!userPracticeId && userPracticeId.toString().trim() !== '',
     queryFn: async () => {
       if (!userPracticeId || userPracticeId.toString().trim() === '') {
         throw new Error('Practice ID is required');
@@ -938,7 +939,7 @@ const handleEditClient = () => {
   );
 
   // Determine if the user has permission to view this page
-  const hasPermission = user && user.role !== UserRoleEnum.CLIENT;
+  const hasPermission = user && !hasRole(user as any, 'CLIENT');
 
   if (!user) return null;
 

@@ -22,7 +22,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
-import { UserRoleEnum } from "@/db/schema";
+import { } from "@/db/schema";
+import { isVeterinarian, isTechnician, isPracticeAdministrator } from '@/lib/rbac-helpers';
 import { Pet } from "@/db/schemas/petsSchema";
 
 // Define types for the timeline items
@@ -76,7 +77,7 @@ export default function PatientTimelinePage() {
   });
 
   // Check permissions
-  const isPractitioner = [UserRoleEnum.VETERINARIAN, UserRoleEnum.TECHNICIAN, UserRoleEnum.PRACTICE_ADMIN, UserRoleEnum.SUPER_ADMIN, UserRoleEnum.ADMINISTRATOR].includes(user?.role as UserRoleEnum);
+  const isPractitioner = isVeterinarian(user as any) || isTechnician(user as any) || isPracticeAdministrator(user as any);
   
   if (!isPractitioner) {
     return (

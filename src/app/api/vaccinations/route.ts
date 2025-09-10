@@ -99,6 +99,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Allow only practice-level roles, administrators and super admins to create vaccinations
+    const allowedRoles = ['PRACTICE_ADMINISTRATOR', 'VETERINARIAN', 'SUPER_ADMIN', 'ADMINISTRATOR'];
+    if (!allowedRoles.includes(userPractice.userRole)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await request.json();
     const validatedData = createVaccinationSchema.parse(body) as CreateVaccinationData;
 

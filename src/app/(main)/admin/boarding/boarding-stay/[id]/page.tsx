@@ -34,7 +34,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { format, parseISO, differenceInDays } from "date-fns";
+import { format, parseISO, differenceInDays, addHours, addDays } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { usePracticeId } from "@/hooks/use-practice-id";
@@ -89,12 +89,14 @@ interface MedicationSchedule {
   id: number;
   stayId: number;
   practiceId: number;
-  name: string;
-  instructions: string;
+  medicationName: string;
+  dosage: string;
   frequency: string;
-  schedule: string;
-  lastAdministeredAt: string | null;
-  nextDueAt: string | null;
+  route: string;
+  startDate: string | null;
+  endDate: string | null;
+  specialInstructions: string | null;
+  lastAdministered: string | null;
   createdAt: string;
 }
 
@@ -102,13 +104,13 @@ interface FeedingSchedule {
   id: number;
   stayId: number;
   practiceId: number;
-  foodType: string;
+  feedingType: string;
+  foodDescription: string | null;
   amount: string;
   frequency: string;
   specialInstructions: string | null;
-  schedule: string;
-  lastFedAt: string | null;
-  nextFeedingAt: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
   createdAt: string;
 }
 
@@ -116,12 +118,13 @@ interface BoardingRequirement {
   id: number;
   stayId: number;
   practiceId: number;
-  name: string;
-  description: string;
+  requirementType: string;
+  requirementDescription: string;
   isCompleted: boolean;
-  isRequired: boolean;
-  completedAt: string | null;
+  isMandatory: boolean;
+  completedDate: string | null;
   completedById: number | null;
+  notes: string | null;
   createdAt: string;
 }
 
@@ -129,10 +132,11 @@ interface BoardingActivity {
   id: number;
   stayId: number;
   practiceId: number;
-  type: string;
+  activityType: string;
   notes: string | null;
   performedById: number;
-  performedAt: string;
+  activityDate: string;
+  success?: boolean;
   createdAt: string;
 }
 
@@ -336,11 +340,20 @@ export default function BoardingStayPage() {
   // Create medication mutation
   const createMedicationMutation = useMutation({
     mutationFn: async (data: z.infer<typeof medicationSchema>) => {
-      const res = await apiRequest("POST", `/api/boarding/stays/${params.id}/medications`, {
-        ...data,
+      // Map client form fields to server API shape
+      const payload = {
         stayId: parseInt(params.id),
+        medicationName: data.name,
+        dosage: data.instructions || "",
+        frequency: data.frequency,
+        route: data.schedule || "",
+        startDate: stay?.startDate || new Date().toISOString(),
+        endDate: stay?.endDate || null,
+        specialInstructions: data.instructions || null,
         practiceId
-      });
+      };
+
+      const res = await apiRequest("POST", `/api/boarding/medication-schedules`, payload);
       return await res.json();
     },
     onSuccess: () => {
@@ -364,11 +377,17 @@ export default function BoardingStayPage() {
   // Create feeding mutation
   const createFeedingMutation = useMutation({
     mutationFn: async (data: z.infer<typeof feedingSchema>) => {
-      const res = await apiRequest("POST", `/api/boarding/stays/${params.id}/feedings`, {
-        ...data,
+      const payload = {
         stayId: parseInt(params.id),
+        feedingType: data.foodType,
+        foodDescription: data.foodType,
+        amount: data.amount,
+        frequency: data.frequency,
+        specialInstructions: data.specialInstructions || null,
         practiceId
-      });
+      };
+
+      const res = await apiRequest("POST", `/api/boarding/feeding-schedules`, payload);
       return await res.json();
     },
     onSuccess: () => {
@@ -392,11 +411,16 @@ export default function BoardingStayPage() {
   // Create requirement mutation
   const createRequirementMutation = useMutation({
     mutationFn: async (data: z.infer<typeof requirementSchema>) => {
-      const res = await apiRequest("POST", `/api/boarding/stays/${params.id}/requirements`, {
-        ...data,
+      const payload = {
         stayId: parseInt(params.id),
+        requirementType: data.name,
+        requirementDescription: data.description,
+        isMandatory: data.isRequired,
+        notes: null,
         practiceId
-      });
+      };
+
+      const res = await apiRequest("POST", `/api/boarding/requirements`, payload);
       return await res.json();
     },
     onSuccess: () => {
@@ -420,13 +444,17 @@ export default function BoardingStayPage() {
   // Create activity mutation
   const createActivityMutation = useMutation({
     mutationFn: async (data: z.infer<typeof activitySchema>) => {
-      const res = await apiRequest("POST", `/api/boarding/stays/${params.id}/activities`, {
-        ...data,
+      const payload = {
         stayId: parseInt(params.id),
-        practiceId,
+        activityType: data.type,
+        activityDate: new Date().toISOString(),
         performedById: user?.id,
-        performedAt: new Date().toISOString()
-      });
+        notes: data.notes || null,
+        success: true,
+        practiceId
+      };
+
+      const res = await apiRequest("POST", `/api/boarding/activities`, payload);
       return await res.json();
     },
     onSuccess: () => {
@@ -490,6 +518,35 @@ export default function BoardingStayPage() {
     } catch (error) {
       console.error('Error formatting datetime:', dateString, error);
       return "Invalid Date";
+    }
+  };
+
+  // Compute a rough "next due" datetime based on lastAdministered and frequency
+  const computeNextDue = (lastAdministeredIso: string, frequency: string) => {
+    try {
+      const last = parseISO(lastAdministeredIso);
+      if (isNaN(last.getTime())) return null;
+
+      switch ((frequency ?? '').toLowerCase()) {
+        case 'daily':
+        case 'once_daily':
+          return addDays(last, 1).toISOString();
+        case 'twice_daily':
+        case 'twice daily':
+          return addHours(last, 12).toISOString();
+        case 'three_times_daily':
+        case 'three times daily':
+          return addHours(last, 8).toISOString();
+        case 'every_other_day':
+          return addDays(last, 2).toISOString();
+        case 'weekly':
+          return addDays(last, 7).toISOString();
+        default:
+          return null;
+      }
+    } catch (error) {
+      console.error('Error computing next due for', { lastAdministeredIso, frequency }, error);
+      return null;
     }
   };
   
@@ -557,11 +614,34 @@ export default function BoardingStayPage() {
   const displayRequirements = requirements || [];
   const displayActivities = activities || [];
   
-  // Calculate duration and cost only if stay data is available
-  // const stayDuration = displayStay && displayStay.startDate && displayStay.endDate 
-  //   ? calculateDuration(displayStay.startDate, displayStay.endDate) 
-  //   : 0;
-  const stayDuration = 0; // Temporarily disabled to avoid errors
+  // Normalize possible date fields from different server payload shapes.
+  // Server may return checkInDate / plannedCheckOutDate or startDate / endDate.
+  const normalizedStart: string | null = (displayStay as any)?.startDate
+    ?? (displayStay as any)?.checkInDate
+    ?? (displayStay as any)?.checkIn_date
+    ?? null;
+
+  const normalizedEnd: string | null = (displayStay as any)?.endDate
+    ?? (displayStay as any)?.plannedCheckOutDate
+    ?? (displayStay as any)?.planned_check_out_date
+    ?? (displayStay as any)?.actualCheckOutDate
+    ?? (displayStay as any)?.checkOutDate
+    ?? null;
+
+  // Compute duration (inclusive) if we have valid ISO date strings
+  const stayDuration = (() => {
+    if (!normalizedStart || !normalizedEnd) return 0;
+    try {
+      const startDateObj = parseISO(normalizedStart);
+      const endDateObj = parseISO(normalizedEnd);
+      if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) return 0;
+      return differenceInDays(endDateObj, startDateObj) + 1; // include both days
+    } catch (error) {
+      console.error('calculateDuration error with:', { normalizedStart, normalizedEnd, error });
+      return 0;
+    }
+  })();
+
   const totalCost = displayStay?.dailyRate ? calculateTotalCost(displayStay.dailyRate, stayDuration) : "N/A";
   
   // Status badge component
@@ -584,7 +664,7 @@ export default function BoardingStayPage() {
     
     return (
       <Badge variant={variant as any} className="capitalize">
-        {status.replace("_", " ")}
+  {status ? status.replace("_", " ") : ""}
       </Badge>
     );
   };
@@ -636,7 +716,7 @@ export default function BoardingStayPage() {
             <StatusBadge status={displayStay.status} />
           </div>
           <p className="text-muted-foreground mt-1">
-            {formatDate(displayStay.startDate)} to {formatDate(displayStay.endDate)} ({stayDuration} days)
+            {formatDate(normalizedStart)} to {formatDate(normalizedEnd)} ({stayDuration} days)
           </p>
         </div>
       </div>
@@ -664,7 +744,7 @@ export default function BoardingStayPage() {
         )}
         
         {displayStay.status !== "cancelled" && displayStay.status !== "checked_out" && (
-          <Link href={`/admin/boarding/boarding-stay/${params.id}/edit`}>
+          <Link href={`/admin/boarding/boarding-stay/${String(params.id)}/edit`}>
             <Button variant="outline">
               <FileEdit className="h-4 w-4 mr-2" />
               Edit Reservation
@@ -717,7 +797,7 @@ export default function BoardingStayPage() {
                     <div>
                       <h3 className="font-medium text-sm text-muted-foreground">Kennel</h3>
                       <p>{displayStay.kennel.name}</p>
-                      <p className="text-sm mt-1 capitalize">{displayStay.kennel.type.replace("_", " ")}, {displayStay.kennel.size}</p>
+                      <p className="text-sm mt-1 capitalize">{displayStay?.kennel?.type ? displayStay.kennel.type.replace("_", " ") : ""}, {displayStay?.kennel?.size ?? ""}</p>
                     </div>
                     <div>
                       <h3 className="font-medium text-sm text-muted-foreground">Daily Rate</h3>
@@ -788,13 +868,17 @@ export default function BoardingStayPage() {
                           <div className="animate-pulse h-24 bg-muted rounded-md"></div>
                         ) : displayActivities.length > 0 ? (
                           <ul className="space-y-2">
-                            {displayActivities.slice(0, 3).map((activity: BoardingActivity) => (
-                              <li key={activity.id} className="text-sm border-l-2 border-primary pl-3 py-1">
-                                <div className="font-medium capitalize">{activity.type}</div>
-                                <div className="text-muted-foreground">{formatDateTime(activity.performedAt)}</div>
-                                {activity.notes && <div className="mt-1">{activity.notes}</div>}
-                              </li>
-                            ))}
+                            {displayActivities.slice(0, 3).map((activity: BoardingActivity) => {
+                              const type = (activity.activityType ?? (activity as any).type ?? '').toString();
+                              const when = (activity.activityDate ?? (activity as any).performedAt ?? null) as string | null;
+                              return (
+                                <li key={activity.id} className="text-sm border-l-2 border-primary pl-3 py-1">
+                                  <div className="font-medium capitalize">{type.replace(/_/g, ' ')}</div>
+                                  <div className="text-muted-foreground">{when ? formatDateTime(when) : 'N/A'}</div>
+                                  {activity.notes && <div className="mt-1">{activity.notes}</div>}
+                                </li>
+                              );
+                            })}
                           </ul>
                         ) : (
                           <p className="text-muted-foreground">No activities logged yet</p>
@@ -808,8 +892,8 @@ export default function BoardingStayPage() {
                           <ul className="space-y-2">
                             {displayRequirements.filter((r: BoardingRequirement) => !r.isCompleted).map((req: BoardingRequirement) => (
                               <li key={req.id} className="text-sm border-l-2 border-destructive pl-3 py-1">
-                                <div className="font-medium">{req.name}</div>
-                                <div className="text-muted-foreground text-xs">{req.description}</div>
+                                <div className="font-medium">{(req.requirementType ?? (req as any).name) || 'Requirement'}</div>
+                                <div className="text-muted-foreground text-xs">{(req.requirementDescription ?? (req as any).description) || ''}</div>
                               </li>
                             ))}
                           </ul>
@@ -840,7 +924,7 @@ export default function BoardingStayPage() {
                       <h3 className="font-medium text-sm text-muted-foreground">Species / Breed</h3>
                       <p>{displayStay.pet.species}{displayStay.pet.breed ? ` / ${displayStay.pet.breed}` : ''}</p>
                     </div>
-                    <Link href={`/clients/${displayStay.pet.ownerId}/pets/${displayStay.pet.id}`}>
+                    <Link href={`/admin/clients/${displayStay.pet.ownerId}/pets/${displayStay.pet.id}`}>
                       <Button variant="outline" size="sm" className="w-full mt-2">
                         View Pet Profile
                       </Button>
@@ -869,7 +953,7 @@ export default function BoardingStayPage() {
                       <p className="text-sm">{displayStay.emergencyContactPhone}</p>
                     </div>
                     <div className="flex gap-2 mt-2">
-                      <Link href={`/clients/${displayStay.pet.ownerId}`}>
+                      <Link href={`/admin/clients/${displayStay.pet.ownerId}`}>
                         <Button variant="outline" size="sm" className="w-full">
                           View Owner
                         </Button>
@@ -950,8 +1034,8 @@ export default function BoardingStayPage() {
                             <FormItem>
                               <FormLabel>Frequency</FormLabel>
                               <Select 
-                                onValueChange={field.onChange} 
-                                defaultValue={field.value}
+                                value={field.value}
+                                onValueChange={(val) => field.onChange(val)} 
                               >
                                 <FormControl>
                                   <SelectTrigger>
@@ -979,8 +1063,8 @@ export default function BoardingStayPage() {
                             <FormItem>
                               <FormLabel>Schedule</FormLabel>
                               <Select 
-                                onValueChange={field.onChange} 
-                                defaultValue={field.value}
+                                value={field.value}
+                                onValueChange={(val) => field.onChange(val)} 
                               >
                                 <FormControl>
                                   <SelectTrigger>
@@ -1035,37 +1119,55 @@ export default function BoardingStayPage() {
                 </div>
               ) : (
                 <div className="divide-y">
-                  {displayMedications.map((med: MedicationSchedule) => (
-                    <div key={med.id} className="py-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <h3 className="font-medium text-lg">{med.name}</h3>
-                          <p className="text-muted-foreground text-sm">
-                            {med.frequency.replace("_", " ")} • {med.schedule.replace(/_/g, " ")}
-                          </p>
+                  {displayMedications.map((med: MedicationSchedule) => {
+                    const name = (med.medicationName ?? (med as any).name ?? '').toString();
+                    const dosage = (med.dosage ?? (med as any).instructions ?? '').toString();
+                    const freq = (med.frequency ?? '').toString();
+                    const route = (med.route ?? (med as any).schedule ?? '').toString();
+                    const lastAdmin = med.lastAdministered ?? (med as any).lastAdministeredAt ?? null;
+                    // For next due, prefer a nextDueAt field if present, otherwise try to compute from lastAdmin
+                    const nextDue = (med as any).nextDueAt ?? null;
+                    let computedNextDue = !nextDue && lastAdmin ? computeNextDue(lastAdmin, freq) : nextDue;
+                    // Fallback: if no lastAdmin but we have a startDate, use that as the next due base
+                    if (!computedNextDue) {
+                      const start = (med.startDate ?? (med as any).start_date ?? null) as string | null;
+                      if (start) {
+                        computedNextDue = computeNextDue(start, freq) ?? start;
+                      }
+                    }
+
+                    return (
+                      <div key={med.id} className="py-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h3 className="font-medium text-lg">{name || 'Unnamed medication'}</h3>
+                            <p className="text-muted-foreground text-sm">
+                              {freq.replace(/_/g, ' ')} • {route.replace(/_/g, ' ')}
+                            </p>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button variant="outline" size="sm">
+                              Log
+                            </Button>
+                            <Button variant="ghost" size="icon">
+                              <SquarePen className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex gap-1">
-                          <Button variant="outline" size="sm">
-                            Log
-                          </Button>
-                          <Button variant="ghost" size="icon">
-                            <SquarePen className="h-4 w-4" />
-                          </Button>
+                        <p className="mb-3">{dosage || med.specialInstructions || 'No instructions provided'}</p>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Last administered: </span>
+                            {lastAdmin ? formatDateTime(lastAdmin) : 'Not yet administered'}
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Next due: </span>
+                            {computedNextDue ? formatDateTime(computedNextDue) : 'N/A'}
+                          </div>
                         </div>
                       </div>
-                      <p className="mb-3">{med.instructions}</p>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">Last administered: </span>
-                          {med.lastAdministeredAt ? formatDateTime(med.lastAdministeredAt) : "Not yet administered"}
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Next due: </span>
-                          {med.nextDueAt ? formatDateTime(med.nextDueAt) : "N/A"}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -1136,8 +1238,8 @@ export default function BoardingStayPage() {
                             <FormItem>
                               <FormLabel>Frequency</FormLabel>
                               <Select 
-                                onValueChange={field.onChange} 
-                                defaultValue={field.value}
+                                value={field.value}
+                                onValueChange={(val) => field.onChange(val)} 
                               >
                                 <FormControl>
                                   <SelectTrigger>
@@ -1163,8 +1265,8 @@ export default function BoardingStayPage() {
                             <FormItem>
                               <FormLabel>Schedule</FormLabel>
                               <Select 
-                                onValueChange={field.onChange} 
-                                defaultValue={field.value}
+                                value={field.value}
+                                onValueChange={(val) => field.onChange(val)} 
                               >
                                 <FormControl>
                                   <SelectTrigger>
@@ -1235,39 +1337,59 @@ export default function BoardingStayPage() {
                 </div>
               ) : (
                 <div className="divide-y">
-                  {displayFeedings.map((feeding: FeedingSchedule) => (
-                    <div key={feeding.id} className="py-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <h3 className="font-medium text-lg">{feeding.foodType}</h3>
-                          <p className="text-muted-foreground text-sm">
-                            {feeding.amount} • {feeding.frequency.replace(/_/g, " ")} • {feeding.schedule.replace(/_/g, " ")}
-                          </p>
+                  {displayFeedings.map((feeding: FeedingSchedule) => {
+                    const food = (feeding.foodDescription ?? (feeding as any).foodType ?? 'Food').toString();
+                    const amount = feeding.amount ?? '';
+                    const freq = feeding.frequency ?? '';
+                    const special = feeding.specialInstructions ?? null;
+                    const lastFed = (feeding as any).lastFedAt ?? null;
+                    const nextFeeding = (feeding as any).nextFeedingAt ?? null;
+                    let computedNext = !nextFeeding && lastFed ? computeNextDue(lastFed, freq) : nextFeeding;
+                    // Fallback to startDate or createdAt if lastFed missing
+                    if (!computedNext) {
+                      const start = (feeding.startDate ?? (feeding as any).start_date ?? null) as string | null;
+                      const created = feeding.createdAt ?? null;
+                      if (start) {
+                        computedNext = computeNextDue(start, freq) ?? start;
+                      } else if (created) {
+                        computedNext = computeNextDue(created, freq) ?? created;
+                      }
+                    }
+
+                    return (
+                      <div key={feeding.id} className="py-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h3 className="font-medium text-lg">{food}</h3>
+                            <p className="text-muted-foreground text-sm">
+                              {amount} • {freq.replace(/_/g, ' ')}
+                            </p>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button variant="outline" size="sm">
+                              Log Feeding
+                            </Button>
+                            <Button variant="ghost" size="icon">
+                              <SquarePen className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex gap-1">
-                          <Button variant="outline" size="sm">
-                            Log Feeding
-                          </Button>
-                          <Button variant="ghost" size="icon">
-                            <SquarePen className="h-4 w-4" />
-                          </Button>
+                        {special && (
+                          <p className="mb-3">{special}</p>
+                        )}
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Last fed: </span>
+                            {lastFed ? formatDateTime(lastFed) : 'Not yet fed'}
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Next feeding: </span>
+                            {computedNext ? formatDateTime(computedNext) : 'N/A'}
+                          </div>
                         </div>
                       </div>
-                      {feeding.specialInstructions && (
-                        <p className="mb-3">{feeding.specialInstructions}</p>
-                      )}
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">Last fed: </span>
-                          {feeding.lastFedAt ? formatDateTime(feeding.lastFedAt) : "Not yet fed"}
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Next feeding: </span>
-                          {feeding.nextFeedingAt ? formatDateTime(feeding.nextFeedingAt) : "N/A"}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -1345,7 +1467,7 @@ export default function BoardingStayPage() {
                               <input
                                 type="checkbox"
                                 checked={field.value}
-                                onChange={field.onChange}
+                                onChange={(e) => field.onChange(e.target.checked)}
                                 className="h-4 w-4 rounded border-gray-300"
                               />
                             </FormControl>
@@ -1398,7 +1520,7 @@ export default function BoardingStayPage() {
                             <div key={req.id} className="p-4">
                               <div className="flex justify-between items-start mb-2">
                                 <div>
-                                  <h3 className="font-medium">{req.name}</h3>
+                                  <h3 className="font-medium">{(req.requirementType ?? (req as any).name) || 'Requirement'}</h3>
                                   {req.isRequired && (
                                     <Badge variant="outline" className="mt-1">Required</Badge>
                                   )}
@@ -1412,7 +1534,7 @@ export default function BoardingStayPage() {
                                   Mark Complete
                                 </Button>
                               </div>
-                              <p className="text-sm">{req.description}</p>
+                              <p className="text-sm">{(req.requirementDescription ?? (req as any).description) || ''}</p>
                             </div>
                           ))}
                       </div>
@@ -1432,16 +1554,16 @@ export default function BoardingStayPage() {
                             <div key={req.id} className="p-4">
                               <div className="flex justify-between items-start mb-2">
                                 <div>
-                                  <h3 className="font-medium">{req.name}</h3>
-                                  {req.isRequired && (
+                                  <h3 className="font-medium">{(req.requirementType ?? (req as any).name) || 'Requirement'}</h3>
+                                  {req.isMandatory && (
                                     <Badge variant="outline" className="mt-1">Required</Badge>
                                   )}
                                 </div>
                                 <Badge variant="default">
-                                  Completed {req.completedAt ? formatDate(req.completedAt) : ""}
+                                  Completed {req.completedDate ? formatDate(req.completedDate) : ""}
                                 </Badge>
                               </div>
-                              <p className="text-sm">{req.description}</p>
+                              <p className="text-sm">{(req.requirementDescription ?? (req as any).description) || ''}</p>
                             </div>
                           ))}
                       </div>
@@ -1485,8 +1607,8 @@ export default function BoardingStayPage() {
                           <FormItem>
                             <FormLabel>Activity Type</FormLabel>
                             <Select 
-                              onValueChange={field.onChange} 
-                              defaultValue={field.value}
+                              value={field.value}
+                              onValueChange={(val) => field.onChange(val)} 
                             >
                               <FormControl>
                                 <SelectTrigger>
@@ -1559,21 +1681,25 @@ export default function BoardingStayPage() {
                 </div>
               ) : (
                 <div className="divide-y">
-                  {displayActivities.map((activity: BoardingActivity) => (
-                    <div key={activity.id} className="py-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <h3 className="font-medium capitalize">{activity.type.replace("_", " ")}</h3>
-                          <p className="text-muted-foreground text-sm">
-                            {formatDateTime(activity.performedAt)}
-                          </p>
+                  {displayActivities.map((activity: BoardingActivity) => {
+                    const type = (activity.activityType ?? (activity as any).type ?? '').toString();
+                    const when = (activity.activityDate ?? (activity as any).performedAt ?? null) as string | null;
+                    return (
+                      <div key={activity.id} className="py-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h3 className="font-medium capitalize">{type.replace(/_/g, ' ')}</h3>
+                            <p className="text-muted-foreground text-sm">
+                              {when ? formatDateTime(when) : 'N/A'}
+                            </p>
+                          </div>
                         </div>
+                        {activity.notes && (
+                          <p className="mt-1">{activity.notes}</p>
+                        )}
                       </div>
-                      {activity.notes && (
-                        <p className="mt-1">{activity.notes}</p>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

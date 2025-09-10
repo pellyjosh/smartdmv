@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { referrals, ReferralStatus } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { canEdit } from '@/lib/rbac-helpers';
 import { eq } from 'drizzle-orm';
 
 // Update status schema for validation
@@ -19,6 +20,11 @@ export async function PATCH(
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Server-side RBAC: ensure caller can update referrals
+    if (!canEdit(userPractice.user as any, 'referrals')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id: idParam } = await params;

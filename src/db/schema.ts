@@ -176,6 +176,8 @@ export * from './schemas/treatmentsSchema';
 export * from './schemas/whiteboardItemsSchema';
 export * from './schemas/whiteboardNotesSchema';
 export * from './schemas/inventorySchema';
+export * from './schemas/inventoryTransactionsSchema';
+export * from './schemas/medicationInteractionsSchema';
 export * from './schemas/treatmentTemplatesSchema';
 export * from './schemas/referralsSchema';
 export * from './schemas/marketplaceSchema';

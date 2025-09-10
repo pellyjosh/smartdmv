@@ -7,6 +7,7 @@ import { eq, gt, sql, like } from 'drizzle-orm'; // Import gt for greater than c
 import { HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
 import type { User, AdministratorUser, SuperAdminUser, VeterinarianUser, PracticeManagerUser } from '@/context/UserContext'; 
 import { retryWithBackoff, analyzeError } from '@/lib/network-utils'; 
+import { getUserAssignedRoles } from '@/lib/rbac/dynamic-roles';
 
 export async function GET(request: Request) {
   console.log('[API ME START] Received request to /api/auth/me');
@@ -19,9 +20,9 @@ export async function GET(request: Request) {
   console.log('[API ME] Found httpOnly session token (value logged as ****** for security)');
 
   try {
-    // The session token is now the session ID (integer)
-    const sessionId = parseInt(sessionTokenValue, 10);
-    if (isNaN(sessionId)) {
+    // The session token is the session ID (string) stored in cookies and in DB (sessions.id is text)
+    const sessionId = sessionTokenValue;
+    if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
       console.log(`[API ME] Invalid session token format: ${sessionTokenValue}. Clearing cookie.`);
       const response = NextResponse.json(null, { status: 200 });
       const cookieStore = await cookies();
@@ -70,7 +71,16 @@ export async function GET(request: Request) {
       }
       console.log('[API ME] User record found for session:', userRecord.email);
 
-      let userData: User;
+      let userData: any;
+
+      // Fetch any assigned roles (from user_roles) so the client can see assigned role entries
+      let assignedRoles: any[] = [];
+      try {
+        assignedRoles = await getUserAssignedRoles(userRecord.id.toString());
+      } catch (err) {
+        console.warn('[API ME] Failed to load assigned roles for user', userRecord.id, err);
+        assignedRoles = [];
+      }
 
       if (userRecord.role === 'ADMINISTRATOR') {
         const adminPractices = await (db as any).query.administratorAccessiblePractices.findMany({
@@ -112,6 +122,7 @@ export async function GET(request: Request) {
           accessiblePracticeIds,
           currentPracticeId: currentPracticeId!, // Should be guaranteed to be set now
           companyId: 'default', // TODO: Add companyId to users schema for multi-tenancy
+          roles: assignedRoles,
         };
       } else if (userRecord.role === 'SUPER_ADMIN') {
         // SUPER_ADMIN has access to ALL practices in the system
@@ -141,6 +152,7 @@ export async function GET(request: Request) {
           accessiblePracticeIds,
           currentPracticeId: currentPracticeId!, // Should be guaranteed to be set now
           companyId: 'default', // TODO: Add companyId to users schema for multi-tenancy
+          roles: assignedRoles,
         };
       } else if (userRecord.role === 'PRACTICE_ADMINISTRATOR') {
         if (!userRecord.practiceId) {
@@ -154,6 +166,7 @@ export async function GET(request: Request) {
           role: 'PRACTICE_ADMINISTRATOR',
           practiceId: userRecord.practiceId!.toString(),
           companyId: 'default', // TODO: Add companyId to users schema for multi-tenancy
+          roles: assignedRoles,
         };
       } else if (userRecord.role === 'CLIENT') {
         if (!userRecord.practiceId) {
@@ -167,6 +180,7 @@ export async function GET(request: Request) {
           role: 'CLIENT',
           practiceId: userRecord.practiceId!.toString(),
           companyId: 'default', // TODO: Add companyId to users schema for multi-tenancy
+          roles: assignedRoles,
         };
       } else if (userRecord.role === 'VETERINARIAN') {
         if (!userRecord.practiceId) {
@@ -180,6 +194,7 @@ export async function GET(request: Request) {
           role: 'VETERINARIAN',
           practiceId: userRecord.practiceId!.toString(),
           companyId: 'default', // TODO: Add companyId to users schema for multi-tenancy
+          roles: assignedRoles,
         };
       } else if (userRecord.role === 'PRACTICE_MANAGER') {
         if (!userRecord.practiceId) {
@@ -193,6 +208,7 @@ export async function GET(request: Request) {
           role: 'PRACTICE_MANAGER',
           practiceId: userRecord.practiceId!.toString(),
           companyId: 'default', // TODO: Add companyId to users schema for multi-tenancy
+          roles: assignedRoles,
         };
       } else {
         console.error(`[API ME] Unknown user role for ${userRecord.email}: ${userRecord.role}. Clearing cookie and returning null.`);

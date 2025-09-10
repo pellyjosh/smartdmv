@@ -5,7 +5,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useUser } from "@/context/UserContext";
-import { UserRoleEnum, type SOAPNote, type SOAPTemplate, type Treatment, insertSOAPNoteSchema, insertSOAPTemplateSchema } from "@/db/schema";
+import { type SOAPNote, type SOAPTemplate, type Treatment, insertSOAPNoteSchema, insertSOAPTemplateSchema } from "@/db/schema";
+import { isVeterinarian, isPracticeAdministrator, isAdmin } from '@/lib/rbac-helpers';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -394,7 +395,7 @@ function SOAPNotesList({
                       <Edit className="h-4 w-4 mr-1" />
                       Edit
                     </Button>
-                    {!note.locked && [UserRoleEnum.VETERINARIAN, UserRoleEnum.PRACTICE_ADMIN, UserRoleEnum.ADMINISTRATOR, UserRoleEnum.SUPER_ADMIN].includes(user?.role as UserRoleEnum) && (
+                    {!note.locked && (isVeterinarian(user as any) || isPracticeAdministrator(user as any) || isAdmin(user as any)) && (
                       <Button 
                         variant="outline" 
                         size="sm"
@@ -963,7 +964,7 @@ function SOAPNoteDetailsDialog({
 }
 
 // Form for creating or editing a SOAP note
-function SOAPNoteForm({ 
+export function SOAPNoteForm({ 
   initialData, 
   onSuccess,
   refetchSoap

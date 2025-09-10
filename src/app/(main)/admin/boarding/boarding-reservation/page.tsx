@@ -207,10 +207,11 @@ export default function BoardingReservationPage() {
   // Update boarding stay mutation
   const updateMutation = useMutation({
     mutationFn: async (data: z.infer<typeof formSchema>) => {
-      const res = await apiRequest("PATCH", `/api/boarding/stays/${reservationId}`, {
+      // Server expects PUT for updating a boarding stay
+      const res = await apiRequest("PUT", `/api/boarding/stays/${reservationId}`, {
         ...data,
-        petId: data.petId, // Keep as string since our schema uses text UUIDs
-        kennelId: data.kennelId // Keep as string since our schema uses text UUIDs
+        petId: data.petId,
+        kennelId: data.kennelId
       });
       return await res.json();
     },

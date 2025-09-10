@@ -31,13 +31,16 @@ export default function UsersAndPermissionsPage() {
     (user && 'practiceId' in user ? Number(user.practiceId) : 
      user && 'currentPracticeId' in user ? Number(user.currentPracticeId) : 0);
 
-  // Use the roles hook to get role checking functions
-  const { isSuperAdmin, isPracticeAdmin } = useRoles(practiceId);
-  
-  // Extract user role
+  // Use the roles hook to get role checking functions (supports legacy `user.role` and assigned `user.roles`)
+  const { isSuperAdmin, isPracticeAdmin, isSuperAdminAssigned, isPracticeAdminAssigned } = useRoles(practiceId);
+
+  // Extract user role (legacy) and assigned roles (from user_roles)
   const userRole = user?.role || "";
-  const isSuperAdminUser = isSuperAdmin(userRole);
-  const isPracticeAdminUser = isPracticeAdmin(userRole);
+  const assignedRoles = user && 'roles' in user ? (user as any).roles : undefined;
+
+  // Determine effective admin status using either the legacy role or assigned roles
+  const isSuperAdminUser = isSuperAdmin(userRole) || isSuperAdminAssigned(assignedRoles);
+  const isPracticeAdminUser = isPracticeAdmin(userRole) || isPracticeAdminAssigned(assignedRoles);
 
   // Fetch real users count - use practice-admin/users endpoint to get correct practice-filtered data
   const { data: users = [], isLoading: usersLoading } = useQuery<any[]>({

@@ -6,10 +6,9 @@ import { inventory } from "@/db/schemas/inventorySchema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-const isSqlite = process.env.DB_TYPE === 'sqlite';
-
 // Utility function for database-agnostic timestamp handling
-const getTimestamp = () => isSqlite ? new Date().getTime() : new Date();
+// Always return a Date object to satisfy DB column types (Drizzle expects Date)
+const getTimestamp = (): Date => new Date();
 
 // Schema for dispense request
 const dispenseSchema = z.object({
@@ -66,9 +65,9 @@ export async function POST(
       );
     }
 
-    // Check if there's enough remaining to dispense
-    const currentDispensed = prescription.quantityDispensed || 0;
-    const remainingToDispense = prescription.quantityPrescribed - currentDispensed;
+  // Check if there's enough remaining to dispense
+  const currentDispensed = Number(prescription.quantityDispensed) || 0;
+  const remainingToDispense = Number(prescription.quantityPrescribed) - currentDispensed;
     
     if (quantity > remainingToDispense) {
       return NextResponse.json(
@@ -104,13 +103,13 @@ export async function POST(
 
     // Update prescription - increase dispensed quantity
     const newQuantityDispensed = currentDispensed + quantity;
-    const isCompleted = newQuantityDispensed >= prescription.quantityPrescribed;
+  const isCompleted = newQuantityDispensed >= Number(prescription.quantityPrescribed);
 
     // @ts-ignore
     const [updatedPrescription] = await db.update(prescriptions)
       .set({ 
-        quantityDispensed: newQuantityDispensed,
-        lastDispensed: getTimestamp(),
+  quantityDispensed: String(newQuantityDispensed),
+  dateDispensed: getTimestamp(),
         status: isCompleted ? "completed" : prescription.status,
         updatedAt: getTimestamp()
       })

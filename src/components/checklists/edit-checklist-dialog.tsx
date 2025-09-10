@@ -164,8 +164,9 @@ export default function EditChecklistDialog({
         priority: values.priority,
         status: values.status,
         notes: values.notes ?? null,
-        // dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : null, // TEMPORARILY DISABLED
+        dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : null,
       };
+      console.debug('[CLIENT PATCH] assigned-checklist payload:', payload);
       const response = await apiRequest('PATCH', `/api/assigned-checklists/${checklist.id}`, payload);
       return await response.json();
     },

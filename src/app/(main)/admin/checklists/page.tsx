@@ -12,7 +12,8 @@ import CreateTemplateDialog from '@/components/checklists/create-template-dialog
 import CreateChecklistDialog from '@/components/checklists/create-checklist-dialog';
 import { StaffTasksView } from '@/components/checklists/staff-tasks-view';
 import { useUser } from '@/context/UserContext';
-import { UserRoleEnum } from '@/lib/db-types';
+import { isPracticeAdministrator, isVeterinarian, isTechnician, hasRole } from '@/lib/rbac-helpers';
+import { RequirePermission, PermissionButton } from '@/lib/rbac/components';
 
 export default function ChecklistsPage() {
   const { user } = useUser();
@@ -51,12 +52,10 @@ export default function ChecklistsPage() {
   });
 
   // Only certain roles can create templates
-  const canCreateTemplates = user?.role === UserRoleEnum.PRACTICE_ADMINISTRATOR || 
-                            user?.role === UserRoleEnum.PRACTICE_MANAGER || 
-                            user?.role === UserRoleEnum.VETERINARIAN || user?.role === UserRoleEnum.ADMINISTRATOR;;
+  const canCreateTemplates = isPracticeAdministrator(user as any) || isVeterinarian(user as any) || isTechnician(user as any);
 
   // Check if the user is staff (any role that can receive assigned tasks)
-  const isStaffMember = user?.role !== UserRoleEnum.CLIENT && user?.role !== UserRoleEnum.SUPER_ADMIN;
+  const isStaffMember = !!user && !hasRole(user as any, 'CLIENT');
 
   // All authenticated users can view their assigned tasks
   const isLoading = (activeTab === 'templates' && isLoadingTemplates) || 
@@ -64,24 +63,25 @@ export default function ChecklistsPage() {
                    (activeTab === 'my-tasks' && isLoadingTasks);
 
   return (
-    <div className="container py-6 space-y-6">
+    <RequirePermission resource={"checklists" as any} action={"READ" as any}>
+      <div className="container py-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Treatment Checklists</h1>
           <p className="text-muted-foreground">Manage treatment templates and track assigned procedures</p>
         </div>
         <div className="flex space-x-2">
-          {activeTab === 'templates' && canCreateTemplates && (
-            <Button onClick={() => setOpenCreateTemplateDialog(true)}>
+          {activeTab === 'templates' && (
+            <PermissionButton resource={"checklists" as any} action={"CREATE" as any} className="inline-flex items-center" onClick={() => setOpenCreateTemplateDialog(true)}>
               <Plus className="mr-1 h-4 w-4" />
               New Template
-            </Button>
+            </PermissionButton>
           )}
           {activeTab === 'assigned' && (
-            <Button onClick={() => setOpenCreateChecklistDialog(true)}>
+            <PermissionButton resource={"checklists" as any} action={"CREATE" as any} className="inline-flex items-center" onClick={() => setOpenCreateChecklistDialog(true)}>
               <Plus className="mr-1 h-4 w-4" />
               New Checklist
-            </Button>
+            </PermissionButton>
           )}
         </div>
       </div>
@@ -182,6 +182,7 @@ export default function ChecklistsPage() {
         open={openCreateChecklistDialog} 
         onOpenChange={setOpenCreateChecklistDialog}
       />
-    </div>
+      </div>
+    </RequirePermission>
   );
 }

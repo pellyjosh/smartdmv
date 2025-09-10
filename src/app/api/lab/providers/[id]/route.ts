@@ -45,7 +45,7 @@ export async function GET(
       .where(
         and(
           eq(labProviderSettings.id, parseInt(id)),
-          eq(labProviderSettings.practiceId, userPractice.practiceId)
+          eq(labProviderSettings.practiceId, parseInt(userPractice.practiceId))
         )
       )
       .limit(1);
@@ -62,7 +62,9 @@ export async function GET(
       ...provider[0],
       settings: provider[0].settings ? (() => {
         try {
-          return JSON.parse(provider[0].settings);
+          return typeof provider[0].settings === 'string' 
+            ? JSON.parse(provider[0].settings) 
+            : provider[0].settings;
         } catch {
           return {};
         }
@@ -99,12 +101,12 @@ export async function PUT(
       .set({
         ...validated,
         settings: validated.settings ? JSON.stringify(validated.settings) : null,
-        updatedAt: Date.now(), // Use timestamp in milliseconds for SQLite
+        updatedAt: new Date(),
       })
       .where(
         and(
           eq(labProviderSettings.id, parseInt(id)),
-          eq(labProviderSettings.practiceId, userPractice.practiceId)
+          eq(labProviderSettings.practiceId, parseInt(userPractice.practiceId))
         )
       )
       .returning();
@@ -140,7 +142,7 @@ export async function DELETE(
       .where(
         and(
           eq(labProviderSettings.id, parseInt(id)),
-          eq(labProviderSettings.practiceId, userPractice.practiceId)
+          eq(labProviderSettings.practiceId, parseInt(userPractice.practiceId))
         )
       )
       .returning();

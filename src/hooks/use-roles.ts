@@ -25,6 +25,29 @@ export function useRoles(practiceId: number) {
     return userRole === 'PRACTICE_ADMINISTRATOR' || userRole === 'PRACTICE_ADMIN';
   };
 
+  // New helpers: check assigned roles array (when the user object includes `roles` from the API)
+  // This supports the dynamic RBAC model where a user may have entries in `user_roles` rather
+  // than a single `role` field on the users table.
+  const isSuperAdminAssigned = (assignedRoles: any[] | undefined) => {
+    if (!Array.isArray(assignedRoles)) return false;
+    return assignedRoles.some((r: any) => {
+      if (!r) return false;
+      const name = (r.name || '').toString().toUpperCase();
+      const display = (r.displayName || '').toString().toUpperCase();
+      return name === 'SUPER_ADMIN' || display === 'SUPER_ADMIN' || name === 'SUPERADMIN' || display === 'SUPERADMIN';
+    });
+  };
+
+  const isPracticeAdminAssigned = (assignedRoles: any[] | undefined) => {
+    if (!Array.isArray(assignedRoles)) return false;
+    return assignedRoles.some((r: any) => {
+      if (!r) return false;
+      const name = (r.name || '').toString().toUpperCase();
+      const display = (r.displayName || '').toString().toUpperCase();
+      return name === 'PRACTICE_ADMINISTRATOR' || name === 'PRACTICE_ADMIN' || display === 'PRACTICE_ADMINISTRATOR' || display === 'PRACTICE_ADMIN';
+    });
+  };
+
   const isVeterinarian = (userRole: string) => {
     return userRole === 'VETERINARIAN';
   };
@@ -72,6 +95,9 @@ export function useRoles(practiceId: number) {
     isTechnician,
     isReceptionist,
     isClient,
+  // Export the new assigned-role helpers
+  isSuperAdminAssigned,
+  isPracticeAdminAssigned,
     getAvailableRoles,
     getSystemRoles,
     getCustomRoles,

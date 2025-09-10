@@ -8,7 +8,7 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const notificationId = params.id;
+  const notificationId = parseInt(params.id, 10);
 
     if (!notificationId) {
       return NextResponse.json({ error: 'Notification ID is required.' }, { status: 400 });
@@ -25,14 +25,12 @@ export async function PATCH(
       return NextResponse.json({ error: 'Notification not found.' }, { status: 404 });
     }
 
-    // Update the notification - use type suppression for Drizzle union type
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
+    // Update the notification
     await db.update(notifications)
       .set({ 
         read: true,
-        updatedAt: new Date().toISOString(), // Convert to ISO string for SQLite compatibility
-      })
+        updated_at: new Date().toISOString(), // Use snake_case DB column
+      } as any)
       .where(eq(notifications.id, notificationId));
 
     console.log('Notification marked as read:', notificationId);

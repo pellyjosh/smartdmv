@@ -6,6 +6,14 @@
  */
 
 // Types and Interfaces
+/**
+ * RBAC System Main Export File
+ *
+ * This is the central export point for the Role-Based Access Control system.
+ * Import everything you need from this file.
+ */
+
+// Types and Interfaces
 export * from './types';
 
 // Permission definitions and role templates
@@ -65,9 +73,12 @@ export {
 
 export {
   ResourceType,
-  StandardAction,
-  UserRoleEnum
+  StandardAction
 } from './types';
 
 // Default role permissions for quick reference
-export { DEFAULT_ROLE_PERMISSIONS } from './roles';
+// Re-export the canonical UserRoleEnum directly from the db schema
+export { UserRoleEnum } from '@/db/schema';
+
+// Default role permissions for quick reference (alias to existing roles export)
+export { DEFAULT_ROLES } from './roles';

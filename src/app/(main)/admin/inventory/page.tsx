@@ -42,6 +42,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, CheckSquare, Package, PlusCircle, Search, ShoppingBag, Trash, ArrowUpDown, AlertTriangle, Pill } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { RequirePermission, PermissionButton } from '@/lib/rbac/components';
 import { Inventory } from "@/db/schema";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
@@ -131,7 +132,7 @@ export default function InventoryPage() {
     ).length || 0;
   const totalValue =
     inventoryItems?.reduce((acc, item) => {
-      const price = parseFloat(item.price || "0");
+      const price = parseFloat(Array.isArray(item.price) ? item.price[0] : item.price || "0");
       return acc + price * item.quantity;
     }, 0) || 0;
 
@@ -140,9 +141,23 @@ export default function InventoryPage() {
     ? inventoryItems.filter((item) => {
         const matchesSearch =
           searchTerm === "" ||
-          item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.sku?.toLowerCase().includes(searchTerm.toLowerCase());
+          (typeof item.name === "string"
+            ? item.name.toLowerCase()
+            : Array.isArray(item.name)
+              ? item.name.join(" ").toLowerCase()
+              : ""
+          ).includes(searchTerm.toLowerCase()) ||
+          (typeof item.description === "string"
+            ? item.description.toLowerCase().includes(searchTerm.toLowerCase())
+            : Array.isArray(item.description)
+              ? item.description.join(" ").toLowerCase().includes(searchTerm.toLowerCase())
+              : false) ||
+          (typeof item.sku === "string"
+            ? item.sku.toLowerCase()
+            : Array.isArray(item.sku)
+              ? item.sku.join(" ").toLowerCase()
+              : ""
+          ).includes(searchTerm.toLowerCase());
 
         const matchesCategory =
           categoryFilter === "all" || item.type === categoryFilter;
@@ -1014,6 +1029,12 @@ function InventoryTable({
 
   return (
     <div>
+                <PermissionButton resource={"inventory" as any} action={"CREATE" as any}>
+                  <Button>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Add Item
+                  </Button>
+                </PermissionButton>
       {hasSelectionEnabled && selectedItems.length > 0 && (
         <div className="bg-muted p-4 mb-4 rounded-md flex justify-between items-center">
           <div>
@@ -1090,7 +1111,7 @@ function InventoryTable({
                   <TableCell className="text-right">{item.unit || '-'}</TableCell>
                   <TableCell className="text-right">{item.minQuantity || '-'}</TableCell>
                   <TableCell className="text-right">
-                    {item.price ? `$${parseFloat(item.price).toFixed(2)}` : '-'}
+                    {item.price ? `$${parseFloat(Array.isArray(item.price) ? item.price[0] : item.price || "0").toFixed(2)}` : '-'}
                   </TableCell>
                   <TableCell>
                     <StockStatusBadge status={stockStatus} />
@@ -1098,7 +1119,7 @@ function InventoryTable({
                   <TableCell className="text-right">
                     <div className="flex justify-end space-x-2">
                       <Button variant="outline" size="sm" asChild>
-                        <Link href={`/inventory/${item.id}`}>Details</Link>
+                        <Link href={`/admin/inventory/${item.id}` as unknown as string}>Details</Link>
                       </Button>
                       <Button variant="outline" size="sm">
                         Adjust

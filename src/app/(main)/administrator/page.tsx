@@ -1,6 +1,7 @@
 
 "use client";
 import { useUser, type AdministratorUser } from "@/context/UserContext";
+import { isAdmin } from '@/lib/rbac-helpers';
 import { Button } from "@/components/ui/button";
 import React, { useEffect, useState } from "react";
 import { XCircle } from 'lucide-react';
@@ -21,7 +22,8 @@ export default function AdministratorDashboardPage() {
   // Keep all hooks above any potential early return
   useEffect(() => {
     if (!user) return;
-    if (user.role === 'ADMINISTRATOR' || user.role === 'SUPER_ADMIN') {
+    // Use RBAC helper to detect admin-like users
+    if (isAdmin(user as any)) {
       const currentId = (user as any).currentPracticeId as string | undefined;
       if (currentId && currentId !== currentPracticeSelection) {
         setCurrentPracticeSelection(currentId);

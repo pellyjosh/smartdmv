@@ -39,18 +39,63 @@ export async function checkPermission(
   }
 
   // Get role permissions
-  const role = DEFAULT_ROLES[userRole as UserRoleEnum];
-  if (!role) {
-    return {
-      allowed: false,
-      reason: 'Unknown user role',
-      missingPermissions: [`${resourceType}:${action}`]
-    };
+  // Attempt to fetch all assigned roles for the user and aggregate permissions.
+  // This lets users with multiple roles gain permissions from any assigned role.
+  let dynamicRolePermissions: Permission[] | null = null;
+  let assignedRolesFromApi: any[] | null = null;
+  try {
+    const res = await fetch(`/api/user-roles/user/${userId}`);
+    if (res.ok) {
+      const assignedRoles = await res.json();
+      if (Array.isArray(assignedRoles) && assignedRoles.length > 0) {
+        assignedRolesFromApi = assignedRoles;
+        const perms: Permission[] = [];
+        for (const r of assignedRoles) {
+          if (Array.isArray(r.permissions)) {
+            perms.push(...r.permissions);
+          }
+        }
+        dynamicRolePermissions = perms;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch user assigned roles, falling back to DEFAULT_ROLES', err);
   }
 
-  const permissions = getAllRolePermissions(role);
+  let permissions: Permission[];
+  if (dynamicRolePermissions) {
+    // If any assigned role is SUPER_ADMIN, short-circuit allow
+    if (assignedRolesFromApi && assignedRolesFromApi.some(r => r.name === 'SUPER_ADMIN')) {
+      return { allowed: true, reason: 'Permission granted by SUPER_ADMIN role' };
+    }
+
+    permissions = dynamicRolePermissions;
+  } else {
+    const role = DEFAULT_ROLES[userRole as UserRoleEnum];
+    if (!role) {
+      return {
+        allowed: false,
+        reason: 'Unknown user role',
+        missingPermissions: [`${resourceType}:${action}`]
+      };
+    }
+
+    permissions = getAllRolePermissions(role);
+  }
+  // Support a small set of resource aliases to bridge gaps between
+  // DB-seeded permission resource names and the in-memory permission
+  // templates used by DEFAULT_ROLES. For example, some DB roles use
+  // 'checklists' while permission templates place checklist-like
+  // permissions under 'treatments'. This alias map is intentionally
+  // small and explicit to avoid unexpected permission grants.
+  const RESOURCE_ALIASES: Record<string, string[]> = {
+    checklists: ['treatments'],
+  };
+
+  const resourcesToCheck = [resourceType, ...(RESOURCE_ALIASES[resourceType] || [])];
+
   const relevantPermission = permissions.find(p => 
-    p.resource === resourceType && 
+    resourcesToCheck.includes(p.resource) && 
     p.action === action
   );
 

@@ -55,6 +55,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { RequirePermission, PermissionButton } from '@/lib/rbac/components';
 import { Loader2, Plus, Search, FileText, Send, Calendar, CheckCircle, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -277,7 +278,11 @@ export default function ReferralsPage() {
   const filteredOutboundReferrals = outboundReferrals?.filter((referral: Referral) => 
     searchQuery === "" ||
     referral.referralReason?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    referral.specialty?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (typeof referral.specialty === "string"
+      ? referral.specialty.toLowerCase().includes(searchQuery.toLowerCase())
+      : Array.isArray(referral.specialty)
+        ? referral.specialty.some((s: string) => s.toLowerCase().includes(searchQuery.toLowerCase()))
+        : false) ||
     referral.status?.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
@@ -330,6 +335,7 @@ export default function ReferralsPage() {
   };
 
   return (
+    <RequirePermission resource={"referrals" as any} action={"READ" as any}>
     <div className="container mx-auto p-4 space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -352,10 +358,12 @@ export default function ReferralsPage() {
           </div>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                New Referral
-              </Button>
+              <PermissionButton resource={"referrals" as any} action={"CREATE" as any}>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Referral
+                </Button>
+              </PermissionButton>
             </DialogTrigger>
             <DialogContent className="max-w-[900px] max-h-screen overflow-y-auto">
               <DialogHeader>
@@ -898,9 +906,43 @@ export default function ReferralsPage() {
                               
                               {referral.status === ReferralStatus.PENDING && (
                                 <>
+                                  <PermissionButton resource={"referrals" as any} action={"UPDATE" as any}>
+                                    <Button 
+                                      size="sm"
+                                      onClick={() => updateReferralStatusMutation.mutate({ id: referral.id, status: ReferralStatus.ACCEPTED })}
+                                      disabled={updateReferralStatusMutation.isPending}
+                                    >
+                                      {updateReferralStatusMutation.isPending ? (
+                                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                      ) : (
+                                        <CheckCircle className="h-4 w-4 mr-1" />
+                                      )}
+                                      Accept
+                                    </Button>
+                                  </PermissionButton>
+                                  <PermissionButton resource={"referrals" as any} action={"UPDATE" as any}>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => updateReferralStatusMutation.mutate({ id: referral.id, status: ReferralStatus.DECLINED })}
+                                      disabled={updateReferralStatusMutation.isPending}
+                                    >
+                                      {updateReferralStatusMutation.isPending ? (
+                                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                      ) : (
+                                        <XCircle className="h-4 w-4 mr-1" />
+                                      )}
+                                      Decline
+                                    </Button>
+                                  </PermissionButton>
+                                </>
+                              )}
+                              
+                              {referral.status === ReferralStatus.ACCEPTED && (
+                                <PermissionButton resource={"referrals" as any} action={"UPDATE" as any}>
                                   <Button 
                                     size="sm"
-                                    onClick={() => updateReferralStatusMutation.mutate({ id: referral.id, status: ReferralStatus.ACCEPTED })}
+                                    onClick={() => updateReferralStatusMutation.mutate({ id: referral.id, status: ReferralStatus.COMPLETED })}
                                     disabled={updateReferralStatusMutation.isPending}
                                   >
                                     {updateReferralStatusMutation.isPending ? (
@@ -908,37 +950,9 @@ export default function ReferralsPage() {
                                     ) : (
                                       <CheckCircle className="h-4 w-4 mr-1" />
                                     )}
-                                    Accept
+                                    Complete
                                   </Button>
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm"
-                                    onClick={() => updateReferralStatusMutation.mutate({ id: referral.id, status: ReferralStatus.DECLINED })}
-                                    disabled={updateReferralStatusMutation.isPending}
-                                  >
-                                    {updateReferralStatusMutation.isPending ? (
-                                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                    ) : (
-                                      <XCircle className="h-4 w-4 mr-1" />
-                                    )}
-                                    Decline
-                                  </Button>
-                                </>
-                              )}
-                              
-                              {referral.status === ReferralStatus.ACCEPTED && (
-                                <Button 
-                                  size="sm"
-                                  onClick={() => updateReferralStatusMutation.mutate({ id: referral.id, status: ReferralStatus.COMPLETED })}
-                                  disabled={updateReferralStatusMutation.isPending}
-                                >
-                                  {updateReferralStatusMutation.isPending ? (
-                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                  ) : (
-                                    <CheckCircle className="h-4 w-4 mr-1" />
-                                  )}
-                                  Complete
-                                </Button>
+                                </PermissionButton>
                               )}
                             </div>
                           </TableCell>
@@ -960,5 +974,6 @@ export default function ReferralsPage() {
         </TabsContent>
       </Tabs>
     </div>
+    </RequirePermission>
   );
 }

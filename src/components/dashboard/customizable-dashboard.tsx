@@ -19,6 +19,7 @@ import {
 } from "./widgets";
 // import { useAuth } from "@/hooks/use-auth";
 import { useUser } from '../../context/UserContext'; 
+import { useRoles } from '@/hooks/use-roles';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   AlertDialog, 
@@ -353,7 +354,10 @@ const AddWidgetDialog: React.FC<AddWidgetDialogProps> = ({
   userRole
 }) => {
   const [selectedType, setSelectedType] = useState<string | null>(null);
-  
+  const { user } = useUser();
+  const practiceIdForRoles = Number((user && ('practiceId' in user ? (user as any).practiceId : ('currentPracticeId' in user ? (user as any).currentPracticeId : 0))) || 0);
+  const { isSuperAdminAssigned, isPracticeAdminAssigned } = useRoles(practiceIdForRoles);
+
   const handleAddWidget = () => {
     if (selectedType) {
       onAddWidget(selectedType);
@@ -361,9 +365,24 @@ const AddWidgetDialog: React.FC<AddWidgetDialogProps> = ({
       setSelectedType(null);
     }
   };
-  
+
+  const assignedRoles = user && 'roles' in user ? (user as any).roles : undefined;
+
+  const userHasAnyRoleLocal = (allowed: string[]) => {
+    if (!allowed || allowed.length === 0) return false;
+    if (userRole && allowed.includes(userRole)) return true;
+    if (isSuperAdminAssigned(assignedRoles) && allowed.includes('SUPER_ADMIN')) return true;
+    if (isPracticeAdminAssigned(assignedRoles) && (allowed.includes('PRACTICE_ADMIN') || allowed.includes('PRACTICE_ADMINISTRATOR'))) return true;
+    if (!Array.isArray(assignedRoles) || assignedRoles.length === 0) return false;
+    return allowed.some(ar => assignedRoles.some((r: any) => {
+      const name = (r?.name || '').toString().toUpperCase();
+      const display = (r?.displayName || '').toString().toUpperCase();
+      return name === ar || display === ar || name === ar.replace(/_/g, '') || display === ar.replace(/_/g, '');
+    }));
+  };
+
   const availableWidgets = Object.values(WIDGET_CATALOG).filter(
-    widget => widget.allowedRoles.includes(userRole)
+    widget => userHasAnyRoleLocal(widget.allowedRoles)
   );
   
   return (
@@ -615,8 +634,8 @@ export function CustomizableDashboard() {
   const handleCreateDashboard = (name: string, isDefault: boolean) => {
     if (!currentConfig || !user) return;
     
-    // Get the correct practice ID based on user type
-    const practiceId = 'currentPracticeId' in user ? user.currentPracticeId : user.practiceId;
+  // Get the correct practice ID based on user type (type-guarded)
+  const practiceId = user && ('currentPracticeId' in user ? (user as any).currentPracticeId : ('practiceId' in user ? (user as any).practiceId : undefined));
     
     console.log("Creating dashboard config:", {
       name,

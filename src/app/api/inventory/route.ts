@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { inventory } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { hasPermission } from '@/lib/rbac-helpers';
+import { createAuditLog } from '@/lib/audit-logger';
+import { ResourceType, StandardAction } from '@/lib/rbac/types';
 import { eq, desc, and } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -13,8 +16,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Check RBAC permissions
+    const hasReadPermission = hasPermission(userPractice.user, StandardAction.READ, ResourceType.INVENTORY);
+    const isAdministrator = userPractice.user.role === 'ADMINISTRATOR' || userPractice.user.role === 'SUPER_ADMIN' || userPractice.user.role === 'PRACTICE_ADMINISTRATOR';
+    
+    if (!hasReadPermission && !isAdministrator) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    }
+
     const inventoryItems = await db.query.inventory.findMany({
-      where: eq(inventory.practiceId, userPractice.practiceId),
+      where: eq(inventory.practiceId, userPractice.practiceId.toString()),
       orderBy: desc(inventory.createdAt),
     });
 
@@ -53,6 +64,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Check RBAC permissions
+    const hasCreatePermission = hasPermission(userPractice.user, StandardAction.CREATE, ResourceType.INVENTORY);
+    const isAdministrator = userPractice.user.role === 'ADMINISTRATOR' || userPractice.user.role === 'SUPER_ADMIN' || userPractice.user.role === 'PRACTICE_ADMINISTRATOR';
+    
+    if (!hasCreatePermission && !isAdministrator) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    }
+
     const body = await request.json();
     const validatedData = createInventorySchema.parse(body);
 
@@ -60,7 +79,7 @@ export async function POST(request: NextRequest) {
     const isSqlite = process.env.DB_TYPE === 'sqlite';
     
     const insertData = {
-      practiceId: userPractice.practiceId,
+      practiceId: userPractice.practiceId.toString(),
       name: validatedData.name,
       type: validatedData.type,
       description: validatedData.description || null,
@@ -86,6 +105,25 @@ export async function POST(request: NextRequest) {
     const insertedItems = await (db as any).insert(inventory).values(insertData).returning();
     
     const newInventoryItem = insertedItems[0];
+
+    // Log the audit trail
+    await createAuditLog({
+      action: 'CREATE',
+      recordType: 'INVENTORY',
+      recordId: newInventoryItem.id.toString(),
+      userId: userPractice.user.id,
+      practiceId: userPractice.practiceId,
+      description: `Created inventory item: ${validatedData.name}`,
+      metadata: {
+        itemName: validatedData.name,
+        itemType: validatedData.type,
+        initialQuantity: validatedData.quantity,
+        sku: validatedData.sku,
+        supplier: validatedData.supplier,
+        endpoint: 'POST /api/inventory',
+        timestamp: new Date().toISOString()
+      }
+    });
 
     return NextResponse.json(newInventoryItem, { status: 201 });
   } catch (error) {

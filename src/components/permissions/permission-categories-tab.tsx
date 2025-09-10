@@ -15,6 +15,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/context/UserContext';
+import { useRoles } from '@/hooks/use-roles';
 import { 
   Plus, Search, Edit, Trash2, Layers, Shield, 
   Settings, MoreHorizontal, Eye, EyeOff 
@@ -55,7 +57,8 @@ interface PermissionAction {
 
 interface PermissionCategoriesTabProps {
   practiceId: number;
-  isSuperAdmin: boolean;
+  // optional - the component will compute effective super admin status if not provided
+  isSuperAdmin?: boolean;
 }
 
 export default function PermissionCategoriesTab({ practiceId, isSuperAdmin }: PermissionCategoriesTabProps) {
@@ -64,6 +67,17 @@ export default function PermissionCategoriesTab({ practiceId, isSuperAdmin }: Pe
   const [editingCategory, setEditingCategory] = useState<PermissionCategory | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Compute effective admin status using legacy user.role or assigned roles from user_roles
+  const { user } = useUser();
+  const { isSuperAdmin: isSuperAdminLegacy, isSuperAdminAssigned } = useRoles(practiceId);
+
+  const userRole = user?.role || '';
+  const assignedRoles = user && 'roles' in user ? (user as any).roles : undefined;
+
+  const effectiveIsSuperAdmin = typeof isSuperAdmin === 'boolean'
+    ? isSuperAdmin
+    : (isSuperAdminLegacy(userRole) || isSuperAdminAssigned(assignedRoles));
 
   // Fetch permission categories
   const { data: categories = [], isLoading, error } = useQuery<PermissionCategory[]>({
@@ -177,7 +191,7 @@ export default function PermissionCategoriesTab({ practiceId, isSuperAdmin }: Pe
     toggleCategoryMutation.mutate({ id, isActive });
   };
 
-  if (!isSuperAdmin) {
+  if (!effectiveIsSuperAdmin) {
     return (
       <Card>
         <CardContent className="p-6">

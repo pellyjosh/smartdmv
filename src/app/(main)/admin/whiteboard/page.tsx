@@ -63,7 +63,8 @@ import {
   type WhiteboardStatus,
   type UrgencyLevel
 } from "@/lib/appointment-workflow";
-import { WhiteboardItem, UserRoleEnum, WhiteboardNote } from "@/db/schema";
+import { WhiteboardItem, WhiteboardNote } from "@/db/schema";
+import { isPracticeAdministrator, isVeterinarian, isAdmin, hasRole } from '@/lib/rbac-helpers';
 import { whiteboardService, WebSocketStatus } from "@/lib/websocket";
 import WhiteboardItemCard from "@/components/whiteboard/WhiteboardItemCard";
 
@@ -129,14 +130,14 @@ export default function WhiteboardPage() {
   }, []);
 
   // Get practice ID from user context
-  const practiceId = user?.role === 'CLIENT' || user?.role === 'PRACTICE_ADMINISTRATOR' || user?.role === 'VETERINARIAN' || user?.role === 'PRACTICE_MANAGER'
+  const practiceId = (user && (hasRole(user as any, 'CLIENT') || isPracticeAdministrator(user as any) || isVeterinarian(user as any) || hasRole(user as any, 'PRACTICE_MANAGER')))
     ? (user as any).practiceId
-    : user?.role === 'ADMINISTRATOR' || user?.role === 'SUPER_ADMIN'
+    : (user && (isAdmin(user as any)))
     ? (user as any).currentPracticeId
     : null;
 
   // Check if user has permission to access whiteboard
-  const hasAccess = user && user.role !== UserRoleEnum.CLIENT;
+  const hasAccess = !!user && !((user as any).role === 'CLIENT');
 
   // Fetch whiteboard items for the selected date
   const { data: whiteboardItems, isLoading: isWhiteboardLoading, error: whiteboardError } = useQuery<WhiteboardItem[]>({

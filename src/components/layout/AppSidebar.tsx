@@ -637,6 +637,9 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout, isLoading: userIsLoading, initialAuthChecked, userPracticeId } = useUser();
+  // Role helpers that understand assigned roles (from user.roles) as well as legacy user.role
+  const practiceIdNumber = Number(userPracticeId || 0) || 0;
+  const { isSuperAdminAssigned, isPracticeAdminAssigned } = useRoles(practiceIdNumber);
   const [mobileSheetOpen, setMobileSheetOpen] = React.useState(false);
   const [expandedMenus, setExpandedMenus] = React.useState<Record<string, boolean>>({});
   const [searchTerm, setSearchTerm] = React.useState("");
@@ -655,12 +658,23 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
 
   // Helper to check if practice has subscribed to a specific add-on
   const hasMarketplaceSubscription = React.useCallback((featureTitle: string): boolean => {
-    // Super admins and administrators get full access - using hardcoded check for now as this is a fallback
-    if (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMINISTRATOR') {
-      return true;
-    }
+    // Super admins and administrators get full access. Support both legacy `user.role` and
+    // assigned roles returned on the user object (`user.roles`).
+    const userHasRole = (roleName: string) => {
+      if (!user) return false;
+      if ((user as any).role === roleName) return true;
+      const assigned = (user as any).roles;
+      if (!Array.isArray(assigned)) return false;
+      return assigned.some((r: any) => {
+        const name = (r?.name || '').toString().toUpperCase();
+        const display = (r?.displayName || '').toString().toUpperCase();
+        return name === roleName || display === roleName || name === roleName.replace(/_/g, '') || display === roleName.replace(/_/g, '');
+      });
+    };
 
-    const addOnSlug = MARKETPLACE_FEATURE_MAPPING[featureTitle];
+    if (userHasRole('SUPER_ADMIN') || userHasRole('ADMINISTRATOR')) return true;
+
+  const addOnSlug = MARKETPLACE_FEATURE_MAPPING[featureTitle];
     if (!addOnSlug || !practiceAddons) {
       return false;
     }
@@ -676,7 +690,8 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
     );
     
     return hasActiveSubscription;
-  }, [user?.role, practiceAddons]);
+  }, [user, practiceAddons]);
+  // Update dependency to trigger when the user or assigned roles change
 
   // Transform the menuGroups into the NavItem structure
   const allNavItems: NavItem[] = React.useMemo(() => {
@@ -773,16 +788,32 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
 
     const lowerSearchTerm = searchTerm.toLowerCase().trim();
 
+    const userAssignedRoles = (user as any)?.roles;
+    const userLegacyRole = (user as any)?.role;
+
+    const userHasAnyRole = (allowedRoles: AppUserRole[] | undefined) => {
+      if (!allowedRoles || allowedRoles.length === 0) return false;
+      // Check legacy role first
+      if (userLegacyRole && allowedRoles.includes(userLegacyRole as AppUserRole)) return true;
+      // Check assigned roles array
+      if (!Array.isArray(userAssignedRoles)) return false;
+      return allowedRoles.some(ar => userAssignedRoles.some((r: any) => {
+        const name = (r?.name || '').toString().toUpperCase();
+        const display = (r?.displayName || '').toString().toUpperCase();
+        return name === ar || display === ar || name === ar.replace(/_/g, '') || display === ar.replace(/_/g, '');
+      }));
+    };
+
     if (!lowerSearchTerm) {
       // If no search term, return all role-appropriate items with their full submenus
-      return allNavItems.filter(item => item.roles.includes(user.role as AppUserRole));
+      return allNavItems.filter(item => userHasAnyRole(item.roles));
     }
 
     const results: NavItem[] = [];
 
     allNavItems.forEach(item => {
-      // Check if user has role for this top-level item
-      const hasRoleForParent = item.roles.includes(user.role as AppUserRole);
+  // Check if user has role for this top-level item
+  const hasRoleForParent = userHasAnyRole(item.roles);
       if (!hasRoleForParent) return;
 
       // Check if the top-level item itself matches the search term
@@ -793,7 +824,7 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
       if (item.submenu) {
         // Filter submenus for matches
         const matchingSubmenuItems = item.submenu.filter(sub => {
-          const hasRoleForSub = sub.roles ? sub.roles.includes(user.role as AppUserRole) : true;
+          const hasRoleForSub = sub.roles ? userHasAnyRole(sub.roles) : true;
           return hasRoleForSub &&
                  (sub.title.toLowerCase().includes(lowerSearchTerm) ||
                   (sub.keywords && sub.keywords.some(sk => sk.toLowerCase().includes(lowerSearchTerm))));

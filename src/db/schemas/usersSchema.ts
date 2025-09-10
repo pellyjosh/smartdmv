@@ -87,7 +87,7 @@ export const administratorAccessiblePracticesRelations = relations(administrator
 }));
 
 export interface User {
-  id: string;
+  id: number;
   email: string;
   username: string;
   name: string | null;
@@ -102,13 +102,13 @@ export interface User {
   emergencyContactPhone: string | null;
   emergencyContactRelationship: string | null;
   role: UserRole;
-  practiceId: string | null;
-  currentPracticeId: string | null;
+  practiceId: number | null;
+  currentPracticeId: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface AdministratorAccessiblePractice {
-  administratorId: string;
-  practiceId: string;
+  administratorId: number;
+  practiceId: number;
 }

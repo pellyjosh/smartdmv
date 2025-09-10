@@ -198,10 +198,32 @@ export function UserProvider({ children }: { children: ReactNode }) {
       } else if (result.data) {
         const userData: User | null = result.data;
         if (userData && userData.id) {
-          setUser(userData);
-          sessionStorage.setItem(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(userData));
-          setClientCookie(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(userData));
-          console.log('[UserContext fetchUser SUCCESS] User fetched and set:', userData.email, userData.role);
+          // Ensure compatibility with new roles/permissions model: if the server
+          // returns a legacy single `role` string, map it into a `roles` array so
+          // `rbac-helpers` functions work without requiring immediate refactors.
+          try {
+            const anyUser: any = userData;
+            if (anyUser && anyUser.role && !anyUser.roles) {
+              anyUser.roles = [
+                {
+                  id: `legacy-${anyUser.role}`,
+                  name: anyUser.role,
+                  displayName: anyUser.role.replace('_', ' '),
+                  permissions: [],
+                },
+              ];
+            }
+            setUser(anyUser);
+            sessionStorage.setItem(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(anyUser));
+            setClientCookie(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(anyUser));
+            console.log('[UserContext fetchUser SUCCESS] User fetched and set:', anyUser.email, anyUser.role);
+          } catch (mapErr) {
+            // Fallback if mapping fails
+            setUser(userData);
+            sessionStorage.setItem(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(userData));
+            setClientCookie(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(userData));
+            console.log('[UserContext fetchUser SUCCESS_NO_MAP] User fetched and set (no mapping):', userData.email, (userData as any).role);
+          }
         } else {
           setUser(null);
           sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);

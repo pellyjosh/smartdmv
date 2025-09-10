@@ -79,8 +79,8 @@ export function AppHeader({}: AppHeaderProps) {
   }, [user]);
 
   // Helper function to get practice name by ID
-  const practiceId = (user as any)?.practiceId || (user as any)?.currentPracticeId;
-  const { isPracticeAdmin, isClient } = useRoles(practiceId);
+  const practiceId = Number((user as any)?.practiceId || (user as any)?.currentPracticeId || 0) || 0;
+  const { isPracticeAdmin, isClient, isSuperAdminAssigned, isPracticeAdminAssigned } = useRoles(practiceId);
 
   const getPracticeName = (practiceId: string | number): string => {
     console.log('[AppHeader] getPracticeName called with:', practiceId);
@@ -92,7 +92,7 @@ export function AppHeader({}: AppHeaderProps) {
     return result;
   };
 
-  const adminUser = user?.role === 'ADMINISTRATOR' ? user as AdministratorUser : null;
+  const adminUser = (user as any)?.role === 'ADMINISTRATOR' ? user as AdministratorUser : null;
   const isMultiLocationEnabled = adminUser && adminUser.accessiblePracticeIds && adminUser.accessiblePracticeIds.length > 1;
 
   const handlePracticeChange = async (newPracticeId: string) => {
@@ -102,9 +102,11 @@ export function AppHeader({}: AppHeaderProps) {
     }
   };
 
+  const assignedRoles = user && 'roles' in user ? (user as any).roles : undefined;
+
   const currentPracticeName =
     adminUser?.currentPracticeId ||
-    (isPracticeAdmin(user?.role || '') && (user as PracticeAdminUser).practiceId) ||
+    ((isPracticeAdmin(user?.role || '') || isPracticeAdminAssigned(assignedRoles)) && (user as PracticeAdminUser).practiceId) ||
     (isClient(user?.role || '') && (user as ClientUser).practiceId) ||
     'N/A';
 
@@ -213,7 +215,7 @@ export function AppHeader({}: AppHeaderProps) {
                     </Link>
                   </DropdownMenuItem>
 
-                  {user.role === 'ADMINISTRATOR' && (
+                                  {(user as any)?.role === 'ADMINISTRATOR' && (
                     <DropdownMenuItem asChild>
                       <Link href="/administrator" className="flex w-full cursor-pointer items-center text-sm">
                         <UserCog className="mr-2 h-4 w-4" />
@@ -221,7 +223,7 @@ export function AppHeader({}: AppHeaderProps) {
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  {isPracticeAdmin(user?.role || '') && (
+                  {(isPracticeAdmin(user?.role || '') || isPracticeAdminAssigned(assignedRoles)) && (
                      <DropdownMenuItem asChild>
                       <Link href="/practice-administrator" className="flex w-full cursor-pointer items-center text-sm">
                         <UserCog className="mr-2 h-4 w-4" />

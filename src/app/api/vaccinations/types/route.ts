@@ -8,8 +8,9 @@ import { z } from 'zod';
 // Validation schema for creating vaccine types
 const createVaccineTypeSchema = z.object({
   name: z.string().min(1),
-  type: z.enum(['core', 'non-core', 'optional']),
-  species: z.enum(['dog', 'cat', 'bird', 'reptile', 'rabbit', 'ferret', 'other']),
+  // allow case-insensitive input by lower-casing strings before enum validation
+  type: z.preprocess((val) => (typeof val === 'string' ? val.toLowerCase() : val), z.enum(['core', 'non-core', 'optional'])),
+  species: z.preprocess((val) => (typeof val === 'string' ? val.toLowerCase() : val), z.enum(['dog', 'cat', 'bird', 'reptile', 'rabbit', 'ferret', 'other'])),
   manufacturer: z.string().optional(),
   diseasesProtected: z.string().optional(), // JSON string
   recommendedSchedule: z.string().optional(), // JSON string
@@ -28,9 +29,13 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const practiceId = searchParams.get('practiceId') || userPractice.practiceId;
-    const species = searchParams.get('species');
-    const type = searchParams.get('type');
+  const practiceId = searchParams.get('practiceId') || userPractice.practiceId;
+  const speciesParam = searchParams.get('species');
+  const typeParam = searchParams.get('type');
+
+  // Normalize query params to lowercase so 'Dog' and 'dog' behave the same
+  const species = typeof speciesParam === 'string' ? speciesParam.toLowerCase() : speciesParam;
+  const type = typeof typeParam === 'string' ? typeParam.toLowerCase() : typeParam;
     const isActive = searchParams.get('isActive');
 
     // Build conditions
@@ -39,7 +44,7 @@ export async function GET(request: NextRequest) {
     if (species && species !== 'all') {
       conditions.push(eq(vaccineTypes.species, species as any));
     }
-    
+
     if (type && type !== 'all') {
       conditions.push(eq(vaccineTypes.type, type as any));
     }

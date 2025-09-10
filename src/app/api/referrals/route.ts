@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { referrals, ReferralStatus, ReferralPriority, VetSpecialty } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { canCreate, canView } from '@/lib/rbac-helpers';
 import { eq, and } from 'drizzle-orm';
 
 // Create referral schema for validation
@@ -84,6 +85,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Server-side RBAC: ensure caller can create referrals
+    if (!canCreate(userPractice.user as any, 'referrals')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await request.json();
     const validatedData = createReferralSchema.parse(body);
 
@@ -130,6 +136,11 @@ export async function GET(request: NextRequest) {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Server-side RBAC: ensure caller can view referrals
+    if (!canView(userPractice.user as any, 'referrals')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const practiceReferrals = await db.query.referrals.findMany({

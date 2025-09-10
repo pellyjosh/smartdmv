@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { 
+    let { 
       stayId, 
       medicationName, 
       dosage, 
@@ -59,8 +59,12 @@ export async function POST(request: NextRequest) {
       practiceId 
     } = body;
 
+    // Coerce numeric ids to numbers
+    const stayIdNum = typeof stayId === 'string' ? parseInt(stayId, 10) : stayId;
+    const practiceIdNum = typeof practiceId === 'string' ? parseInt(practiceId, 10) : practiceId;
+
     // Validate required fields
-    if (!stayId || !medicationName || !dosage || !frequency || !route || !startDate || !practiceId) {
+  if (!stayIdNum || !medicationName || !dosage || !frequency || !route || !startDate || !practiceIdNum) {
       return NextResponse.json(
         { error: 'Missing required fields: stayId, medicationName, dosage, frequency, route, startDate, and practiceId are required' },
         { status: 400 }
@@ -69,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     // Check if the boarding stay exists
     const existingStay = await db.query.boardingStays.findFirst({
-      where: (boardingStays, { eq }) => eq(boardingStays.id, stayId)
+      where: (boardingStays, { eq }) => eq(boardingStays.id, stayIdNum)
     });
 
     if (!existingStay) {
@@ -79,12 +83,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const medicationId = randomUUID();
-
+    // Insert and let the DB generate the integer primary key (id)
     const newMedicationSchedule = await (db as any).insert(medicationSchedules)
       .values({
-        id: medicationId,
-        stayId,
+        stayId: stayIdNum,
         medicationName,
         dosage,
         frequency,
@@ -93,13 +95,15 @@ export async function POST(request: NextRequest) {
         endDate: endDate ? new Date(endDate) : null,
         specialInstructions: specialInstructions || null,
         lastAdministered: null,
-        practiceId
+        practiceId: practiceIdNum
       })
       .returning();
 
-    // Fetch the complete medication schedule data with relations
+    // Use returned id from the insert to fetch the full record with relations
+    const insertedId = Array.isArray(newMedicationSchedule) && newMedicationSchedule[0] ? newMedicationSchedule[0].id : (newMedicationSchedule as any).id;
+
     const completeMedicationSchedule = await db.query.medicationSchedules.findFirst({
-      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, medicationId),
+      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, insertedId),
       with: {
         stay: {
           with: {

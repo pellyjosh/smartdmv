@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const isActive = searchParams.get('isActive');
 
-    let whereConditions = [eq(labTestCatalog.practiceId, userPractice.practiceId)];
+    let whereConditions = [eq(labTestCatalog.practiceId, parseInt(userPractice.practiceId))];
 
     if (provider) {
       whereConditions.push(eq(labTestCatalog.provider, provider as any));
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       .values({
         ...validated,
         testCode,
-        practiceId: userPractice.practiceId,
+        practiceId: parseInt(userPractice.practiceId),
         referenceRanges: validated.referenceRanges || null,
         panelTestIds: validated.panelTestIds || null,
       })
@@ -151,7 +151,7 @@ export async function PUT(request: NextRequest) {
       .where(
         and(
           eq(labTestCatalog.id, id),
-          eq(labTestCatalog.practiceId, userPractice.practiceId)
+          eq(labTestCatalog.practiceId, parseInt(userPractice.practiceId))
         )
       )
       .returning();
@@ -178,8 +178,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const body = await request.json();
+    const { id } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Test ID is required' }, { status: 400 });
@@ -190,7 +190,7 @@ export async function DELETE(request: NextRequest) {
       .where(
         and(
           eq(labTestCatalog.id, parseInt(id)),
-          eq(labTestCatalog.practiceId, userPractice.practiceId)
+          eq(labTestCatalog.practiceId, parseInt(userPractice.practiceId))
         )
       )
       .returning();

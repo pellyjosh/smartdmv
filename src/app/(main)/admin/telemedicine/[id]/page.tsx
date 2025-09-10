@@ -23,6 +23,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { isAdmin } from '@/lib/rbac-helpers';
 
 interface TelemedicineAppointment {
   id: number;
@@ -163,8 +164,7 @@ export default function TelemedicineAppointmentPage() {
     const hasPermission = 
       appointment.client?.id.toString() === user.id ||
       appointment.practitioner?.id.toString() === user.id ||
-      user.role === 'SUPER_ADMIN' ||
-      user.role === 'ADMINISTRATOR';
+  isAdmin(user as any);
 
     return hasPermission && 
            (appointment.type === 'virtual' || appointment.type === 'telemedicine') &&

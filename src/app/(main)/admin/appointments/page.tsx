@@ -20,8 +20,10 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUser } from "@/context/UserContext";
+import { isPracticeAdministrator, isVeterinarian, isAdmin, hasRole } from '@/lib/rbac-helpers';
+import { RequirePermission, PermissionButton } from '@/lib/rbac/components';
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Appointment, appointmentStatusEnum, UserRoleEnum } from "@/db/schema";
+import { Appointment, appointmentStatusEnum } from "@/db/schema";
 import {
   Dialog,
   DialogContent,
@@ -144,7 +146,7 @@ export default function AppointmentsPage() {
       }
       return res.json();
     },
-    enabled: !!user && user.role === UserRoleEnum.PRACTICE_ADMINISTRATOR,
+  enabled: !!user && isPracticeAdministrator(user as any),
   });
 
   // Filter appointments for the selected date
@@ -264,14 +266,15 @@ export default function AppointmentsPage() {
   const isLoading = isLoadingAppointments || isLoadingPets || isLoadingStaff;
 
   return (
-    <div className="h-full">
+    <RequirePermission resource={"appointments" as any} action={"READ" as any}>
+      <div className="h-full">
       <main className="flex-1 overflow-y-auto pb-16 md:pb-0 p-4 md:p-6">
-        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Appointments</h1>
-          <Button onClick={() => setIsDialogOpen(true)}>
+          <PermissionButton resource={"appointments" as any} action={"CREATE" as any} className="inline-flex items-center">
             <CalendarPlus className="mr-2 h-4 w-4" />
-            New Appointment
-          </Button>
+            <span onClick={() => setIsDialogOpen(true)}>New Appointment</span>
+          </PermissionButton>
         </div>
 
         {user && (
@@ -293,11 +296,9 @@ export default function AppointmentsPage() {
                   <EnhancedCalendar
                     practiceId={userPracticeId}
                     userRole={
-                      user.role === "CLIENT" ||
-                      user.role === "PRACTICE_ADMINISTRATOR" ||
-                      user.role === "ADMINISTRATOR"
-                        ? user.role
-                        : "CLIENT"
+                      ((user && (hasRole(user as any, 'CLIENT') || isPracticeAdministrator(user as any) || isAdmin(user as any)))
+                        ? (user.role as 'CLIENT' | 'PRACTICE_ADMINISTRATOR' | 'ADMINISTRATOR')
+                        : "CLIENT") as 'CLIENT' | 'PRACTICE_ADMINISTRATOR' | 'ADMINISTRATOR'
                     }
                     userId={user.id}
                   />
@@ -311,11 +312,9 @@ export default function AppointmentsPage() {
                   <DraggableCalendar
                     practiceId={userPracticeId}
                     userRole={
-                      user.role === "CLIENT" ||
-                      user.role === "PRACTICE_ADMINISTRATOR" ||
-                      user.role === "ADMINISTRATOR"
-                        ? user.role
-                        : "CLIENT"
+                      ((user && (hasRole(user as any, 'CLIENT') || isPracticeAdministrator(user as any) || isAdmin(user as any)))
+                        ? (user.role as 'CLIENT' | 'PRACTICE_ADMINISTRATOR' | 'ADMINISTRATOR')
+                        : "CLIENT") as 'CLIENT' | 'PRACTICE_ADMINISTRATOR' | 'ADMINISTRATOR'
                     }
                     userId={user.id}
                   />
@@ -455,7 +454,7 @@ export default function AppointmentsPage() {
                       <FormControl>
                         <Combobox
                           options={
-                            user && user.role === UserRoleEnum.CLIENT 
+                            user && hasRole(user as any, 'CLIENT') 
                               ? [{ value: user.id, label: "Default Practitioner" }]
                               : isLoadingStaff 
                                 ? [{ value: "loading", label: "Loading staff..." }]
@@ -472,7 +471,7 @@ export default function AppointmentsPage() {
                           onSelect={field.onChange}
                           placeholder="Search and select practitioner..."
                           emptyText="No practitioners found."
-                          disabled={isLoadingStaff || (user?.role === UserRoleEnum.CLIENT && !user?.id)}
+                          disabled={isLoadingStaff || (hasRole(user as any, 'CLIENT') && !user?.id)}
                         />
                       </FormControl>
                       <FormMessage />
@@ -557,7 +556,8 @@ export default function AppointmentsPage() {
             </Card>
           )}
         </div>
-      </main>
-    </div>
+          </main>
+      </div>
+    </RequirePermission>
   );
 }

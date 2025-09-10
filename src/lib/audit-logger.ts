@@ -60,9 +60,46 @@ export interface CreateAuditLogParams {
  */
 export async function createAuditLog(params: CreateAuditLogParams): Promise<void> {
   try {
+    // Normalize action and recordType safely even if caller passed undefined/null
+    const normalizedAction = (params.action || 'UNKNOWN').toString().toUpperCase();
+    const normalizedRecordType = (params.recordType || 'UNKNOWN').toString().toUpperCase();
+
+    // sanitize metadata and changes so Dates or objects with toISOString don't break DB serialization
+    const sanitizeForAudit = (input: any): any => {
+      if (input === undefined || input === null) return input;
+      if (input instanceof Date) return input.toISOString();
+      const t = typeof input;
+      if (t === 'string' || t === 'number' || t === 'boolean') return input;
+      if (Array.isArray(input)) return input.map(sanitizeForAudit);
+      if (t === 'object') {
+        try {
+          // if it's an object with a toISOString method, try to use it safely
+          if (typeof (input as any).toISOString === 'function') {
+            try {
+              return (input as any).toISOString();
+            } catch (e) {
+              // fallthrough to object traversal
+            }
+          }
+          const out: any = {};
+          for (const k of Object.keys(input)) {
+            try {
+              out[k] = sanitizeForAudit((input as any)[k]);
+            } catch (e) {
+              out[k] = String((input as any)[k]);
+            }
+          }
+          return out;
+        } catch (e) {
+          return String(input);
+        }
+      }
+      return String(input);
+    };
+
     const auditLogData: NewAuditLog = {
-      action: params.action.toUpperCase(),
-      recordType: params.recordType.toUpperCase(),
+      action: normalizedAction,
+      recordType: normalizedRecordType,
       recordId: params.recordId,
       description: params.description || `${params.action} ${params.recordType}${params.recordId ? ` (ID: ${params.recordId})` : ''}`,
       userId: params.userId,
@@ -70,8 +107,13 @@ export async function createAuditLog(params: CreateAuditLogParams): Promise<void
       organizationId: params.organizationId,
       ipAddress: params.ipAddress,
       userAgent: params.userAgent,
-      metadata: params.metadata,
-      changes: params.changes,
+      metadata: sanitizeForAudit(params.metadata),
+      changes: params.changes
+        ? {
+            before: sanitizeForAudit(params.changes.before),
+            after: sanitizeForAudit(params.changes.after),
+          }
+        : undefined,
       reason: params.reason,
     };
 
@@ -128,6 +170,35 @@ export async function createAuditLogFromRequest(
  */
 export async function createAuditLogsBatch(logs: CreateAuditLogParams[]): Promise<void> {
   try {
+    const sanitizeForAudit = (input: any): any => {
+      if (input === undefined || input === null) return input;
+      if (input instanceof Date) return input.toISOString();
+      const t = typeof input;
+      if (t === 'string' || t === 'number' || t === 'boolean') return input;
+      if (Array.isArray(input)) return input.map(sanitizeForAudit);
+      if (t === 'object') {
+        try {
+          if (typeof (input as any).toISOString === 'function') {
+            try {
+              return (input as any).toISOString();
+            } catch (e) {}
+          }
+          const out: any = {};
+          for (const k of Object.keys(input)) {
+            try {
+              out[k] = sanitizeForAudit((input as any)[k]);
+            } catch (e) {
+              out[k] = String((input as any)[k]);
+            }
+          }
+          return out;
+        } catch (e) {
+          return String(input);
+        }
+      }
+      return String(input);
+    };
+
     const auditLogDataArray: NewAuditLog[] = logs.map(params => ({
       action: params.action.toUpperCase(),
       recordType: params.recordType.toUpperCase(),
@@ -138,8 +209,13 @@ export async function createAuditLogsBatch(logs: CreateAuditLogParams[]): Promis
       organizationId: params.organizationId,
       ipAddress: params.ipAddress,
       userAgent: params.userAgent,
-      metadata: params.metadata,
-      changes: params.changes,
+      metadata: sanitizeForAudit(params.metadata),
+      changes: params.changes
+        ? {
+            before: sanitizeForAudit(params.changes.before),
+            after: sanitizeForAudit(params.changes.after),
+          }
+        : undefined,
       reason: params.reason,
     }));
 

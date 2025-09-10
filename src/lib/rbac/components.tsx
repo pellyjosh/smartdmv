@@ -210,7 +210,7 @@ export function PermissionButton({
   action,
   practiceId,
   resourceId,
-  fallbackText = 'Access Denied',
+  fallbackText = '',
   children,
   disabled,
   ...props

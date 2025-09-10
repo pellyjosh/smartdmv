@@ -15,17 +15,24 @@ export async function GET(
       { status: 400 }
     );
   }
-
+  // coerce id to number for integer primary keys
+  const idNum = typeof id === 'string' ? parseInt(id, 10) : id;
+  if (Number.isNaN(idNum)) {
+    return NextResponse.json(
+      { error: 'Invalid feeding schedule ID format' },
+      { status: 400 }
+    );
+  }
   try {
     const feedingSchedule = await db.query.feedingSchedules.findFirst({
-      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, id),
+      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, idNum),
       with: {
-        boardingStay: {
-          with: {
-            pet: true
+          stay: {
+            with: {
+              pet: true
+            }
           }
         }
-      }
     });
 
     if (!feedingSchedule) {
@@ -58,6 +65,15 @@ export async function PUT(
     );
   }
 
+  // coerce id to number for integer primary keys
+  const idNum = typeof id === 'string' ? parseInt(id, 10) : id;
+  if (Number.isNaN(idNum)) {
+    return NextResponse.json(
+      { error: 'Invalid feeding schedule ID format' },
+      { status: 400 }
+    );
+  }
+
   try {
     const body = await request.json();
     const { 
@@ -73,7 +89,7 @@ export async function PUT(
 
     // Check if the feeding schedule exists
     const existingSchedule = await db.query.feedingSchedules.findFirst({
-      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, id)
+      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, idNum)
     });
 
     if (!existingSchedule) {
@@ -94,14 +110,14 @@ export async function PUT(
         ...(nextFeedingTime !== undefined && { nextFeedingTime: nextFeedingTime ? new Date(nextFeedingTime) : null }),
         ...(isCompleted !== undefined && { isCompleted })
       })
-      .where(eq(feedingSchedules.id, id))
+  .where(eq(feedingSchedules.id, idNum))
       .returning();
 
     // Fetch the complete updated feeding schedule data with relations
     const completeFeedingSchedule = await db.query.feedingSchedules.findFirst({
-      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, id),
+      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, idNum),
       with: {
-        boardingStay: {
+        stay: {
           with: {
             pet: true
           }
@@ -132,10 +148,19 @@ export async function DELETE(
     );
   }
 
+  // coerce id to number for integer primary keys
+  const idNum = typeof id === 'string' ? parseInt(id, 10) : id;
+  if (Number.isNaN(idNum)) {
+    return NextResponse.json(
+      { error: 'Invalid feeding schedule ID format' },
+      { status: 400 }
+    );
+  }
+
   try {
     // Check if the feeding schedule exists
     const existingSchedule = await db.query.feedingSchedules.findFirst({
-      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, id)
+      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, idNum)
     });
 
     if (!existingSchedule) {
@@ -146,7 +171,7 @@ export async function DELETE(
     }
 
     await (db as any).delete(feedingSchedules)
-      .where(eq(feedingSchedules.id, id));
+  .where(eq(feedingSchedules.id, idNum));
 
     return NextResponse.json(
       { message: 'Feeding schedule deleted successfully' },

@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { PlusCircle, Clipboard, Loader2, ArrowLeft, Calendar, Edit, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Pet, SOAPNote, UserRoleEnum } from "@/db/schema";
+import { Pet, SOAPNote } from "@/db/schema";
+import { isVeterinarian, isTechnician, isPracticeAdministrator } from '@/lib/rbac-helpers';
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/UserContext";
@@ -24,13 +25,7 @@ export default function PetSOAPNotesPage() {
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'recent' | 'by-practitioner'>('all');
 
   // Check permissions
-  const isPractitioner = [
-    UserRoleEnum.VETERINARIAN, 
-    UserRoleEnum.TECHNICIAN, 
-    UserRoleEnum.PRACTICE_ADMIN, 
-    UserRoleEnum.SUPER_ADMIN, 
-    UserRoleEnum.ADMINISTRATOR
-  ].includes(user?.role as UserRoleEnum);
+  const isPractitioner = isVeterinarian(user as any) || isTechnician(user as any) || isPracticeAdministrator(user as any);
   
   // Fetch pet data
   const { data: pet, isLoading: isPetLoading, error: petError } = useQuery({

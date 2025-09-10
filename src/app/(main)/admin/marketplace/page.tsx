@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, ShoppingCart, Star, StarHalf, Download, Check, Shield, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/UserContext";
+import { isPracticeAdministrator, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AddonCategory } from "@/db/schema";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -26,10 +27,10 @@ const MarketplacePage = () => {
 
   // Get the practice ID similar to how it's done in UserContext
   const userPracticeId = user ?
-    (user.role === 'CLIENT' || user.role === 'PRACTICE_ADMINISTRATOR' || user.role === 'VETERINARIAN' || user.role === 'PRACTICE_MANAGER' ?
+    ((isPracticeAdministrator(user as any) || isVeterinarian(user as any) || (user as any).role === 'CLIENT') ?
       ((user as any).practiceId && (user as any).practiceId.toString().trim() !== '' ? (user as any).practiceId : undefined) :
-      (user.role === 'ADMINISTRATOR' || user.role === 'SUPER_ADMIN' ? 
-        ((user as any).currentPracticeId && (user as any).currentPracticeId.toString().trim() !== '' ? (user as any).currentPracticeId : undefined) : 
+      (isAdmin(user as any) ?
+        ((user as any).currentPracticeId && (user as any).currentPracticeId.toString().trim() !== '' ? (user as any).currentPracticeId : undefined) :
         undefined)
     ) : undefined;
 

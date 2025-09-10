@@ -46,13 +46,13 @@ export type SelectPet = typeof pets.$inferSelect;
 export type InsertPet = typeof pets.$inferInsert;
 
 export interface Pet {
-  id: string;
+  id: number;
   name: string;
   species: string | null;
   breed: string | null;
   dateOfBirth: Date | null;
-  ownerId: string;
-  practiceId: string;
+  ownerId: number;
+  practiceId: number;
   createdAt: Date;
   updatedAt: Date;
   weight: string | null;

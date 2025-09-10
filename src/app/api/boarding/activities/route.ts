@@ -2,18 +2,21 @@ import { NextResponse, NextRequest } from "next/server";
 import { db } from "@/db/index";
 import { boardingActivities } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { randomUUID } from "crypto";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const stayId = searchParams.get('stayId');
+    const stayIdParam = searchParams.get('stayId');
 
     let activitiesList;
 
-    if (stayId) {
+    if (stayIdParam) {
+      const stayIdNum = parseInt(stayIdParam, 10);
+      if (Number.isNaN(stayIdNum)) {
+        return NextResponse.json([], { status: 200 });
+      }
       activitiesList = await db.query.boardingActivities.findMany({
-        where: (boardingActivities, { eq }) => eq(boardingActivities.stayId, stayId),
+        where: (boardingActivities, { eq }) => eq(boardingActivities.stayId, stayIdNum),
         with: {
           stay: {
             with: {
@@ -49,7 +52,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { 
+    let { 
       stayId, 
       activityType, 
       activityDate, 
@@ -59,8 +62,12 @@ export async function POST(request: NextRequest) {
       practiceId 
     } = body;
 
+    const stayIdNum = typeof stayId === 'string' ? parseInt(stayId, 10) : stayId;
+    const performedByIdNum = typeof performedById === 'string' ? parseInt(performedById, 10) : performedById;
+    const practiceIdNum = typeof practiceId === 'string' ? parseInt(practiceId, 10) : practiceId;
+
     // Validate required fields
-    if (!stayId || !activityType || !activityDate || !performedById || !practiceId) {
+    if (!stayIdNum || !activityType || !activityDate || !performedByIdNum || !practiceIdNum) {
       return NextResponse.json(
         { error: 'Missing required fields: stayId, activityType, activityDate, performedById, and practiceId are required' },
         { status: 400 }
@@ -69,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     // Check if the boarding stay exists
     const existingStay = await db.query.boardingStays.findFirst({
-      where: (boardingStays, { eq }) => eq(boardingStays.id, stayId)
+      where: (boardingStays, { eq }) => eq(boardingStays.id, stayIdNum)
     });
 
     if (!existingStay) {
@@ -79,24 +86,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const activityId = randomUUID();
-
     const newActivity = await (db as any).insert(boardingActivities)
       .values({
-        id: activityId,
-        stayId,
+        stayId: stayIdNum,
         activityType,
         activityDate: new Date(activityDate),
-        performedById,
+        performedById: performedByIdNum,
         notes: notes || null,
         success,
-        practiceId
+        practiceId: practiceIdNum
       })
       .returning();
 
     // Fetch the complete activity data with relations
+    const insertedId = Array.isArray(newActivity) && newActivity[0] ? newActivity[0].id : (newActivity as any).id;
+
     const completeActivity = await db.query.boardingActivities.findFirst({
-      where: (boardingActivities, { eq }) => eq(boardingActivities.id, activityId),
+      where: (boardingActivities, { eq }) => eq(boardingActivities.id, insertedId),
       with: {
         stay: {
           with: {
