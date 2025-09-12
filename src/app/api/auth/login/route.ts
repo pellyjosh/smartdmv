@@ -31,20 +31,20 @@ export async function POST(request: Request) {
 
     // If loginUserAction is successful, userData is populated.
     // Session management
-    const sessionTokenValue = crypto.randomUUID(); // This will be stored in session data
+    const sessionTokenValue = crypto.randomUUID(); // This will be used as the session ID
     const sessionExpiresAtDate = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000);
     const isSqlite = process.env.DB_TYPE === 'sqlite';
 
-    // Insert session and get the auto-generated ID
-    const insertResult = await (db as any).insert(sessionsTable).values({
-      // Don't set id - let database auto-generate it
+    // Insert session with the UUID as the ID
+    await (db as any).insert(sessionsTable).values({
+      id: sessionTokenValue, // Use the UUID as the session ID
       userId: userData.id,
       expiresAt: isSqlite ? sessionExpiresAtDate.getTime() : sessionExpiresAtDate,
-      data: JSON.stringify({ originalToken: sessionTokenValue }), // Store original UUID as backup
+      data: JSON.stringify({}), // Store any additional session data here if needed
       // createdAt will be handled by DB default
-    }).returning({ sessionId: sessionsTable.id });
+    });
 
-    const sessionId = insertResult[0].sessionId;
+    const sessionId = sessionTokenValue;
     console.log('Session created successfully for user:', userData.id, 'with session ID:', sessionId);
 
     const cookieStore = await cookies();

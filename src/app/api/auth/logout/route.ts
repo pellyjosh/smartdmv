@@ -15,10 +15,8 @@ export async function POST() {
     if (sessionTokenValue) {
       // Delete session from database
       console.log(`[API Logout] Attempting to delete session ${sessionTokenValue} from DB.`);
-      const sessionId = parseInt(sessionTokenValue, 10);
-      const deleteResult = isNaN(sessionId)
-        ? []
-        : await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionId)).returning({ id: sessionsTable.id });
+      const sessionId = sessionTokenValue; // Session ID is a UUID string
+      const deleteResult = await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionId)).returning({ id: sessionsTable.id });
       if (deleteResult.length > 0) {
         console.log(`[API Logout] Session ${sessionTokenValue} deleted successfully from DB.`);
       } else {
