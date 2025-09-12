@@ -1,49 +1,69 @@
-'use client';
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { 
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger 
-} from '@/components/ui/dialog';
-import { 
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
-} from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
-import { 
-  Plus, Search, Edit, Trash2, Mail, UserCog2, 
-  Users, Shield, Filter, ArrowUpDown 
-} from 'lucide-react';
+import { useState } from "react";
+import { useUser } from '@/context/UserContext';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Form, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useToast } from "@/hooks/use-toast";
+import { Search, Plus, UserCheck, UserMinus } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { apiRequest } from "@/lib/queryClient";
+
+// Type definitions
+interface Role {
+  id?: number;
+  role?: string;
+  name?: string;
+  description?: string;
+  isActive?: boolean;
+  practiceId?: number;
+}
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
 
 interface UserAssignment {
-  id: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  currentRole: string;
-  assignedRoles: AssignedRole[];
-  lastUpdated: string;
+  id?: number;
+  userId: number;
+  roleId?: number;
+  role: string | {
+    id: number;
+    name: string;
+  };
+  customRoleId?: number;
+  practiceId: number;
+  practiceName?: string;
+  user?: User;
 }
 
-interface AssignedRole {
-  roleId: string;
-  roleName: string;
-  roleType: 'system' | 'custom';
-  assignedAt: string;
-  assignedBy: string;
-}
-
-interface Role {
-  id: string;
+interface CurrentUser {
+  id: number;
+  role: string;
   name: string;
-  type: 'system' | 'custom';
-  isActive: boolean;
 }
 
 interface UserAssignmentsTabProps {
@@ -51,424 +71,621 @@ interface UserAssignmentsTabProps {
   isSuperAdmin: boolean;
 }
 
-export default function UserAssignmentsTab({ practiceId, isSuperAdmin }: UserAssignmentsTabProps) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRole, setSelectedRole] = useState('all');
+// Form schemas
+const roleAssignmentSchema = z.object({
+  userId: z.number().positive(),
+  roleId: z.string().or(z.number()),
+  practiceId: z.number().positive()
+});
+
+const changeRoleSchema = z.object({
+  userId: z.number().positive(),
+  roleId: z.string().or(z.number()),
+  practiceId: z.number().positive()
+});
+
+// Main component
+const UserAssignmentsTab = ({ practiceId, isSuperAdmin }: UserAssignmentsTabProps) => {
+  // State hooks
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<string>('');
+  const [isChangeRoleDialogOpen, setIsChangeRoleDialogOpen] = useState(false);
+  const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserAssignment | null>(null);
+  
+  // Utility hooks
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch user assignments
-  const { data: assignments = [], isLoading: assignmentsLoading } = useQuery<UserAssignment[]>({
-    queryKey: ['user-assignments', practiceId],
-    queryFn: async () => {
-      const response = await fetch(`/api/user-assignments?practiceId=${practiceId}`);
-      if (!response.ok) throw new Error('Failed to fetch user assignments');
-      return response.json();
-    },
-  });
+  // Authentication check - use the existing useAuth hook
+  const { user: currentUser, isLoading: isAuthLoading } = useUser();
+  const isAuthenticated = !!currentUser;
 
-  // Fetch available roles
-  const { data: availableRoles = [] } = useQuery<Role[]>({
-    queryKey: ['available-roles', practiceId],
+  // Data fetching queries
+  const { 
+    data: roles = [] 
+  } = useQuery<Role[]>({
+    queryKey: ["/api/roles", { practiceId }],
     queryFn: async () => {
-      const response = await fetch(`/api/roles?practiceId=${practiceId}&available=true`);
+      const response = await fetch(`/api/roles?practiceId=${practiceId}`);
       if (!response.ok) throw new Error('Failed to fetch roles');
       return response.json();
     },
+    enabled: isAuthenticated && practiceId !== undefined,
   });
 
-  // Fetch users for assignment
-  const { data: users = [] } = useQuery<any[]>({
-    queryKey: ['users-for-assignment', practiceId],
+  const { 
+    data: availableUsers = [] 
+  } = useQuery<User[]>({
+    queryKey: ["/api/users", { practiceId, unassigned: true }],
     queryFn: async () => {
-      const response = await fetch(`/api/users?practiceId=${practiceId}&select=id,name,email,role`);
-      if (!response.ok) throw new Error('Failed to fetch users');
+      const params = new URLSearchParams({ 
+        practiceId: practiceId.toString(),
+        unassigned: 'true'
+      });
+      const response = await fetch(`/api/users?${params.toString()}`);
+      if (!response.ok) throw new Error('Failed to fetch available users');
       return response.json();
     },
+    enabled: isAuthenticated && practiceId !== undefined,
   });
 
-  // Assign role mutation
+  // Fetch user role assignments with the search/filter parameters
+  const {
+    data: userAssignments = [], 
+    isLoading: isRolesLoading, 
+    error: rolesError 
+  } = useQuery<UserAssignment[]>({
+    queryKey: ["/api/user-assignments", { practiceId, roleId: selectedRole }],
+    queryFn: async () => {
+      const params = new URLSearchParams({ practiceId: practiceId.toString() });
+      if (selectedRole) params.set('roleId', selectedRole);
+      const response = await fetch(`/api/user-assignments?${params.toString()}`);
+      if (!response.ok) throw new Error('Failed to fetch user role assignments');
+      return response.json();
+    },
+    enabled: isAuthenticated && practiceId !== undefined,
+  });  // Handle errors separately 
+  if (rolesError) {
+    console.error("Error fetching user role assignments:", rolesError);
+    toast({
+      title: "Error loading role assignments",
+      description: "There was a problem loading the role assignments. Please try refreshing the page.",
+      variant: "destructive",
+    });
+  }
+
+  // Form handling
+  const assignRoleForm = useForm({
+    resolver: zodResolver(roleAssignmentSchema),
+    defaultValues: {
+      userId: 0,
+      roleId: "",
+      practiceId
+    }
+  });
+
+  const changeRoleForm = useForm({
+    resolver: zodResolver(changeRoleSchema),
+    defaultValues: {
+      userId: 0,
+      roleId: "",
+      practiceId
+    }
+  });
+
+  // Mutations
   const assignRoleMutation = useMutation({
-    mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
-      const response = await fetch('/api/user-assignments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, roleId, practiceId }),
-      });
-      if (!response.ok) throw new Error('Failed to assign role');
+    mutationFn: async (data: z.infer<typeof roleAssignmentSchema>) => {
+      // Use the API endpoint that expects userId, roleId, and practiceId
+      const assignmentData = {
+        userId: (data.userId as number).toString(),
+        roleId: (data.roleId as string | number).toString(),
+        practiceId: data.practiceId
+      };
+      
+      const response = await apiRequest("POST", "/api/user-assignments", assignmentData);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user-assignments', practiceId] });
+      toast({
+        title: "Success",
+        description: "Role assigned successfully",
+      });
       setIsAssignDialogOpen(false);
-      setSelectedUser('');
-      toast({ title: 'Success', description: 'Role assigned successfully' });
+      assignRoleForm.reset();
+      queryClient.invalidateQueries({ queryKey: ["/api/user-assignments"] });
     },
-    onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to assign role",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  const removeRoleMutation = useMutation({
+    mutationFn: async (assignmentId: number) => {
+      // We need the full assignment details for the deletion endpoint
+      const assignment = (userAssignments as UserAssignment[]).find((a: UserAssignment) => a.id === assignmentId);
+      
+      if (!assignment) {
+        throw new Error("Assignment not found");
+      }
+      
+      // Get the role ID from the role object
+      let roleId: string;
+      if (typeof assignment.role === 'object' && assignment.role?.id) {
+        roleId = assignment.role.id.toString();
+      } else if (typeof assignment.role === 'string') {
+        // Find role ID by name for system roles
+        const role = roles.find(r => r.name === assignment.role);
+        roleId = role?.id?.toString() || '';
+      } else {
+        throw new Error("Invalid role format in assignment");
+      }
+      
+      if (!roleId) {
+        throw new Error("Could not determine role ID");
+      }
+      
+      // Use the DELETE method of user-assignments endpoint
+      await apiRequest("DELETE", "/api/user-assignments", {
+        userId: assignment.userId,
+        roleId: roleId,
+        practiceId: assignment.practiceId
+      });
     },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Role assignment removed successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/user-assignments"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove role assignment",
+        variant: "destructive",
+      });
+    }
   });
 
-  // Revoke role mutation
-  const revokeRoleMutation = useMutation({
-    mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
-      const response = await fetch('/api/user-assignments', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, roleId, practiceId }),
-      });
-      if (!response.ok) throw new Error('Failed to revoke role');
+  const changeRoleMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof changeRoleSchema>) => {
+      // First, remove existing role if any
+      if (selectedUser && selectedUser.role) {
+        try {
+          let roleId: string;
+          if (typeof selectedUser.role === 'object' && selectedUser.role.id) {
+            roleId = selectedUser.role.id.toString();
+          } else if (typeof selectedUser.role === 'string') {
+            // Find role ID by name for system roles
+            const role = roles.find(r => r.name === selectedUser.role);
+            roleId = role?.id?.toString() || '';
+          } else {
+            roleId = '';
+          }
+          
+          if (roleId) {
+            await apiRequest("DELETE", "/api/user-assignments", {
+              userId: (data.userId as number).toString(),
+              roleId: roleId,
+              practiceId: data.practiceId
+            });
+          }
+        } catch (error) {
+          console.error("Error removing existing role:", error);
+          // Continue with assignment even if removal fails
+        }
+      }
+      
+      // Then assign the new role
+      const assignmentData = {
+        userId: (data.userId as number).toString(),
+        roleId: (data.roleId as string | number).toString(),
+        practiceId: data.practiceId
+      };
+      
+      const response = await apiRequest("POST", "/api/user-assignments", assignmentData);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user-assignments', practiceId] });
-      toast({ title: 'Success', description: 'Role revoked successfully' });
+      toast({
+        title: "Success",
+        description: "Role updated successfully",
+      });
+      setIsChangeRoleDialogOpen(false);
+      changeRoleForm.reset();
+      queryClient.invalidateQueries({ queryKey: ["/api/user-assignments"] });
     },
-    onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update role",
+        variant: "destructive",
+      });
+    }
   });
 
-  // Filter assignments
-  const filteredAssignments = assignments.filter(assignment => {
-    const matchesSearch = assignment.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         assignment.userEmail.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = selectedRole === 'all' || 
-                       assignment.currentRole === selectedRole ||
-                       assignment.assignedRoles.some(role => role.roleName === selectedRole);
-    return matchesSearch && matchesRole;
-  });
-
-  const handleAssignRole = (data: { userId: string; roleId: string }) => {
-    assignRoleMutation.mutate(data);
+  // Event handlers
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
   };
 
-  const handleRevokeRole = (userId: string, roleId: string) => {
-    if (confirm('Are you sure you want to revoke this role assignment?')) {
-      revokeRoleMutation.mutate({ userId, roleId });
+  const handleRoleFilter = (value: string) => {
+    setSelectedRole(value === "all" ? null : value);
+  };
+
+  const handleAssignRoleClick = () => {
+    assignRoleForm.reset({
+      userId: 0,
+      roleId: "",
+      practiceId
+    });
+    setIsAssignDialogOpen(true);
+  };
+
+  const handleChangeRoleClick = (user: UserAssignment) => {
+    setSelectedUser(user);
+    
+    let roleIdValue: string | number = '';
+    
+    // Handle the roleId based on the type of role
+    if (typeof user.role === 'string') {
+      roleIdValue = user.role === 'CUSTOM' ? user.customRoleId?.toString() || '' : user.role;
+    } else if (typeof user.role === 'object' && user.role?.id) {
+      roleIdValue = user.role.id.toString();
+    }
+    
+    changeRoleForm.reset({
+      userId: user.userId,
+      roleId: roleIdValue,
+      practiceId
+    });
+    setIsChangeRoleDialogOpen(true);
+  };
+  
+  const handleRemoveRoleClick = (assignment: UserAssignment) => {
+    if (!assignment.id) {
+      toast({
+        title: "Error",
+        description: "Cannot remove assignment: Missing assignment ID",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setSelectedUser(assignment);
+    setIsRemoveDialogOpen(true);
+  };
+  
+  const confirmRemove = () => {
+    if (selectedUser && selectedUser.id) {
+      removeRoleMutation.mutate(selectedUser.id);
+      setIsRemoveDialogOpen(false);
     }
   };
 
-  const getRoleTypeColor = (type: string) => {
-    return type === 'system' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800';
+  const onAssignRoleSubmit = (data: z.infer<typeof roleAssignmentSchema>) => {
+    assignRoleMutation.mutate(data);
   };
 
+  const onChangeRoleSubmit = (data: z.infer<typeof changeRoleSchema>) => {
+    changeRoleMutation.mutate(data);
+  };
+
+  // Filtered users for search
+  const filteredUsers = (userAssignments as UserAssignment[]).filter((assignment: UserAssignment) => {
+    const roleName = typeof assignment.role === 'object' && assignment.role?.name
+      ? assignment.role.name
+      : assignment.role;
+      
+    return assignment.user?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      assignment.user?.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (typeof roleName === 'string' && roleName.toLowerCase().includes(searchQuery.toLowerCase()));
+  });
+
+  // Loading state
+  const isLoading = isAuthLoading || isRolesLoading;
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <UserCog2 className="h-5 w-5" />
-                User Role Assignments
-              </CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">
-                Manage role assignments for users in your practice
-              </p>
-            </div>
-            
-            <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Assign Role
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Assign Role to User</DialogTitle>
-                </DialogHeader>
-                <AssignRoleForm 
-                  users={users} 
-                  roles={availableRoles} 
-                  onSubmit={handleAssignRole} 
-                  isLoading={assignRoleMutation.isPending} 
-                />
-              </DialogContent>
-            </Dialog>
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <div>
+          <CardTitle>User Role Assignments</CardTitle>
+          <CardDescription>
+            Manage which roles are assigned to each user
+          </CardDescription>
+        </div>
+        <Button 
+          className="flex items-center gap-1"
+          onClick={handleAssignRoleClick}
+          disabled={!isAuthenticated}
+        >
+          <Plus className="h-4 w-4" />
+          Assign Role
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search by user name or email..."
+              className="pl-8"
+              value={searchQuery}
+              onChange={handleSearch}
+            />
           </div>
-        </CardHeader>
-        
-        <CardContent>
-          {/* Filters */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search users..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            
-            <Select value={selectedRole} onValueChange={setSelectedRole}>
-              <SelectTrigger className="w-[200px]">
-                <Filter className="h-4 w-4 mr-2" />
+          <div className="w-full md:w-64">
+            <Select onValueChange={handleRoleFilter} defaultValue="all">
+              <SelectTrigger>
                 <SelectValue placeholder="Filter by role" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Roles</SelectItem>
-                {availableRoles.map((role) => (
-                  <SelectItem key={role.id} value={role.name}>
-                    {role.name} {role.type === 'custom' ? '(Custom)' : ''}
+                {roles.map((role: Role) => (
+                  <SelectItem key={role.id || role.role} value={role.id?.toString() || role.role || ""}>
+                    {role.name || role.role}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Assignments Table */}
-      <Card>
-        <CardContent className="p-0">
+        {isLoading ? (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        ) : rolesError ? (
+          <div className="bg-destructive/10 text-destructive p-4 rounded-md">
+            Failed to load user assignments. Please try again.
+          </div>
+        ) : (
           <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>User</TableHead>
-                  <TableHead>Primary Role</TableHead>
-                  <TableHead>Additional Roles</TableHead>
-                  <TableHead>Last Updated</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Assigned Role</TableHead>
+                  {isSuperAdmin && <TableHead>Practice</TableHead>}
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {assignmentsLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
-                      Loading assignments...
-                    </TableCell>
-                  </TableRow>
-                ) : filteredAssignments.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
-                      No role assignments found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredAssignments.map((assignment) => (
-                    <TableRow key={assignment.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                            <span className="text-sm font-medium">
-                              {assignment.userName.charAt(0)}
-                            </span>
-                          </div>
-                          <div>
-                            <div className="font-medium">{assignment.userName}</div>
-                            <div className="text-sm text-muted-foreground flex items-center gap-1">
-                              <Mail className="h-3 w-3" />
-                              {assignment.userEmail}
-                            </div>
-                          </div>
-                        </div>
+                {filteredUsers && filteredUsers.length > 0 ? (
+                  filteredUsers.map((assignment: UserAssignment) => (
+                    <TableRow key={`${assignment.userId}-${assignment.roleId || assignment.role}`}>
+                      <TableCell className="font-medium">
+                        {assignment.user?.name || "—"}
                       </TableCell>
-                      
+                      <TableCell>{assignment.user?.email}</TableCell>
                       <TableCell>
-                        <Badge className="bg-blue-100 text-blue-800">
-                          {assignment.currentRole.replace(/_/g, ' ')}
+                        <Badge variant="outline">
+                          {typeof assignment.role === 'object' && assignment.role.name 
+                            ? assignment.role.name 
+                            : String(assignment.role)}
                         </Badge>
                       </TableCell>
-                      
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {assignment.assignedRoles.length === 0 ? (
-                            <span className="text-sm text-muted-foreground">None</span>
-                          ) : (
-                            assignment.assignedRoles.map((role) => (
-                              <Badge 
-                                key={role.roleId} 
-                                className={getRoleTypeColor(role.roleType)}
-                              >
-                                {role.roleName}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-4 w-4 p-0 ml-1 hover:bg-red-100"
-                                  onClick={() => handleRevokeRole(assignment.userId, role.roleId)}
-                                >
-                                  ×
-                                </Button>
-                              </Badge>
-                            ))
-                          )}
-                        </div>
-                      </TableCell>
-                      
-                      <TableCell>
-                        {new Date(assignment.lastUpdated).toLocaleDateString()}
-                      </TableCell>
-                      
+                      {isSuperAdmin && (
+                        <TableCell>{assignment.practiceName || "System"}</TableCell>
+                      )}
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedUser(assignment.userId);
-                            setIsAssignDialogOpen(true);
-                          }}
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Assign Role
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="flex items-center gap-1"
+                            onClick={() => handleChangeRoleClick(assignment)}
+                          >
+                            <UserCheck className="h-4 w-4" />
+                            Change Role
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            className="flex items-center gap-1 text-destructive hover:text-destructive"
+                            onClick={() => handleRemoveRoleClick(assignment)}
+                          >
+                            <UserMinus className="h-4 w-4" />
+                            Remove
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={isSuperAdmin ? 5 : 4} className="text-center py-6 text-muted-foreground">
+                      {searchQuery ? "No users match your search" : "No user assignments found"}
+                    </TableCell>
+                  </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
-        </CardContent>
-      </Card>
+        )}
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-md bg-blue-100">
-                <Users className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <div className="text-sm font-medium">Total Users</div>
-                <div className="text-2xl font-bold">{assignments.length}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Assign Role Dialog */}
+        <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Assign Role to User</DialogTitle>
+              <DialogDescription>
+                Select a user and a role to assign.
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...assignRoleForm}>
+              <form onSubmit={assignRoleForm.handleSubmit(onAssignRoleSubmit)} className="space-y-6">
+                <FormField
+                  control={assignRoleForm.control}
+                  name="userId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>User</FormLabel>
+                      <Select
+                        onValueChange={(value) => field.onChange(parseInt(value))}
+                        defaultValue={field.value.toString()}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select user" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableUsers.map((user: User) => (
+                            <SelectItem key={user.id} value={user.id.toString()}>
+                              {user.name} ({user.email})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={assignRoleForm.control}
+                  name="roleId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value.toString()}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {roles.map((role: Role) => (
+                            <SelectItem 
+                              key={role.id || role.role} 
+                              value={role.id?.toString() || role.role || ""}
+                            >
+                              {role.name || role.role}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <DialogFooter>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setIsAssignDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={assignRoleMutation.isPending}>
+                    {assignRoleMutation.isPending ? "Assigning..." : "Assign Role"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Change Role Dialog */}
+        <Dialog open={isChangeRoleDialogOpen} onOpenChange={setIsChangeRoleDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Change User Role</DialogTitle>
+              <DialogDescription>
+                Assign a different role to {selectedUser?.user?.name}.
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...changeRoleForm}>
+              <form onSubmit={changeRoleForm.handleSubmit(onChangeRoleSubmit)} className="space-y-6">
+                <FormField
+                  control={changeRoleForm.control}
+                  name="roleId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>New Role</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value.toString()}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {roles.map((role: Role) => (
+                            <SelectItem 
+                              key={role.id || role.role} 
+                              value={role.id?.toString() || role.role || ""}
+                            >
+                              {role.name || role.role}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <DialogFooter>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setIsChangeRoleDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={changeRoleMutation.isPending}>
+                    {changeRoleMutation.isPending ? "Updating..." : "Change Role"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
         
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-md bg-purple-100">
-                <Shield className="h-5 w-5 text-purple-600" />
-              </div>
-              <div>
-                <div className="text-sm font-medium">Multiple Roles</div>
-                <div className="text-2xl font-bold">
-                  {assignments.filter(a => a.assignedRoles.length > 0).length}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-md bg-green-100">
-                <ArrowUpDown className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <div className="text-sm font-medium">Recent Changes</div>
-                <div className="text-2xl font-bold">
-                  {assignments.filter(a => {
-                    const dayAgo = new Date();
-                    dayAgo.setDate(dayAgo.getDate() - 1);
-                    return new Date(a.lastUpdated) > dayAgo;
-                  }).length}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+        {/* Remove Role Confirmation Dialog */}
+        <Dialog open={isRemoveDialogOpen} onOpenChange={setIsRemoveDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Remove Role Assignment</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to remove {selectedUser?.user?.name}'s 
+                {typeof selectedUser?.role === 'object' && selectedUser?.role?.name
+                  ? ` ${selectedUser.role.name}`
+                  : selectedUser?.role
+                    ? ` ${selectedUser.role}`
+                    : ''} role?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-6">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsRemoveDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={confirmRemove}
+                disabled={removeRoleMutation.isPending}
+              >
+                {removeRoleMutation.isPending ? "Removing..." : "Remove Role"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
   );
-}
+};
 
-// Assign Role Form Component
-function AssignRoleForm({ 
-  users, 
-  roles, 
-  onSubmit, 
-  isLoading 
-}: { 
-  users: any[]; 
-  roles: Role[]; 
-  onSubmit: (data: { userId: string; roleId: string }) => void; 
-  isLoading: boolean; 
-}) {
-  const [formData, setFormData] = useState({
-    userId: '',
-    roleId: '',
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (formData.userId && formData.roleId) {
-      onSubmit(formData);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="user">Select User</Label>
-        <Select value={formData.userId} onValueChange={(value) => setFormData({ ...formData, userId: value })}>
-          <SelectTrigger>
-            <SelectValue placeholder="Choose a user" />
-          </SelectTrigger>
-          <SelectContent>
-            {users.map((user) => (
-              <SelectItem key={user.id} value={user.id}>
-                <div className="flex items-center gap-2">
-                  <span>{user.name || user.username}</span>
-                  <span className="text-sm text-muted-foreground">({user.email})</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="role">Select Role</Label>
-        <Select value={formData.roleId} onValueChange={(value) => setFormData({ ...formData, roleId: value })}>
-          <SelectTrigger>
-            <SelectValue placeholder="Choose a role" />
-          </SelectTrigger>
-          <SelectContent>
-            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">System Roles</div>
-            {roles.filter(role => role.type === 'system').map((role) => (
-              <SelectItem key={role.id} value={role.id}>
-                <div className="flex items-center gap-2">
-                  <Shield className="h-3 w-3" />
-                  {role.name.replace(/_/g, ' ')}
-                </div>
-              </SelectItem>
-            ))}
-            {roles.filter(role => role.type === 'custom').length > 0 && (
-              <>
-                <div className="px-2 py-1 text-xs font-medium text-muted-foreground border-t mt-1 pt-2">
-                  Custom Roles
-                </div>
-                {roles.filter(role => role.type === 'custom').map((role) => (
-                  <SelectItem key={role.id} value={role.id}>
-                    <div className="flex items-center gap-2">
-                      <UserCog2 className="h-3 w-3" />
-                      {role.name}
-                    </div>
-                  </SelectItem>
-                ))}
-              </>
-            )}
-          </SelectContent>
-        </Select>
-      </div>
-      
-      <div className="flex justify-end gap-2 pt-4">
-        <Button type="submit" disabled={isLoading || !formData.userId || !formData.roleId}>
-          {isLoading ? 'Assigning...' : 'Assign Role'}
-        </Button>
-      </div>
-    </form>
-  );
-}
+export default UserAssignmentsTab;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { users, roles } from '@/db/schema';
+import { users, roles, userRoles } from '@/db/schema';
 import { z } from 'zod';
 import { eq, and, count, isNull, or } from 'drizzle-orm';
 import { createAuditLog } from '@/lib/audit-logger';
@@ -24,17 +24,33 @@ export async function GET(request: NextRequest) {
       )
     );
 
-    // Get user counts for each role
+    // Get user counts for each role - using both legacy users.role and new user_roles table
     const userCounts = await Promise.all(
       rolesData.map(async (role) => {
-        const [result] = await db
+        // Count from legacy users.role field
+        const [legacyResult] = await db
           .select({ count: count() })
           .from(users)
           .where(and(
             eq(users.practiceId, parseInt(practiceId)),
             eq(users.role, role.name)
           ));
-        return { roleId: role.id, count: result?.count || 0 };
+        
+        // Count from new user_roles assignments
+        const [assignedResult] = await db
+          .select({ count: count() })
+          .from(userRoles)
+          .innerJoin(users, eq(users.id, userRoles.userId))
+          .where(and(
+            eq(users.practiceId, parseInt(practiceId)),
+            eq(userRoles.roleId, role.id),
+            eq(userRoles.isActive, true)
+          ));
+        
+        // Use the higher count (handles transition period where both might exist)
+        const totalCount = Math.max(legacyResult?.count || 0, assignedResult?.count || 0);
+        
+        return { roleId: role.id, count: totalCount };
       })
     );
 

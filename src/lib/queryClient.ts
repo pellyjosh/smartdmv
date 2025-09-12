@@ -163,8 +163,8 @@ const handleSessionErrors = (error: unknown) => {
   // Check if it's an auth error
   if ((error as any)?.status === 401) {
     console.log("Session error detected, updating auth state...");
-    // Will be handled by the useAuth hook's checkAuth method
-    queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+    // Will be handled by the UserContext's fetchUser method
+    // No need to invalidate specific queries since UserContext handles auth state
   }
 };
 

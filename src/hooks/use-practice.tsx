@@ -99,8 +99,7 @@ export const PracticeProvider = ({ children }: { children: ReactNode }) => {
       await apiRequest("POST", "/api/switch-practice", { practiceId });
     },
     onSuccess: () => {
-      // Invalidate relevant queries
-      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      // Invalidate relevant queries - auth state is handled by UserContext
       queryClient.invalidateQueries({ queryKey: ["/api/practices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/pets"] });

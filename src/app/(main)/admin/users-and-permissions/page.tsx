@@ -27,9 +27,13 @@ export default function UsersAndPermissionsPage() {
   const { practice } = usePractice();
 
   // Get practice ID (0 for system-wide context for super admin)
-  const practiceId = practice?.id || 
+  const calculatedPracticeId = practice?.id || 
     (user && 'practiceId' in user ? Number(user.practiceId) : 
      user && 'currentPracticeId' in user ? Number(user.currentPracticeId) : 0);
+  
+  // Temporary fix: if practiceId is 0 and user is authenticated, default to 1
+  // TODO: Fix practice context to return correct practice ID
+  const practiceId = calculatedPracticeId === 0 && user ? 1 : calculatedPracticeId;
 
   // Use the roles hook to get role checking functions (supports legacy `user.role` and assigned `user.roles`)
   const { isSuperAdmin, isPracticeAdmin, isSuperAdminAssigned, isPracticeAdminAssigned } = useRoles(practiceId);
@@ -42,13 +46,12 @@ export default function UsersAndPermissionsPage() {
   const isSuperAdminUser = isSuperAdmin(userRole) || isSuperAdminAssigned(assignedRoles);
   const isPracticeAdminUser = isPracticeAdmin(userRole) || isPracticeAdminAssigned(assignedRoles);
 
-  // Fetch real users count - use practice-admin/users endpoint to get correct practice-filtered data
-  const { data: users = [], isLoading: usersLoading } = useQuery<any[]>({
-    queryKey: [isPracticeAdminUser ? "/api/practice-admin/users" : "/api/users", { practiceId }],
+  // Fetch role assignment statistics for more accurate counts
+  const { data: roleStats, isLoading: roleStatsLoading } = useQuery<any>({
+    queryKey: ["/api/user-roles/statistics", { practiceId }],
     queryFn: async () => {
-      const endpoint = isPracticeAdminUser ? "/api/practice-admin/users" : "/api/users";
-      const response = await fetch(`${endpoint}?practiceId=${practiceId}`);
-      if (!response.ok) throw new Error('Failed to fetch users');
+      const response = await fetch(`/api/user-roles/statistics?practiceId=${practiceId}`);
+      if (!response.ok) throw new Error('Failed to fetch role statistics');
       return response.json();
     },
     enabled: !!practiceId,
@@ -76,9 +79,9 @@ export default function UsersAndPermissionsPage() {
     enabled: !!practiceId,
   });
 
-  // Calculate metrics
-  const totalUsers = users.length || 0;
-  const customRoles = roles.filter((role: any) => role.isCustom).length || 0;
+  // Calculate metrics using the accurate role statistics
+  const totalUsers = roleStats?.totalUsers || 0;
+  const customRoles = roleStats?.summary?.customRoles || 0;
   const totalOverrides = overrides.length || 0;
 
   const handleTabChange = (value: string) => {
@@ -122,7 +125,7 @@ export default function UsersAndPermissionsPage() {
                   </div>
                   <div>
                     <div className="text-sm font-medium">Total Users</div>
-                    {usersLoading ? (
+                    {roleStatsLoading ? (
                       <div className="flex items-center gap-2 mt-1">
                         <Skeleton className="h-8 w-12 rounded-md" />
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />

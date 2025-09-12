@@ -51,6 +51,14 @@ import {
 } from './schemas/aiConfigSchema';
 import { auditLogs, auditLogsRelations } from './schemas/auditLogsSchema';
 import { permissionOverrides } from './schemas/permissionOverridesSchema';
+import { 
+  permissionCategories, 
+  permissionResources, 
+  permissionActions,
+  permissionCategoriesRelations,
+  permissionResourcesRelations,
+  permissionActionsRelations
+} from './schemas/permissionCategoriesSchema';
 import { roles, rolesRelations } from './schemas/rolesSchema';
 import { userRoles, userRolesRelations } from './schemas/userRolesSchema';
 import {
@@ -156,6 +164,13 @@ export const schema = {
   // Audit logs
   auditLogs,
   auditLogsRelations,
+  // Permission categories
+  permissionCategories,
+  permissionCategoriesRelations,
+  permissionResources,
+  permissionResourcesRelations,
+  permissionActions,
+  permissionActionsRelations,
 };
 
 // Re-export all tables and their relations for Drizzle to use
@@ -190,6 +205,10 @@ export * from './schemas/vaccinationsSchema';
 export * from './schemas/checklistsSchema';
 export * from './schemas/integrationSettingsSchema';
 export * from './schemas/auditLogsSchema';
+export * from './schemas/permissionOverridesSchema';
+export * from './schemas/permissionCategoriesSchema';
+export * from './schemas/rolesSchema';
+export * from './schemas/userRolesSchema';
 export * from './schemas/permissionOverridesSchema';
 export * from './schemas/rolesSchema';
 export * from './schemas/userRolesSchema';

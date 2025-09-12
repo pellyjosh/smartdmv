@@ -65,7 +65,7 @@ const VaccinationFormSchema = z.object({
   }),
   expirationDate: z.date().optional(),
   administrationSite: z.string().optional(),
-  administrationRoute: z.enum(["subcutaneous", "intramuscular", "intranasal", "oral", "topical"]).optional(),
+  route: z.enum(["subcutaneous", "intramuscular", "intranasal", "oral", "topical"]).optional(),
   dose: z.string().optional(),
   nextDueDate: z.date().optional(),
   notes: z.string().optional(),
@@ -117,6 +117,8 @@ const AddVaccinationPage = () => {
       vaccineType: "core",
       administrationDate: new Date(),
       status: "completed",
+      // Set current user as administering vet if they are a veterinarian
+      administeringVetId: user && isVeterinarian(user as any) ? user.id : undefined,
     },
   });
   
@@ -156,10 +158,32 @@ const AddVaccinationPage = () => {
   // Create vaccination mutation
   const createVaccinationMutation = useMutation({
     mutationFn: async (data: VaccinationFormValues) => {
+      // Transform the data to match API expectations
+      const apiData = {
+        petId: data.petId,
+        vaccineTypeId: data.vaccineTypeId,
+        vaccineName: data.vaccineName,
+        manufacturer: data.manufacturer,
+        lotNumber: data.lotNumber,
+        serialNumber: data.serialNumber,
+        administeringVetId: data.administeringVetId,
+        administrationSite: data.administrationSite,
+        route: data.route,
+        dose: data.dose,
+        notes: data.notes,
+        reactions: data.reactions,
+        status: data.status,
+        practiceId: data.practiceId,
+        // Convert dates to ISO strings for API
+        administrationDate: data.administrationDate instanceof Date ? data.administrationDate.toISOString() : data.administrationDate,
+        expirationDate: data.expirationDate instanceof Date ? data.expirationDate.toISOString() : data.expirationDate,
+        nextDueDate: data.nextDueDate instanceof Date ? data.nextDueDate.toISOString() : data.nextDueDate,
+      };
+      
       const response = await fetch("/api/vaccinations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(apiData),
       });
       if (!response.ok) {
         const error = await response.json();
@@ -189,11 +213,13 @@ const AddVaccinationPage = () => {
       toast({ title: "Error", description: "User or practice not found.", variant: "destructive" });
       return;
     }
+    
     const completeData = {
       ...data,
       practiceId: Number(userPracticeId),
       createdById: user.id,
     };
+    
     createVaccinationMutation.mutate(completeData);
   };
 
@@ -234,6 +260,13 @@ const AddVaccinationPage = () => {
       }
     }
   }, [petId, pets, setValue]);
+
+  // Effect to set current user as administering vet if they are a veterinarian
+  useEffect(() => {
+    if (user && isVeterinarian(user as any) && !form.getValues('administeringVetId')) {
+      setValue('administeringVetId', user.id);
+    }
+  }, [user, setValue, form]);
 
   // Filter vaccine types by the selected pet's species
   const filteredVaccineTypes = vaccineTypes?.filter((vt: any) => 
@@ -630,7 +663,7 @@ const AddVaccinationPage = () => {
                   {/* Administration Route */}
                   <FormField
                     control={form.control}
-                    name="administrationRoute"
+                    name="route"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Administration Route</FormLabel>
