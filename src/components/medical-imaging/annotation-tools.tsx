@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,8 +33,15 @@ import {
 
 interface AnnotationToolsProps {
   imageRef: React.RefObject<HTMLImageElement>;
-  seriesId: string;
+  seriesId: number;
   onAnnotationAdded?: (annotation: any) => void;
+  onPreviewChange?: (preview: any) => void;
+  onDrawingStateChange?: (isDrawing: boolean) => void;
+  onMouseHandlers?: (handlers: {
+    onMouseDown: (event: React.MouseEvent) => void;
+    onMouseMove: (event: React.MouseEvent) => void;
+    onMouseUp: (event: React.MouseEvent) => void;
+  }) => void;
 }
 
 // Annotation schema for form validation
@@ -57,7 +64,10 @@ type AnnotationFormValues = z.infer<typeof annotationSchema>;
 const AnnotationTools: React.FC<AnnotationToolsProps> = ({
   imageRef,
   seriesId,
-  onAnnotationAdded
+  onAnnotationAdded,
+  onPreviewChange,
+  onDrawingStateChange,
+  onMouseHandlers
 }) => {
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [startPoint, setStartPoint] = useState<{ x: number, y: number } | null>(null);
@@ -82,9 +92,27 @@ const AnnotationTools: React.FC<AnnotationToolsProps> = ({
     form.setValue('seriesId', seriesId);
   }, [seriesId, form]);
   
+  // Notify parent of preview changes
+  useEffect(() => {
+    if (onPreviewChange) {
+      onPreviewChange({
+        previewAnnotation,
+        freehandPoints,
+        shape
+      });
+    }
+  }, [previewAnnotation, freehandPoints, shape, onPreviewChange]);
+  
+  // Notify parent of drawing state changes
+  useEffect(() => {
+    if (onDrawingStateChange) {
+      onDrawingStateChange(isDrawing);
+    }
+  }, [isDrawing, onDrawingStateChange]);
+  
   // Mutation for saving annotations
   const createAnnotationMutation = useMutation({
-    mutationFn: async (data: AnnotationFormValues) => {
+    mutationFn: async (data: any) => {
       const response = await apiRequest("POST", `/api/imaging-series/${seriesId}/annotations`, data);
       return response.json();
     },
@@ -106,7 +134,7 @@ const AnnotationTools: React.FC<AnnotationToolsProps> = ({
   });
   
   // Get cursor position relative to image
-  const getCursorPosition = (event: React.MouseEvent): { x: number, y: number } | null => {
+  const getCursorPosition = useCallback((event: React.MouseEvent): { x: number, y: number } | null => {
     if (!imageRef.current) return null;
     
     const rect = imageRef.current.getBoundingClientRect();
@@ -114,22 +142,22 @@ const AnnotationTools: React.FC<AnnotationToolsProps> = ({
     const y = ((event.clientY - rect.top) / rect.height) * 100;
     
     return { x, y };
-  };
+  }, [imageRef]);
   
   // Prepare annotation data for submission
-  const prepareAnnotationData = (): AnnotationFormValues => {
-    const data = form.getValues();
+  const prepareAnnotationData = () => {
+    const formData = form.getValues();
+    
+    let annotationData: any = {
+      shape: formData.shape,
+      label: formData.label
+    };
     
     if (shape === "freehand") {
-      return {
-        ...data,
-        points: freehandPoints
-      };
-    }
-    
-    if (previewAnnotation) {
-      return {
-        ...data,
+      annotationData.points = freehandPoints;
+    } else if (previewAnnotation) {
+      annotationData = {
+        ...annotationData,
         x: previewAnnotation.x,
         y: previewAnnotation.y,
         width: previewAnnotation.width,
@@ -137,7 +165,13 @@ const AnnotationTools: React.FC<AnnotationToolsProps> = ({
       };
     }
     
-    return data;
+    // Format data for the API/database
+    return {
+      annotationType: formData.shape,
+      annotationData: annotationData,
+      text: formData.label,
+      createdById: "user-1" // TODO: Get from auth context
+    };
   };
   
   // Handle form submission
@@ -173,9 +207,11 @@ const AnnotationTools: React.FC<AnnotationToolsProps> = ({
   };
   
   // Mouse down handler for starting annotation
-  const handleMouseDown = (event: React.MouseEvent) => {
+  const handleMouseDown = useCallback((event: React.MouseEvent) => {
     const position = getCursorPosition(event);
     if (!position) return;
+    
+    console.log('Mouse down at position:', position, 'Shape:', shape);
     
     if (shape === "text") {
       setPreviewAnnotation({
@@ -201,10 +237,10 @@ const AnnotationTools: React.FC<AnnotationToolsProps> = ({
       width: 0,
       height: 0
     });
-  };
+  }, [shape, getCursorPosition]);
   
   // Mouse move handler for drawing
-  const handleMouseMove = (event: React.MouseEvent) => {
+  const handleMouseMove = useCallback((event: React.MouseEvent) => {
     if (!isDrawing) return;
     
     const currentPosition = getCursorPosition(event);
@@ -221,17 +257,20 @@ const AnnotationTools: React.FC<AnnotationToolsProps> = ({
     const height = currentPosition.y - startPoint.y;
     
     // For rectangle and circle, update dimensions
-    setPreviewAnnotation({
+    const newPreview = {
       shape,
       x: width >= 0 ? startPoint.x : currentPosition.x,
       y: height >= 0 ? startPoint.y : currentPosition.y,
       width: Math.abs(width),
       height: Math.abs(height)
-    });
-  };
+    };
+    
+    console.log('Annotation preview update:', newPreview);
+    setPreviewAnnotation(newPreview);
+  }, [isDrawing, shape, startPoint, getCursorPosition]);
   
   // Mouse up handler for finishing drawing
-  const handleMouseUp = (event: React.MouseEvent) => {
+  const handleMouseUp = useCallback((event: React.MouseEvent) => {
     if (!isDrawing) return;
     
     if (shape === "freehand") {
@@ -256,7 +295,18 @@ const AnnotationTools: React.FC<AnnotationToolsProps> = ({
     });
     
     setIsDrawing(false);
-  };
+  }, [isDrawing, shape, startPoint, getCursorPosition]);
+
+  // Pass mouse handlers to parent after they are defined
+  useEffect(() => {
+    if (onMouseHandlers) {
+      onMouseHandlers({
+        onMouseDown: handleMouseDown,
+        onMouseMove: handleMouseMove,
+        onMouseUp: handleMouseUp
+      });
+    }
+  }, [onMouseHandlers, handleMouseDown, handleMouseMove, handleMouseUp]);
   
   // Render preview of current annotation
   const renderPreview = () => {
@@ -429,23 +479,12 @@ const AnnotationTools: React.FC<AnnotationToolsProps> = ({
           />
           
           <div className="mt-4">
-            <p className="text-sm text-muted-foreground mb-2">
+            <p className="text-sm text-muted-foreground mb-4">
               {getInstructionText()}
             </p>
-            
-            <div 
-              ref={canvasRef}
-              className="relative h-40 border border-dashed rounded-md bg-muted/50 flex items-center justify-center"
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-            >
-              {!previewAnnotation && freehandPoints.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Annotation preview area</p>
-              ) : (
-                renderPreview()
-              )}
-            </div>
+            <p className="text-xs text-blue-600 mb-4">
+              Draw directly on the image above to create your annotation.
+            </p>
           </div>
           
           {(previewAnnotation || freehandPoints.length > 0) && (

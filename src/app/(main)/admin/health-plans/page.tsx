@@ -1,8 +1,9 @@
 'use client'
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 // Navigation components are now provided by AppLayout
 import { HealthPlanForm } from "@/components/health-plans/health-plan-form";
+import { EditHealthPlanForm } from "@/components/health-plans/edit-health-plan-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,50 +11,118 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useUser } from "@/context/UserContext";
+import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { HealthPlan, HealthPlanMilestone, Pet } from "@/db/schema";
 import { isPracticeAdministrator, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
 import { RequirePermission, PermissionButton } from '@/lib/rbac/components';
-import { Loader2, PlusCircle, CalendarIcon, CheckCircle2, XCircle, HeartPulse } from "lucide-react";
+import { Loader2, Plus, CalendarIcon, CheckCircle2, XCircle, HeartPulse } from "lucide-react";
 
 export default function HealthPlansPage() {
   const [isHealthPlanDialogOpen, setIsHealthPlanDialogOpen] = useState(false);
+  const [isEditPlanDialogOpen, setIsEditPlanDialogOpen] = useState(false);
+  const [isAddMilestoneOpen, setIsAddMilestoneOpen] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
-  const { user } = useUser();
+  const [milestoneTitle, setMilestoneTitle] = useState('');
+  const [milestoneDescription, setMilestoneDescription] = useState('');
+  const [milestoneDueDate, setMilestoneDueDate] = useState<string>('');
+  const [noteText, setNoteText] = useState<string>('');
+  const { user, initialAuthChecked, fetchUser } = useUser();
+  const router = useRouter();
   const { toast } = useToast();
 
+  // Helper: fetch with timeout to avoid queries hanging indefinitely
+  const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 8000) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(id);
+      return res;
+    } catch (err) {
+      clearTimeout(id);
+      throw err;
+    }
+  };
+
   // Fetch health plans
-  const { data: healthPlans, isLoading: isHealthPlansLoading } = useQuery<HealthPlan[]>({
+  const { data: healthPlans, isLoading: isHealthPlansLoading, isError: isHealthPlansError, refetch: refetchHealthPlans } = useQuery<HealthPlan[]>({
     queryKey: ["/api/health-plans"],
     queryFn: async () => {
-      const response = await fetch('/api/health-plans');
-      if (!response.ok) throw new Error('Failed to fetch health plans');
+      const response = await fetchWithTimeout('/api/health-plans');
+      if (response.status === 401) {
+        await fetchUser();
+        router.push('/auth/login');
+        throw new Error('Unauthorized');
+      }
+
+      if (response.status === 403) {
+        // If the server forbids this admin endpoint, try the client-specific endpoint
+        // which will return health plans for clients (or empty array) if appropriate.
+        const clientRes = await fetchWithTimeout('/api/health-plans/client');
+        if (!clientRes.ok) {
+          const body = await clientRes.json().catch(() => ({}));
+          throw new Error(body?.error || 'Failed to fetch client health plans');
+        }
+        return clientRes.json();
+      }
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body?.error || 'Failed to fetch health plans');
+      }
+
       return response.json();
     },
-    enabled: !!user,
+  enabled: !!user && initialAuthChecked,
+    retry: 0,
   });
 
   // Fetch pets
-  const { data: pets, isLoading: isPetsLoading } = useQuery<Pet[]>({
+  const { data: pets, isLoading: isPetsLoading, isError: isPetsError, refetch: refetchPets } = useQuery<Pet[]>({
     queryKey: ["/api/pets"],
     queryFn: async () => {
-      const response = await fetch('/api/pets');
-      if (!response.ok) throw new Error('Failed to fetch pets');
+      const response = await fetchWithTimeout('/api/pets');
+      if (response.status === 401) {
+        await fetchUser();
+        router.push('/auth/login');
+        throw new Error('Unauthorized');
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body?.error || 'Failed to fetch pets');
+      }
       return response.json();
     },
-    enabled: !!user,
+  enabled: !!user && initialAuthChecked,
+    retry: 0,
   });
 
   // Fetch health plan milestones for the selected plan
-  const { data: milestones, isLoading: isMilestonesLoading } = useQuery<HealthPlanMilestone[]>({
-    queryKey: ["/api/health-plans", selectedPlanId, "milestones"],
+  const { data: milestones, isLoading: isMilestonesLoading, isError: isMilestonesError, refetch: refetchMilestones } = useQuery<HealthPlanMilestone[]>({
+  queryKey: selectedPlanId !== null ? ["/api/health-plans", selectedPlanId, "milestones"] : ["/api/health-plans", "no-plan", "milestones"],
     queryFn: async () => {
-      const response = await fetch(`/api/health-plans/${selectedPlanId}/milestones`);
+      if (selectedPlanId === null) return [] as HealthPlanMilestone[];
+      const response = await fetchWithTimeout(`/api/health-plans/${selectedPlanId}/milestones`);
       if (!response.ok) throw new Error('Failed to fetch health plan milestones');
       return response.json();
     },
-    enabled: !!selectedPlanId,
+  enabled: selectedPlanId !== null && initialAuthChecked,
+    retry: 0,
+  });
+
+  // Fetch health plan notes for the selected plan
+  const { data: planNotes, isLoading: isNotesLoading, isError: isNotesError, refetch: refetchNotes } = useQuery({
+    queryKey: selectedPlanId !== null ? ["/api/health-plans", selectedPlanId, "notes"] : ["/api/health-plans", "no-plan", "notes"],
+    queryFn: async () => {
+      if (selectedPlanId === null) return [];
+      const response = await fetchWithTimeout(`/api/health-plans/${selectedPlanId}/notes`);
+      if (!response.ok) throw new Error('Failed to fetch health plan notes');
+      return response.json();
+    },
+    enabled: selectedPlanId !== null && initialAuthChecked,
+    retry: 0,
   });
 
   // Toggle milestone completion mutation
@@ -62,7 +131,9 @@ export default function HealthPlansPage() {
       return await apiRequest("PATCH", `/api/health-plan-milestones/${milestoneId}/toggle`, {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/health-plans", selectedPlanId, "milestones"] });
+  if (selectedPlanId !== null) queryClient.invalidateQueries({ queryKey: ["/api/health-plans", selectedPlanId, "milestones"] });
+      refetchMilestones();
+
       toast({
         title: "Milestone updated",
         description: "The milestone status has been successfully updated.",
@@ -77,18 +148,60 @@ export default function HealthPlansPage() {
     },
   });
 
+  // Create milestone mutation
+  const createMilestoneMutation = useMutation({
+    mutationFn: async (data: { planId: number; title: string; description?: string | null; dueDate?: string | null }) => {
+      return await apiRequest('POST', `/api/health-plans/${data.planId}/milestones`, data);
+    },
+    onSuccess: () => {
+  if (selectedPlanId !== null) queryClient.invalidateQueries({ queryKey: ["/api/health-plans", selectedPlanId, "milestones"] });
+        refetchMilestones();
+      toast({ title: 'Milestone added', description: 'The milestone was added successfully.' });
+      setIsAddMilestoneOpen(false);
+      setMilestoneTitle('');
+      setMilestoneDescription('');
+      setMilestoneDueDate('');
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed to add milestone', description: error?.message || 'An error occurred', variant: 'destructive' });
+    }
+  });
+
+  // Save note mutation (creates a new note for the health plan)
+  const saveNoteMutation = useMutation({
+    mutationFn: async (data: { planId: number; note: string }) => {
+      return await apiRequest('POST', `/api/health-plans/${data.planId}/notes`, { note: data.note });
+    },
+    onSuccess: async () => {
+      if (selectedPlanId !== null) {
+        await queryClient.refetchQueries({ queryKey: ["/api/health-plans", selectedPlanId, "notes"], exact: true });
+        await refetchNotes();
+      }
+      setNoteText(''); // Clear the input after saving
+      toast({ title: 'Note saved', description: 'The note was saved successfully.' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed to save note', description: error?.message || 'An error occurred', variant: 'destructive' });
+    }
+  });
+
   // Handle selecting a health plan
   const handleSelectPlan = (planId: number) => {
     setSelectedPlanId(planId);
   };
 
   // Get selected health plan
-  const selectedPlan = healthPlans?.find(plan => plan.id === selectedPlanId);
+  const selectedPlan = healthPlans?.find(plan => Number((plan as any).id) === selectedPlanId);
   
   // Get pet for selected plan
   const selectedPlanPet = selectedPlan && pets 
-    ? pets.find(pet => pet.id === selectedPlan.petId) 
+    ? pets.find(pet => pet.id === Number((selectedPlan as any).petId)) 
     : null;
+
+  // Keep note text in sync when selected plan changes
+  useEffect(() => {
+    setNoteText(''); // Clear note text when switching plans
+  }, [selectedPlanId]);
   
   // Calculate milestone completion percentage
   const calculateCompletionPercentage = (milestones: HealthPlanMilestone[] | undefined): number => {
@@ -106,7 +219,7 @@ export default function HealthPlansPage() {
     }
   };
   
-  const isLoading = isHealthPlansLoading || isPetsLoading;
+  const isLoading = (!initialAuthChecked) || isHealthPlansLoading || isPetsLoading;
   const canCreateHealthPlan = user && (isPracticeAdministrator(user as any) || isVeterinarian(user as any));
 
   return (
@@ -124,9 +237,9 @@ export default function HealthPlansPage() {
                   {canCreateHealthPlan && (
                     <Dialog open={isHealthPlanDialogOpen} onOpenChange={setIsHealthPlanDialogOpen}>
                       <DialogTrigger asChild>
-                        <PermissionButton resource={"health_plans" as any} action={"CREATE" as any} className="inline-flex items-center" onClick={() => setIsHealthPlanDialogOpen(true)}>
-                          <PlusCircle className="h-4 w-4 mr-2" />
-                          Create Plan
+                        <PermissionButton resource={"health_plans" as any} action={"CREATE" as any}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add New Plan
                         </PermissionButton>
                       </DialogTrigger>
                       <DialogContent className="sm:max-w-[600px]">
@@ -136,30 +249,61 @@ export default function HealthPlansPage() {
                         <HealthPlanForm 
                           onSuccess={() => {
                             setIsHealthPlanDialogOpen(false);
-                            queryClient.invalidateQueries({ queryKey: ["/api/health-plans"] });
+                            refetchHealthPlans();
                           }}
                         />
                       </DialogContent>
                     </Dialog>
                   )}
                 </CardHeader>
+                
+                {/* Edit Health Plan Dialog */}
+                {selectedPlan && (
+                  <Dialog open={isEditPlanDialogOpen} onOpenChange={setIsEditPlanDialogOpen}>
+                    <DialogContent className="sm:max-w-[600px]">
+                      <DialogHeader>
+                        <DialogTitle>Edit Health Plan</DialogTitle>
+                      </DialogHeader>
+                      <EditHealthPlanForm 
+                        healthPlan={selectedPlan}
+                        onSuccess={() => {
+                          setIsEditPlanDialogOpen(false);
+                          refetchHealthPlans();
+                        }}
+                      />
+                    </DialogContent>
+                  </Dialog>
+                )}
+                
                 <CardContent className="h-[calc(100vh-220px)] overflow-y-auto pb-0">
                   {isLoading ? (
-                    <div className="flex items-center justify-center h-40">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
+                    <div className="space-y-3">
+                      {[1,2,3,4].map(i => (
+                        <div key={i} className="animate-pulse border border-slate-100 rounded-lg p-4 bg-slate-50">
+                          <div className="h-4 bg-slate-200 rounded w-3/4 mb-2" />
+                          <div className="h-3 bg-slate-200 rounded w-1/2 mb-3" />
+                          <div className="flex items-center">
+                            <div className="w-8 h-8 rounded-full bg-slate-200 mr-3" />
+                            <div className="flex-1">
+                              <div className="h-3 bg-slate-200 rounded w-1/3 mb-1" />
+                              <div className="h-2 bg-slate-200 rounded w-1/4" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : healthPlans && healthPlans.length > 0 ? (
                     <div className="space-y-3">
                       {healthPlans.map((plan) => {
-                        const planPet = pets?.find(pet => pet.id === plan.petId);
+                        const planPet = pets?.find(pet => pet.id === Number((plan as any).petId));
                         
                         return (
                           <div
                             key={plan.id}
                             className={`border border-slate-200 rounded-lg p-4 cursor-pointer hover:border-primary-200 hover:bg-primary-50 transition-colors ${
-                              selectedPlanId === plan.id ? "border-primary-200 bg-primary-50" : ""
+                              selectedPlanId === Number((plan as any).id) ? "border-primary-200 bg-primary-50" : ""
                             }`}
-                            onClick={() => handleSelectPlan(plan.id)}
+                            onClick={() => handleSelectPlan(Number((plan as any).id))}
                           >
                             <div className="flex justify-between items-start mb-2">
                               <h3 className="font-medium text-slate-900">{plan.name}</h3>
@@ -171,8 +315,8 @@ export default function HealthPlansPage() {
                             <div className="flex items-center text-sm text-slate-500 mb-3">
                               <CalendarIcon className="h-3.5 w-3.5 mr-1 text-slate-400" />
                               <span>
-                                {new Date(plan.startDate).toLocaleDateString()} 
-                                {plan.endDate ? ` - ${new Date(plan.endDate).toLocaleDateString()}` : ""}
+                                {plan.startDate ? new Date((plan as any).startDate).toLocaleDateString() : ''} 
+                                {plan.endDate ? ` - ${new Date((plan as any).endDate).toLocaleDateString()}` : ""}
                               </span>
                             </div>
                             
@@ -196,15 +340,32 @@ export default function HealthPlansPage() {
                               <div className="flex justify-between text-xs text-slate-500 mb-1">
                                 <span>Progress</span>
                                 <span>
-                                  {/* This would be replaced with actual milestone completion data */}
-                                  0%
+                                  {selectedPlanId === Number((plan as any).id)
+                                    ? `${calculateCompletionPercentage(milestones)}%`
+                                    : (typeof (plan as any).milestoneCount !== 'undefined'
+                                        ? `${Math.round(((plan as any).milestoneCompletedCount || 0) / ((plan as any).milestoneCount || 1) * 100)}%`
+                                        : '0%')}
                                 </span>
                               </div>
-                              <Progress value={0} className="h-1.5" />
+                              <Progress
+                                value={selectedPlanId === Number((plan as any).id)
+                                  ? calculateCompletionPercentage(milestones)
+                                  : (typeof (plan as any).milestoneCount !== 'undefined'
+                                      ? Math.round(((plan as any).milestoneCompletedCount || 0) / ((plan as any).milestoneCount || 1) * 100)
+                                      : 0)}
+                                className="h-1.5"
+                              />
                             </div>
                           </div>
                         );
                       })}
+                    </div>
+                  ) : isHealthPlansError ? (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-destructive-600 mb-3">Failed to load health plans.</p>
+                      <div className="flex items-center justify-center">
+                        <Button onClick={() => refetchHealthPlans()}>Retry</Button>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-10 text-center">
@@ -218,7 +379,7 @@ export default function HealthPlansPage() {
                           : "You don't have any health plans assigned yet."}
                       </p>
                       {canCreateHealthPlan && (
-                        <Button onClick={() => setIsHealthPlanDialogOpen(true)}>
+                                <Button onClick={() => setIsHealthPlanDialogOpen(true)}>
                           Create Health Plan
                         </Button>
                       )}
@@ -241,13 +402,19 @@ export default function HealthPlansPage() {
                         </p>
                       </div>
                       <div className="flex space-x-2">
-                        <Button variant="outline" size="sm">
+                        <PermissionButton 
+                          resource={"health_plans" as any} 
+                          action={"UPDATE" as any}
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setIsEditPlanDialogOpen(true)}
+                        >
                           Edit Plan
-                        </Button>
-                        <Dialog>
+                        </PermissionButton>
+                        <Dialog open={isAddMilestoneOpen} onOpenChange={setIsAddMilestoneOpen}>
                           <DialogTrigger asChild>
-                            <PermissionButton resource={"health_plans" as any} action={"UPDATE" as any} className="inline-flex items-center">
-                              <PlusCircle className="h-4 w-4 mr-2" />
+                            <PermissionButton resource={"health_plans" as any} action={"UPDATE" as any}>
+                              <Plus className="h-4 w-4" />
                               Add Milestone
                             </PermissionButton>
                           </DialogTrigger>
@@ -255,24 +422,27 @@ export default function HealthPlansPage() {
                             <DialogHeader>
                               <DialogTitle>Add Milestone</DialogTitle>
                             </DialogHeader>
-                            {/* Milestone form would go here */}
-                            <div className="space-y-4 py-4">
-                              <div className="space-y-2">
-                                <label htmlFor="milestone-title" className="text-sm font-medium">Title</label>
-                                <input id="milestone-title" className="w-full p-2 border border-slate-300 rounded-md" placeholder="Milestone title" />
+                              <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                  <label htmlFor="milestone-title" className="text-sm font-medium">Title</label>
+                                  <input id="milestone-title" value={milestoneTitle} onChange={(e) => setMilestoneTitle(e.target.value)} className="w-full p-2 border border-slate-300 rounded-md" placeholder="Milestone title" />
+                                </div>
+                                <div className="space-y-2">
+                                  <label htmlFor="milestone-description" className="text-sm font-medium">Description</label>
+                                  <textarea id="milestone-description" value={milestoneDescription} onChange={(e) => setMilestoneDescription(e.target.value)} className="w-full p-2 border border-slate-300 rounded-md" placeholder="Description" rows={3} />
+                                </div>
+                                <div className="space-y-2">
+                                  <label htmlFor="milestone-date" className="text-sm font-medium">Due Date</label>
+                                  <input id="milestone-date" value={milestoneDueDate} onChange={(e) => setMilestoneDueDate(e.target.value)} type="date" className="w-full p-2 border border-slate-300 rounded-md" />
+                                </div>
+                                <div className="flex justify-end pt-4">
+                                <Button onClick={() => {
+                                  if (selectedPlanId === null) return toast({ title: 'Select a plan first', description: '' });
+                                  if (!milestoneTitle) return toast({ title: 'Title required', description: 'Please enter a title', variant: 'destructive' });
+                                  createMilestoneMutation.mutate({ planId: selectedPlanId as number, title: milestoneTitle, description: milestoneDescription || undefined, dueDate: milestoneDueDate || undefined });
+                                }} disabled={Boolean((createMilestoneMutation as any).isLoading)}>Add Milestone</Button>
                               </div>
-                              <div className="space-y-2">
-                                <label htmlFor="milestone-description" className="text-sm font-medium">Description</label>
-                                <textarea id="milestone-description" className="w-full p-2 border border-slate-300 rounded-md" placeholder="Description" rows={3} />
                               </div>
-                              <div className="space-y-2">
-                                <label htmlFor="milestone-date" className="text-sm font-medium">Due Date</label>
-                                <input id="milestone-date" type="date" className="w-full p-2 border border-slate-300 rounded-md" />
-                              </div>
-                              <div className="flex justify-end pt-4">
-                                <Button>Add Milestone</Button>
-                              </div>
-                            </div>
                           </DialogContent>
                         </Dialog>
                       </div>
@@ -288,8 +458,21 @@ export default function HealthPlansPage() {
                       
                       <TabsContent value="milestones">
                         {isMilestonesLoading ? (
-                          <div className="flex items-center justify-center h-40">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
+                          <div className="space-y-4">
+                            {[1,2,3].map(i => (
+                              <div key={i} className="animate-pulse p-4 bg-slate-50 rounded-lg">
+                                <div className="h-4 bg-slate-200 rounded w-1/3 mb-2" />
+                                <div className="h-3 bg-slate-200 rounded w-1/2 mb-2" />
+                                <div className="h-2 bg-slate-200 rounded w-full" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : isMilestonesError ? (
+                          <div className="text-center py-8">
+                            <p className="text-sm text-destructive-600 mb-3">Failed to load milestones.</p>
+                            <div className="flex justify-center">
+                              <Button onClick={() => refetchMilestones()}>Retry</Button>
+                            </div>
                           </div>
                         ) : milestones && milestones.length > 0 ? (
                           <div className="space-y-4">
@@ -312,11 +495,11 @@ export default function HealthPlansPage() {
                                   key={milestone.id} 
                                   className="p-4 flex items-start"
                                 >
-                                  <div 
+                                    <div 
                                     className={`flex-shrink-0 w-5 h-5 rounded-full mr-3 cursor-pointer ${
                                       canCreateHealthPlan ? "cursor-pointer" : "cursor-default"
                                     }`}
-                                    onClick={() => canCreateHealthPlan && handleToggleMilestone(milestone.id)}
+                                    onClick={() => canCreateHealthPlan && handleToggleMilestone(Number((milestone as any).id))}
                                   >
                                     {milestone.completed ? (
                                       <CheckCircle2 className="h-5 w-5 text-green-500" />
@@ -369,7 +552,7 @@ export default function HealthPlansPage() {
                             </p>
                             {canCreateHealthPlan && (
                               <Button>
-                                <PlusCircle className="h-4 w-4 mr-2" />
+                                <Plus className="h-4 w-4 mr-2" />
                                 Add Milestone
                               </Button>
                             )}
@@ -391,7 +574,7 @@ export default function HealthPlansPage() {
                               <div>
                                 <p className="text-sm text-slate-500">Period</p>
                                 <p className="font-medium">
-                                  {new Date(selectedPlan.startDate).toLocaleDateString()} 
+                                  {selectedPlan.startDate ? new Date(selectedPlan.startDate).toLocaleDateString() : ''} 
                                   {selectedPlan.endDate ? ` - ${new Date(selectedPlan.endDate).toLocaleDateString()}` : ""}
                                 </p>
                               </div>
@@ -427,11 +610,40 @@ export default function HealthPlansPage() {
                       
                       <TabsContent value="notes">
                         <div className="rounded-lg border border-slate-200 p-4 space-y-4">
-                          {(selectedPlan as any)?.notes ? (
-                            <div>
-                              <p className="text-sm text-slate-700 whitespace-pre-line">
-                                {(selectedPlan as any).notes}
-                              </p>
+                          {isNotesLoading ? (
+                            <div className="space-y-3">
+                              {[1,2].map(i => (
+                                <div key={i} className="animate-pulse p-3 bg-slate-50 rounded-lg">
+                                  <div className="h-3 bg-slate-200 rounded w-1/4 mb-2" />
+                                  <div className="h-4 bg-slate-200 rounded w-full mb-1" />
+                                  <div className="h-4 bg-slate-200 rounded w-3/4" />
+                                </div>
+                              ))}
+                            </div>
+                          ) : isNotesError ? (
+                            <div className="text-center py-6">
+                              <p className="text-sm text-destructive-600 mb-3">Failed to load notes.</p>
+                              <Button onClick={() => refetchNotes()}>Retry</Button>
+                            </div>
+                          ) : planNotes && planNotes.length > 0 ? (
+                            <div className="space-y-3 max-h-64 overflow-y-auto">
+                              {planNotes.map((note: any) => (
+                                <div key={note.id} className="bg-slate-50 rounded-lg p-3">
+                                  <div className="flex justify-between items-start mb-2">
+                                    <span className="text-xs text-slate-500">
+                                      {new Date(note.createdAt).toLocaleDateString()} at {new Date(note.createdAt).toLocaleTimeString()}
+                                    </span>
+                                    {note.createdById && (
+                                      <span className="text-xs text-slate-500">
+                                        Staff ID: {note.createdById}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-slate-700 whitespace-pre-line">
+                                    {note.note}
+                                  </p>
+                                </div>
+                              ))}
                             </div>
                           ) : (
                             <div className="text-center py-6">
@@ -445,10 +657,21 @@ export default function HealthPlansPage() {
                               <textarea 
                                 className="w-full p-3 border border-slate-300 rounded-md text-sm"
                                 rows={4}
-                                placeholder="Enter additional notes for this health plan..."
+                                placeholder="Enter a note for this health plan..."
+                                value={noteText}
+                                onChange={(e) => setNoteText(e.target.value)}
                               />
                               <div className="flex justify-end mt-2">
-                                <Button>Save Note</Button>
+                                <Button 
+                                  onClick={() => {
+                                    if (selectedPlanId === null) return toast({ title: 'No plan selected', description: '' });
+                                    if (!noteText.trim()) return toast({ title: 'Note cannot be empty', description: 'Please enter a note', variant: 'destructive' });
+                                    saveNoteMutation.mutate({ planId: selectedPlanId, note: noteText.trim() });
+                                  }} 
+                                  disabled={saveNoteMutation.isPending || !noteText.trim()}
+                                >
+                                  {saveNoteMutation.isPending ? 'Saving...' : 'Save Note'}
+                                </Button>
                               </div>
                             </div>
                           )}

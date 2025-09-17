@@ -1,8 +1,8 @@
-// src/db/schemas/healthPlansSchema.ts
 import { dbTable, text, timestamp, primaryKeyId, foreignKeyInt } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { pets } from './petsSchema';
 import { practices } from './practicesSchema';
+import { healthPlanMilestones } from './healthPlanMilestonesSchema';
 
 export const healthPlanStatusEnum = ['active', 'inactive', 'completed', 'pending'] as const;
 
@@ -21,7 +21,7 @@ export const healthPlans = dbTable('health_plans', {
   updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
 });
 
-export const healthPlansRelations = relations(healthPlans, ({ one }) => ({
+export const healthPlansRelations = relations(healthPlans, ({ one, many }) => ({
   pet: one(pets, {
     fields: [healthPlans.petId],
     references: [pets.id],
@@ -30,6 +30,7 @@ export const healthPlansRelations = relations(healthPlans, ({ one }) => ({
     fields: [healthPlans.practiceId],
     references: [practices.id],
   }),
+  milestones: many(healthPlanMilestones),
 }));
 
 export type SelectHealthPlan = typeof healthPlans.$inferSelect;

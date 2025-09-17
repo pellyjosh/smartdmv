@@ -71,6 +71,34 @@
       "when": 1757507077362,
       "tag": "0009_needy_masked_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1757884586247,
+      "tag": "0010_bent_winter_soldier",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1757884836502,
+      "tag": "0011_messy_vindicator",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1757886291054,
+      "tag": "0012_flashy_dormammu",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1757961563368,
+      "tag": "0013_groovy_jack_power",
+      "breakpoints": true
     }
   ]
 }

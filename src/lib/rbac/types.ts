@@ -239,6 +239,7 @@ export interface RequirePermissionProps {
   practiceId?: number;
   resourceId?: string;
   redirectTo?: string;
+  autoRedirect?: boolean;
   showFallback?: boolean;
   fallbackComponent?: React.ComponentType;
 }

@@ -6,7 +6,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
 import { usePermission, useRole, useFeatureFlags } from './hooks';
+import { useUser } from '@/context/UserContext';
 import { ResourceType, StandardAction, WithPermissionProps, RequirePermissionProps } from './types';
 
 /**
@@ -53,6 +56,7 @@ export function RequirePermission({
   practiceId,
   resourceId,
   redirectTo = '/access-denied',
+  autoRedirect = false,
   showFallback = true,
   fallbackComponent: FallbackComponent
 }: RequirePermissionProps & { children: React.ReactNode }) {
@@ -61,23 +65,33 @@ export function RequirePermission({
     practiceId,
     resourceId
   });
+  // Respect the global auth readiness so we don't redirect/render access denied
+  // before the initial auth check completes.
+  const { initialAuthChecked, isLoading: userLoading } = useUser();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading) {
+    // Wait until the global auth check has completed as well as permission hook
+    if (!userLoading && initialAuthChecked && !isLoading) {
       checkPermission().then(result => {
         setHasPermission(result.allowed);
-        if (!result.allowed && redirectTo) {
+        // Only perform an automatic redirect if explicitly requested. By
+        // default we render an Access Denied fallback to avoid flashing a
+        // redirect while the permission check settles.
+        if (!result.allowed && redirectTo && autoRedirect) {
           router.push(redirectTo);
         }
       });
     }
-  }, [checkPermission, isLoading, redirectTo, router]);
+  }, [checkPermission, isLoading, redirectTo, router, initialAuthChecked, userLoading]);
 
-  if (isLoading || hasPermission === null) {
+  // While global auth or permission check is pending show a compact skeleton so
+  // page chrome isn't replaced by the large spinner and we avoid flashing
+  // access-denied before the auth check completes.
+  if (userLoading || isLoading || hasPermission === null || !initialAuthChecked) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center py-6">
+        <div className="animate-pulse bg-gray-200 h-4 w-28 rounded"></div>
       </div>
     );
   }
@@ -196,13 +210,15 @@ export function AdminOnly({ children, fallback = null, level = 'any' }: AdminOnl
 /**
  * Permission-aware button component
  */
-interface PermissionButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface PermissionButtonProps extends React.ComponentProps<typeof Button> {
   resource: ResourceType | string;
   action: StandardAction | string;
   practiceId?: number;
   resourceId?: string;
   fallbackText?: string;
   children: React.ReactNode;
+  isLoading?: boolean; // Allow external loading state
+  loadingText?: string; // Custom loading text
 }
 
 export function PermissionButton({
@@ -213,54 +229,77 @@ export function PermissionButton({
   fallbackText = '',
   children,
   disabled,
+  isLoading: externalLoading = false,
+  loadingText = 'Loading...',
+  onClick,
   ...props
 }: PermissionButtonProps) {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const { checkPermission, isLoading } = usePermission(resource, action, {
+  const [internalLoading, setInternalLoading] = useState(false);
+  const { checkPermission, isLoading: permissionLoading } = usePermission(resource, action, {
     practiceId,
     resourceId
   });
 
+  const isLoading = externalLoading || internalLoading;
+  const isDisabled = disabled || isLoading || !hasPermission;
+
   useEffect(() => {
-    if (!isLoading) {
+    if (!permissionLoading) {
       checkPermission().then(result => {
         setHasPermission(result.allowed);
       });
     }
-  }, [checkPermission, isLoading]);
+  }, [checkPermission, permissionLoading]);
 
-  if (isLoading || hasPermission === null) {
+  const handleClick = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!onClick || isDisabled) return;
+
+    setInternalLoading(true);
+    try {
+      await onClick(event);
+    } catch (error) {
+      console.error('Button action failed:', error);
+    } finally {
+      setInternalLoading(false);
+    }
+  };
+
+  if (permissionLoading || hasPermission === null) {
     return (
-      <button 
+      <Button 
         disabled 
         className="opacity-50 cursor-not-allowed"
         {...props}
       >
+        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
         <div className="animate-pulse bg-gray-200 h-4 w-16 rounded"></div>
-      </button>
+      </Button>
     );
   }
 
   if (!hasPermission) {
     return (
-      <button 
+      <Button 
         disabled 
         title="You don't have permission to perform this action"
         className="opacity-50 cursor-not-allowed"
         {...props}
       >
         {fallbackText}
-      </button>
+      </Button>
     );
   }
 
   return (
-    <button 
-      disabled={disabled}
+    <Button 
+      disabled={isDisabled}
+      onClick={handleClick}
       {...props}
     >
-      {children}
-    </button>
+      {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+      {isLoading ? loadingText : children}
+    </Button>
   );
 }
 

@@ -11,6 +11,9 @@ import { ThemeSwitcherWidget } from '@/components/ThemeSwitcherWidget';
 import ClientOnlyWrapper from '@/components/utils/ClientOnlyWrapper'; // Import the wrapper
 import { NetworkStatus } from '@/components/NetworkStatus';
 import { MobileBlocker } from '@/components/ui/mobile-blocker';
+import { NotificationWrapper } from '@/components/notifications/notification-wrapper';
+
+import GlobalLoader from '@/components/GlobalLoader';
 
 export const metadata: Metadata = {
   title: 'SmartDVM',
@@ -28,11 +31,14 @@ export default function RootLayout({
       <ReactQueryProvider>
         <UserProvider>
           <ThemeProvider>
-            <MobileBlocker allowTablets={false}>
-              <ClientOnlyWrapper> {/* Wrap children with ClientOnlyWrapper */}
-                {children}
-              </ClientOnlyWrapper>
-            </MobileBlocker>
+            <NotificationWrapper>
+              <MobileBlocker allowTablets={false}>
+                <ClientOnlyWrapper>
+                  <GlobalLoader />
+                  {children}
+                </ClientOnlyWrapper>
+              </MobileBlocker>
+            </NotificationWrapper>
             <Toaster />
             <NetworkStatus />
             <ThemeSwitcherWidget /> 

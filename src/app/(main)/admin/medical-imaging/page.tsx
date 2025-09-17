@@ -249,7 +249,7 @@ const MedicalImagingPage: React.FC = () => {
         body: JSON.stringify({
           ...data,
           petId: data.petId,
-          practiceId: "default-practice", // You might want to get this from context
+          practiceId: userPracticeId || "default-practice", // Use practice ID from context
           imagingType: data.studyType,
           anatomicalRegion: "other", // Default value
           studyName: data.studyType,
@@ -341,6 +341,24 @@ const MedicalImagingPage: React.FC = () => {
     if (e.target.files && e.target.files.length > 0) {
       setSelectedFile(e.target.files[0]);
     }
+  };
+  
+  // Generate placeholder image data URL
+  const getPlaceholderImage = () => {
+    const svg = `
+      <svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100%" height="100%" fill="#f3f4f6"/>
+        <text x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="system-ui, sans-serif" font-size="14" fill="#6b7280">
+          Medical Image
+        </text>
+      </svg>
+    `;
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
+  };
+  
+  // Handle image load errors
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    e.currentTarget.src = getPlaceholderImage();
   };
   
   // Handles submission of new medical imaging study form
@@ -499,9 +517,10 @@ const MedicalImagingPage: React.FC = () => {
                       onClick={() => setSelectedSeries(series.id)}
                     >
                       <img 
-                        src={series.filePath ? `/${series.filePath.replace(/\\/g, '/')}` : '/placeholder-image.jpg'} 
+                        src={series.filePath ? `/${series.filePath.replace(/\\/g, '/')}` : getPlaceholderImage()} 
                         alt={series.description || `Series ${series.id}`}
                         className="w-full h-32 object-cover"
+                        onError={handleImageError}
                       />
                       <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2">
                         <p className="text-white text-xs truncate">
@@ -532,7 +551,7 @@ const MedicalImagingPage: React.FC = () => {
                     imageUrl={
                       imagingSeries?.find((s: any) => s.id === selectedSeries)?.filePath 
                         ? `/${imagingSeries?.find((s: any) => s.id === selectedSeries)?.filePath?.replace(/\\/g, '/')}` 
-                        : '/placeholder-image.jpg'
+                        : getPlaceholderImage()
                     }
                     title={imagingSeries?.find((s: any) => s.id === selectedSeries)?.modality || 'Medical Image'}
                     description={imagingSeries?.find((s: any) => s.id === selectedSeries)?.description || ''}

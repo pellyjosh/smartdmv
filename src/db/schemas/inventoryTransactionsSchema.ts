@@ -16,7 +16,7 @@ export const inventoryTransactions = dbTable('inventory_transactions', {
   referenceType: text("reference_type"), // e.g., "appointment", "prescription", "manual"
   referenceId: text("reference_id"), // ID of the referenced entity
   referenceData: text("reference_data"), // JSON string with additional data about the reference
-  performedById: text("performed_by_id").notNull().references(() => users.id),
+  performedById: foreignKeyInt("performed_by_id").notNull().references(() => users.id),
   createdAt: timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 

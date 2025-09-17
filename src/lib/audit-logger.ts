@@ -70,13 +70,22 @@ export async function createAuditLog(params: CreateAuditLogParams): Promise<void
       if (input instanceof Date) return input.toISOString();
       const t = typeof input;
       if (t === 'string' || t === 'number' || t === 'boolean') return input;
-      if (Array.isArray(input)) return input.map(sanitizeForAudit);
+      if (Array.isArray(input)) {
+        return input.map(item => {
+          try {
+            return sanitizeForAudit(item);
+          } catch (e) {
+            return String(item);
+          }
+        });
+      }
       if (t === 'object') {
         try {
           // if it's an object with a toISOString method, try to use it safely
           if (typeof (input as any).toISOString === 'function') {
             try {
-              return (input as any).toISOString();
+              const iso = (input as any).toISOString();
+              return iso;
             } catch (e) {
               // fallthrough to object traversal
             }
@@ -175,7 +184,15 @@ export async function createAuditLogsBatch(logs: CreateAuditLogParams[]): Promis
       if (input instanceof Date) return input.toISOString();
       const t = typeof input;
       if (t === 'string' || t === 'number' || t === 'boolean') return input;
-      if (Array.isArray(input)) return input.map(sanitizeForAudit);
+      if (Array.isArray(input)) {
+        return input.map(item => {
+          try {
+            return sanitizeForAudit(item);
+          } catch (e) {
+            return String(item);
+          }
+        });
+      }
       if (t === 'object') {
         try {
           if (typeof (input as any).toISOString === 'function') {

@@ -82,6 +82,8 @@ export default function BookAppointmentPage() {
   const [appointmentTitle, setAppointmentTitle] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [preferredPractitioner, setPreferredPractitioner] = useState<string>('');
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch user's pets
   const { data: pets, isLoading: isLoadingPets } = useQuery({
@@ -120,6 +122,76 @@ export default function BookAppointmentPage() {
     }
   }, [selectedPet, selectedType, pets]);
 
+  // Clear form errors when fields are corrected
+  useEffect(() => {
+    if (selectedPet && formErrors.selectedPet) {
+      setFormErrors(prev => ({ ...prev, selectedPet: '' }));
+    }
+  }, [selectedPet, formErrors.selectedPet]);
+
+  useEffect(() => {
+    if (selectedType && formErrors.selectedType) {
+      setFormErrors(prev => ({ ...prev, selectedType: '' }));
+    }
+  }, [selectedType, formErrors.selectedType]);
+
+  useEffect(() => {
+    if (selectedDate && formErrors.selectedDate) {
+      setFormErrors(prev => ({ ...prev, selectedDate: '' }));
+    }
+  }, [selectedDate, formErrors.selectedDate]);
+
+  useEffect(() => {
+    if (selectedTime && formErrors.selectedTime) {
+      setFormErrors(prev => ({ ...prev, selectedTime: '' }));
+    }
+  }, [selectedTime, formErrors.selectedTime]);
+
+  useEffect(() => {
+    if (appointmentTitle.trim() && formErrors.appointmentTitle) {
+      setFormErrors(prev => ({ ...prev, appointmentTitle: '' }));
+    }
+  }, [appointmentTitle, formErrors.appointmentTitle]);
+
+  // Form validation function
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!selectedPet) {
+      errors.selectedPet = 'Please select a pet for the appointment';
+    }
+
+    if (!selectedType) {
+      errors.selectedType = 'Please select an appointment type';
+    }
+
+    if (!selectedDate) {
+      errors.selectedDate = 'Please select an appointment date';
+    } else {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selectedDateOnly = new Date(selectedDate);
+      selectedDateOnly.setHours(0, 0, 0, 0);
+      
+      if (selectedDateOnly < today) {
+        errors.selectedDate = 'Please select a future date';
+      }
+    }
+
+    if (!selectedTime) {
+      errors.selectedTime = 'Please select an appointment time';
+    }
+
+    if (!appointmentTitle.trim()) {
+      errors.appointmentTitle = 'Please provide an appointment title';
+    } else if (appointmentTitle.trim().length < 3) {
+      errors.appointmentTitle = 'Appointment title must be at least 3 characters';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   // Book appointment mutation
   const bookAppointmentMutation = useMutation({
     mutationFn: async (appointmentData: any) => {
@@ -131,17 +203,39 @@ export default function BookAppointmentPage() {
         credentials: 'include',
         body: JSON.stringify(appointmentData)
       });
-      if (!response.ok) throw new Error('Failed to book appointment');
+      
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(errorData || 'Failed to book appointment');
+      }
+      
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setIsSubmitting(false);
       toast({
-        title: 'Appointment Booked!',
+        title: 'Appointment Booked Successfully!',
         description: 'Your appointment request has been submitted. We\'ll contact you soon to confirm.',
       });
-      router.push('/client?tab=appointments');
+      
+      // Reset form
+      setSelectedPet('');
+      setSelectedType('');
+      setSelectedDate(undefined);
+      setSelectedTime('');
+      setAppointmentTitle('');
+      setNotes('');
+      setPreferredPractitioner('');
+      setFormErrors({});
+      
+      // Navigate back to client portal
+      setTimeout(() => {
+        router.push('/client?tab=appointments');
+      }, 1500);
     },
     onError: (error: any) => {
+      setIsSubmitting(false);
+      console.error('Booking error:', error);
       toast({
         title: 'Booking Failed',
         description: error.message || 'Failed to book appointment. Please try again.',
@@ -150,33 +244,49 @@ export default function BookAppointmentPage() {
     }
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedPet || !selectedType || !selectedDate || !selectedTime) {
+    // Clear previous errors
+    setFormErrors({});
+    
+    // Validate form
+    if (!validateForm()) {
       toast({
-        title: 'Missing Information',
-        description: 'Please fill in all required fields.',
+        title: 'Validation Error',
+        description: 'Please fix the errors below and try again.',
         variant: 'destructive'
       });
       return;
     }
 
-    const appointmentType = appointmentTypes.find(t => t.id === selectedType);
-    const [hours, minutes] = selectedTime.split(':').map(Number);
-    const appointmentDateTime = new Date(selectedDate);
-    appointmentDateTime.setHours(hours, minutes, 0, 0);
+    setIsSubmitting(true);
 
-    bookAppointmentMutation.mutate({
-      title: appointmentTitle,
-      description: notes,
-      type: selectedType,
-      date: appointmentDateTime.toISOString(),
-      durationMinutes: appointmentType?.duration.toString() || '30',
-      petId: selectedPet,
-      practitionerId: preferredPractitioner || null,
-      status: 'pending'
-    });
+    try {
+      const appointmentType = appointmentTypes.find(t => t.id === selectedType);
+      const [hours, minutes] = selectedTime.split(':').map(Number);
+      const appointmentDateTime = new Date(selectedDate!);
+      appointmentDateTime.setHours(hours, minutes, 0, 0);
+
+      // Ensure we have all required data
+      const appointmentData = {
+        title: appointmentTitle.trim(),
+        description: notes.trim(),
+        type: selectedType,
+        date: appointmentDateTime.toISOString(),
+        durationMinutes: appointmentType?.duration.toString() || '30',
+        petId: selectedPet,
+        practitionerId: preferredPractitioner || null,
+        status: 'pending'
+      };
+
+      console.log('Submitting appointment data:', appointmentData);
+
+      await bookAppointmentMutation.mutateAsync(appointmentData);
+    } catch (error: any) {
+      console.error('Appointment booking error:', error);
+      setIsSubmitting(false);
+    }
   };
 
   if (!user || user.role !== 'CLIENT') {
@@ -210,28 +320,52 @@ export default function BookAppointmentPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <PawPrint className="h-5 w-5" />
-                  Select Pet
+                  Select Pet *
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {isLoadingPets ? (
                   <Skeleton className="h-12 w-full" />
                 ) : (
-                  <Select value={selectedPet} onValueChange={setSelectedPet}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose your pet" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pets?.map((pet: any) => (
-                        <SelectItem key={pet.id} value={pet.id}>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{pet.name}</span>
-                            <Badge variant="outline">{pet.species}</Badge>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-2">
+                    <Select value={selectedPet} onValueChange={setSelectedPet}>
+                      <SelectTrigger className={cn(
+                        "w-full",
+                        formErrors.selectedPet && "border-red-500 focus:border-red-500"
+                      )}>
+                        <SelectValue placeholder="Choose your pet">
+                          {selectedPet && pets?.find((pet: any) => pet.id === selectedPet) && (
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">
+                                {pets.find((pet: any) => pet.id === selectedPet)?.name}
+                              </span>
+                              <Badge variant="outline">
+                                {pets.find((pet: any) => pet.id === selectedPet)?.species}
+                              </Badge>
+                            </div>
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {pets?.map((pet: any) => (
+                          <SelectItem key={pet.id} value={pet.id}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{pet.name}</span>
+                              <Badge variant="outline">{pet.species}</Badge>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {formErrors.selectedPet && (
+                      <p className="text-sm text-red-500">{formErrors.selectedPet}</p>
+                    )}
+                    {pets && pets.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        No pets found. <Link href="/client/pets/register" className="text-primary underline">Register a pet first</Link>
+                      </p>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -239,9 +373,9 @@ export default function BookAppointmentPage() {
             {/* Appointment Type */}
             <Card>
               <CardHeader>
-                <CardTitle>Appointment Type</CardTitle>
+                <CardTitle>Appointment Type *</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-3">
                 <div className="grid gap-3">
                   {appointmentTypes.map((type) => {
                     const Icon = type.icon;
@@ -252,7 +386,8 @@ export default function BookAppointmentPage() {
                           "p-4 border rounded-lg cursor-pointer transition-all",
                           selectedType === type.id
                             ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/50"
+                            : "border-border hover:border-primary/50",
+                          formErrors.selectedType && "border-red-200"
                         )}
                         onClick={() => setSelectedType(type.id)}
                       >
@@ -274,6 +409,9 @@ export default function BookAppointmentPage() {
                     );
                   })}
                 </div>
+                {formErrors.selectedType && (
+                  <p className="text-sm text-red-500">{formErrors.selectedType}</p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -285,31 +423,44 @@ export default function BookAppointmentPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <CalendarIcon className="h-5 w-5" />
-                  Select Date
+                  Select Date *
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-4">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  disabled={(date) => date < new Date() || date.getDay() === 0} // Disable past dates and Sundays
-                  className="rounded-md border-0 w-full"
-                  classNames={{
-                    months: "flex w-full",
-                    month: "w-full",
-                    table: "w-full",
-                    head_row: "flex w-full",
-                    head_cell: "flex-1 text-center text-muted-foreground font-normal text-sm",
-                    row: "flex w-full mt-1",
-                    cell: "flex-1 text-center p-0",
-                    day: "h-9 w-full text-sm hover:bg-accent hover:text-accent-foreground",
-                    day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
-                    day_today: "bg-accent text-accent-foreground",
-                    day_outside: "text-muted-foreground opacity-50",
-                    day_disabled: "text-muted-foreground opacity-50",
-                  }}
-                />
+              <CardContent className="p-4 space-y-3">
+                <div className={cn(
+                  "rounded-md border p-3",
+                  formErrors.selectedDate && "border-red-200 bg-red-50/50"
+                )}>
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={setSelectedDate}
+                    disabled={(date) => date < new Date() || date.getDay() === 0} // Disable past dates and Sundays
+                    className="rounded-md border-0 w-full"
+                    classNames={{
+                      months: "flex w-full",
+                      month: "w-full",
+                      table: "w-full",
+                      head_row: "flex w-full",
+                      head_cell: "flex-1 text-center text-muted-foreground font-normal text-sm",
+                      row: "flex w-full mt-1",
+                      cell: "flex-1 text-center p-0",
+                      day: "h-9 w-full text-sm hover:bg-accent hover:text-accent-foreground",
+                      day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+                      day_today: "bg-accent text-accent-foreground",
+                      day_outside: "text-muted-foreground opacity-50",
+                      day_disabled: "text-muted-foreground opacity-50",
+                    }}
+                  />
+                </div>
+                {formErrors.selectedDate && (
+                  <p className="text-sm text-red-500">{formErrors.selectedDate}</p>
+                )}
+                {selectedDate && (
+                  <p className="text-sm text-muted-foreground">
+                    Selected: {format(selectedDate, "EEEE, MMMM d, YYYY")}
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -319,10 +470,10 @@ export default function BookAppointmentPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Clock className="h-5 w-5" />
-                    Select Time
+                    Select Time *
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-3">
                   <div className="grid grid-cols-3 gap-2">
                     {timeSlots.map((time) => (
                       <Button
@@ -331,12 +482,23 @@ export default function BookAppointmentPage() {
                         variant={selectedTime === time ? "default" : "outline"}
                         size="sm"
                         onClick={() => setSelectedTime(time)}
-                        className="justify-center"
+                        className={cn(
+                          "justify-center",
+                          formErrors.selectedTime && selectedTime !== time && "border-red-200"
+                        )}
                       >
                         {time}
                       </Button>
                     ))}
                   </div>
+                  {formErrors.selectedTime && (
+                    <p className="text-sm text-red-500">{formErrors.selectedTime}</p>
+                  )}
+                  {selectedTime && (
+                    <p className="text-sm text-muted-foreground">
+                      Selected time: {selectedTime}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -349,17 +511,23 @@ export default function BookAppointmentPage() {
             <CardTitle>Additional Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="title">Appointment Title</Label>
+            <div className="space-y-2">
+              <Label htmlFor="title">Appointment Title *</Label>
               <Input
                 id="title"
                 value={appointmentTitle}
                 onChange={(e) => setAppointmentTitle(e.target.value)}
                 placeholder="Brief description of the appointment"
+                className={cn(
+                  formErrors.appointmentTitle && "border-red-500 focus:border-red-500"
+                )}
               />
+              {formErrors.appointmentTitle && (
+                <p className="text-sm text-red-500">{formErrors.appointmentTitle}</p>
+              )}
             </div>
 
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="practitioner">Preferred Practitioner (Optional)</Label>
               {isLoadingPractitioners ? (
                 <Skeleton className="h-12 w-full" />
@@ -379,8 +547,8 @@ export default function BookAppointmentPage() {
               )}
             </div>
 
-            <div>
-              <Label htmlFor="notes">Notes & Concerns</Label>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes & Concerns (Optional)</Label>
               <Textarea
                 id="notes"
                 value={notes}
@@ -388,23 +556,39 @@ export default function BookAppointmentPage() {
                 placeholder="Describe any specific concerns, symptoms, or questions..."
                 rows={4}
               />
+              <p className="text-xs text-muted-foreground">
+                Provide any additional information that might help the veterinarian prepare for your visit.
+              </p>
             </div>
           </CardContent>
         </Card>
 
         {/* Submit Button */}
         <div className="flex gap-4">
-          <Button type="button" variant="outline" onClick={() => router.back()}>
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={() => router.back()}
+            disabled={isSubmitting || bookAppointmentMutation.isPending}
+          >
             Cancel
           </Button>
           <Button 
             type="submit" 
-            disabled={bookAppointmentMutation.isPending || !selectedPet || !selectedType || !selectedDate || !selectedTime}
+            disabled={
+              isSubmitting || 
+              bookAppointmentMutation.isPending || 
+              !selectedPet || 
+              !selectedType || 
+              !selectedDate || 
+              !selectedTime ||
+              !appointmentTitle.trim()
+            }
             className="flex-1"
           >
-            {bookAppointmentMutation.isPending ? (
+            {isSubmitting || bookAppointmentMutation.isPending ? (
               <>
-                <Skeleton className="h-4 w-4 mr-2" />
+                <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 Booking...
               </>
             ) : (
@@ -412,6 +596,47 @@ export default function BookAppointmentPage() {
             )}
           </Button>
         </div>
+
+        {/* Form Summary */}
+        {selectedPet && selectedType && selectedDate && selectedTime && (
+          <Card className="bg-muted/50">
+            <CardHeader>
+              <CardTitle className="text-base">Appointment Summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Pet:</span>
+                  <span className="font-medium">
+                    {pets?.find((pet: any) => pet.id === selectedPet)?.name}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Type:</span>
+                  <span className="font-medium">
+                    {appointmentTypes.find(t => t.id === selectedType)?.name}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Date:</span>
+                  <span className="font-medium">
+                    {format(selectedDate, "EEEE, MMMM d, YYYY")}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Time:</span>
+                  <span className="font-medium">{selectedTime}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Duration:</span>
+                  <span className="font-medium">
+                    {appointmentTypes.find(t => t.id === selectedType)?.duration} minutes
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </form>
     </div>
   );

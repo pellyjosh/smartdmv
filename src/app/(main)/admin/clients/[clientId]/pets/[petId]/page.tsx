@@ -464,7 +464,7 @@ export default function PetDetailPage() {
                                       variant="ghost" 
                                       size="sm" 
                                       className="h-7 text-xs"
-                                      onClick={() => router.push(`/appointments/${appointment.id}`)}
+                                      onClick={() => router.push(`/appointments?appointmentId=${appointment.id}`)}
                                     >
                                       View Details
                                     </Button>

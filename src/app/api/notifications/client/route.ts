@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
           }
         }
       },
-      orderBy: [desc(notifications.createdAt)]
+      orderBy: [desc(notifications.created_at)]
     });
 
     console.log(`Found ${notificationsData.length} notifications for client ${user.id}`);
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       message: notification.message,
       type: notification.type || 'info',
       read: notification.read,
-      createdAt: notification.createdAt,
+      createdAt: notification.created_at,
       link: notification.link,
       relatedEntityName: notification.relatedId ? `Related Item ${notification.relatedId}` : null,
     }));

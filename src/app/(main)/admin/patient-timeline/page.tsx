@@ -557,26 +557,35 @@ export default function PatientTimelinePage() {
           <div className="flex justify-between w-full">
             <Button variant="outline" size="sm" 
               onClick={() => {
-                // Navigate to the detailed view based on item type
+                // Navigate to the detailed view based on item type.
+                // Use existing pages in the app when possible.
                 switch (item.type) {
                   case "appointment":
-                    router.push(`/appointments/${item.id}`);
+                    // There is an appointments list page at /appointments. Pass appointmentId as a query param.
+                    router.push(`/admin/appointments?appointmentId=${item.id}`);
                     break;
                   case "telemedicine":
-                    router.push(`/telemedicine/${item.id}`);
+                    // Telemedicine has both a list and a detail page at /telemedicine/[id]
+                    router.push(`/admin/telemedicine/${item.id}`);
                     break;
                   case "soap_note":
-                    router.push(`/soap-notes?noteId=${item.id}`);
+                    // SOAP notes list exists and supports noteId query param
+                    router.push(`/admin/soap-notes?noteId=${item.id}`);
                     break;
                   case "prescription":
-                    router.push(`/soap-notes?noteId=${item.metadata?.soapNoteId}`);
+                    // Prescriptions are shown via the related SOAP note when available
+                    if (item.metadata?.soapNoteId) {
+                      router.push(`/admin/soap-notes?noteId=${item.metadata.soapNoteId}`);
+                    } else {
+                      router.push(`/admin/soap-notes`);
+                    }
                     break;
                   case "health_plan":
-                    router.push(`/health-plans?planId=${item.id}`);
+                    router.push(`/admin/health-plans?planId=${item.id}`);
                     break;
                   case "checklist":
                   case "checklist_item":
-                    router.push(`/checklists?checklistId=${item.type === "checklist" ? item.id : item.metadata?.checklistId}`);
+                    router.push(`/admin/checklists?checklistId=${item.type === "checklist" ? item.id : item.metadata?.checklistId}`);
                     break;
                   default:
                     break;

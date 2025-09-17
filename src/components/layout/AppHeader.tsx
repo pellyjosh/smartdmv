@@ -19,6 +19,7 @@ import Link from "next/link";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useRoles } from "@/hooks/use-roles";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 interface Practice {
   id: number;
@@ -154,6 +155,9 @@ export function AppHeader({}: AppHeaderProps) {
           </div>
 
           <div className="flex items-center gap-x-3">
+            {/* Notification Bell */}
+            <NotificationBell />
+            
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

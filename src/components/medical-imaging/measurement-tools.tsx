@@ -33,7 +33,7 @@ import {
 
 interface MeasurementToolsProps {
   imageRef: React.RefObject<HTMLImageElement>;
-  seriesId: string;
+  seriesId: number;
   onMeasurementAdded?: (measurement: any) => void;
 }
 

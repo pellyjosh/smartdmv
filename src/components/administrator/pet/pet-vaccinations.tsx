@@ -31,7 +31,7 @@ import {
 import { useUser } from "@/context/UserContext";
 import { isPracticeAdministrator, isVeterinarian } from '@/lib/rbac-helpers';
 
-const PetVaccinations = ({ petId }: { petId: string }) => {
+const PetVaccinations = ({ petId }: { petId: string | number }) => {
   const { user } = useUser();
   const [expanded, setExpanded] = useState(true);
   
@@ -41,9 +41,9 @@ const PetVaccinations = ({ petId }: { petId: string }) => {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["/api/vaccinations/pet", petId],
+  queryKey: ["/api/vaccinations/pet", String(petId)],
     queryFn: async () => {
-      const response = await fetch(`/api/vaccinations/pet/${petId}`);
+  const response = await fetch(`/api/vaccinations/pet/${String(petId)}`);
       if (!response.ok) {
         throw new Error("Failed to fetch vaccinations");
       }

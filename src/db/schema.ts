@@ -5,6 +5,8 @@ import { sessions } from './schemas/sessionsSchema';
 import { appointments } from './schemas/appointmentsSchema';
 import { pets } from './schemas/petsSchema';
 import { healthPlans } from './schemas/healthPlansSchema';
+import { healthPlanNotes } from './schemas/healthPlanNotesSchema';
+import { healthPlanMilestones } from './schemas/healthPlanMilestonesSchema';
 import { admissions } from './schemas/admissionsSchema';
 import { rooms } from './schemas/roomsSchema';
 import { customFieldCategories, customFieldGroups, customFieldValues } from './schemas/customFieldsSchema';
@@ -81,6 +83,8 @@ export const schema = {
   usersRelations,
   pets,
   healthPlans,
+  healthPlanNotes,
+  healthPlanMilestones,
   practices,
   sessions,
   appointments,
@@ -181,6 +185,8 @@ export * from './schemas/usersSchema';
 export * from './schemas/appointmentsSchema';
 export * from './schemas/petsSchema';
 export * from './schemas/healthPlansSchema';
+export * from './schemas/healthPlanNotesSchema';
+export * from './schemas/healthPlanMilestonesSchema';
 export * from './schemas/admissionsSchema';
 export * from './schemas/roomsSchema';
 export * from './schemas/customFieldsSchema';

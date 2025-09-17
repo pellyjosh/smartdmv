@@ -4,7 +4,7 @@ import { pets, appointments } from "@/db/schema";
 import { eq, and, or, inArray } from "drizzle-orm";
 import { withNetworkErrorHandlingAndRetry } from "@/lib/api-middleware";
 import { logView, logCreate } from '@/lib/audit-logger';
-import { getUserContextFromRequest } from '@/lib/auth-context';
+import { getCurrentUser } from '@/lib/auth-utils';
 
 const getHandler = async (request: NextRequest) => {
   const url = new URL(request.url);
@@ -91,7 +91,21 @@ const getHandler = async (request: NextRequest) => {
     }
     return NextResponse.json(petsData, { status: 200 });
   } else {
-    return NextResponse.json({ error: 'Invalid parameters. Please provide a valid client ID or practice ID as a query parameter.' }, { status: 400 });
+    // No query params provided: attempt to return pets for the current user's practice (if staff)
+    try {
+      const user = await getCurrentUser(request as any);
+      if (user && (user as any).practiceId) {
+        const practiceIdInt = Number((user as any).practiceId);
+        if (!Number.isFinite(practiceIdInt)) return NextResponse.json([], { status: 200 });
+        const petsData = await db.query.pets.findMany({ where: eq(pets.practiceId, practiceIdInt), with: { owner: true } });
+        return NextResponse.json(petsData, { status: 200 });
+      }
+    } catch (e) {
+      // fall through
+    }
+
+    // Fallback: return empty array so callers that expect [] won't break
+    return NextResponse.json([], { status: 200 });
   }
 };
 

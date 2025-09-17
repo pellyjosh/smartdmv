@@ -2,6 +2,7 @@ import WebSocket, { WebSocketServer as WSServer } from 'ws';
 import http from 'http';
 import { ConnectionManager } from './connection-manager';
 import { MessageHandler } from './message-handler';
+import { AppointmentAutomation } from './appointment-automation';
 import { getConfig, MESSAGE_TYPES } from './config';
 import type { WebSocketMessage } from './types';
 
@@ -14,8 +15,10 @@ export class WebSocketServer {
   private wss: WSServer;
   private connectionManager: ConnectionManager;
   private messageHandler: MessageHandler;
+  private appointmentAutomation: AppointmentAutomation;
   private config = getConfig();
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private automationInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     // Create HTTP server for health checks and WebSocket upgrade
@@ -30,10 +33,12 @@ export class WebSocketServer {
     // Initialize managers
     this.connectionManager = new ConnectionManager();
     this.messageHandler = new MessageHandler(this.connectionManager);
+    this.appointmentAutomation = new AppointmentAutomation();
 
     this.setupHttpRoutes();
     this.setupWebSocketHandlers();
     this.setupCleanupInterval();
+    this.setupAppointmentAutomation();
   }
 
   /**
@@ -69,6 +74,11 @@ export class WebSocketServer {
       // Clear cleanup interval
       if (this.cleanupInterval) {
         clearInterval(this.cleanupInterval);
+      }
+
+      // Clear automation interval
+      if (this.automationInterval) {
+        clearInterval(this.automationInterval);
       }
 
       // Close all WebSocket connections
@@ -109,6 +119,8 @@ export class WebSocketServer {
         this.handleHealthCheck(req, res);
       } else if (url === '/stats') {
         this.handleStatsRequest(req, res);
+      } else if (url === '/automation/trigger' && req.method === 'POST') {
+        this.handleAutomationTrigger(req, res);
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not Found' }));
@@ -179,6 +191,30 @@ export class WebSocketServer {
   }
 
   /**
+   * Setup appointment automation to check for overdue appointments
+   */
+  private setupAppointmentAutomation(): void {
+    // Check for overdue appointments every 5 minutes
+    this.automationInterval = setInterval(async () => {
+      try {
+        await this.appointmentAutomation.processOverdueAppointments();
+      } catch (error) {
+        console.error('❌ Error in appointment automation:', error);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    // Run once immediately after startup (with a delay)
+    setTimeout(async () => {
+      try {
+        console.log('🚀 Running initial appointment automation check...');
+        await this.appointmentAutomation.processOverdueAppointments();
+      } catch (error) {
+        console.error('❌ Error in initial appointment automation:', error);
+      }
+    }, 30000); // 30 seconds after startup
+  }
+
+  /**
    * Handle health check requests
    */
   private handleHealthCheck(req: http.IncomingMessage, res: http.ServerResponse): void {
@@ -210,11 +246,37 @@ export class WebSocketServer {
         memory: process.memoryUsage(),
         config: this.config
       },
+      appointmentAutomation: this.appointmentAutomation.getStats(),
       timestamp: new Date().toISOString()
     };
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(detailedStats, null, 2));
+  }
+
+  /**
+   * Handle manual automation trigger requests
+   */
+  private async handleAutomationTrigger(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      console.log('🔄 Manual appointment automation trigger requested...');
+      await this.appointmentAutomation.runManually();
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        message: 'Appointment automation triggered successfully',
+        timestamp: new Date().toISOString()
+      }));
+    } catch (error) {
+      console.error('❌ Error in manual automation trigger:', error);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        error: 'Failed to trigger appointment automation',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }));
+    }
   }
 
   /**

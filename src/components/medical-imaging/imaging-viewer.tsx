@@ -56,6 +56,11 @@ type Annotation = {
   createdAt: string;
   createdBy: number;
   createdByName?: string;
+  // Add database fields for stored annotations
+  annotation_data?: string;
+  annotationType?: string;
+  text?: string;
+  color?: string;
 };
 
 type Measurement = {
@@ -106,6 +111,13 @@ const ImagingViewer: React.FC<ImagingViewerProps> = ({
   seriesId,
   petId,
   initialImageIndex = 0,
+  imageUrl,
+  title,
+  description,
+  annotations = [],
+  measurements = [],
+  onAnnotationAdded,
+  onMeasurementAdded,
 }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState<number>(initialImageIndex);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
@@ -114,14 +126,211 @@ const ImagingViewer: React.FC<ImagingViewerProps> = ({
   const [activeAnnotations, setActiveAnnotations] = useState<Annotation[]>([]);
   const [activeMeasurements, setActiveMeasurements] = useState<Measurement[]>([]);
   const [selectedTab, setSelectedTab] = useState<string>("view");
+  const [isDrawing, setIsDrawing] = useState<boolean>(false);
+  const [drawingMode, setDrawingMode] = useState<string | null>(null);
+  const [currentDrawing, setCurrentDrawing] = useState<any>(null);
+  
+  // Annotation preview state
+  const [annotationPreview, setAnnotationPreview] = useState<any>(null);
+  const [annotationDrawing, setAnnotationDrawing] = useState<boolean>(false);
+  const [annotationMouseHandlers, setAnnotationMouseHandlers] = useState<any>(null);
+  
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Query to fetch the imaging series data
-  const { data: series, isLoading, error } = useQuery<Series>({
-    queryKey: [`/api/imaging-series/${seriesId}`],
-  });
+  // Sync props with state
+  useEffect(() => {
+    setActiveAnnotations(annotations || []);
+    setActiveMeasurements(measurements || []);
+  }, [annotations, measurements]);
+
+  // Update annotations and measurements when props change
+  useEffect(() => {
+    setActiveAnnotations(annotations);
+    setActiveMeasurements(measurements);
+  }, [annotations, measurements]);
+
+  // Create a series object from props for compatibility
+  const series: Series = {
+    id: parseInt(seriesId),
+    petId: petId || 0,
+    practiceId: 0,
+    studyType: title || 'Medical Image',
+    studyDate: new Date().toISOString(),
+    description: description || '',
+    bodyPart: '',
+    images: imageUrl ? [{
+      id: 1,
+      seriesId: parseInt(seriesId),
+      url: imageUrl,
+      fileName: 'medical-image.jpg',
+      fileType: 'image/jpeg',
+      position: 1,
+      createdAt: new Date().toISOString(),
+    }] : [],
+    annotations: activeAnnotations,
+    measurements: activeMeasurements,
+    createdAt: new Date().toISOString(),
+    createdBy: 1,
+  };
+
+  const isLoading = false;
+  const error = null;
+
+  // Generate placeholder image data URL
+  const getPlaceholderImage = () => {
+    const svg = `
+      <svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100%" height="100%" fill="#f3f4f6"/>
+        <text x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="system-ui, sans-serif" font-size="14" fill="#6b7280">
+          Medical Image
+        </text>
+      </svg>
+    `;
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
+  };
+
+  // Handle image load errors
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    e.currentTarget.src = getPlaceholderImage();
+  };
+
+  // Drawing utilities
+  const getRelativePosition = (event: React.MouseEvent): { x: number; y: number } | null => {
+    if (!imageRef.current) return null;
+    
+    const rect = imageRef.current.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    
+    return { x, y };
+  };
+
+  // Start drawing interaction
+  const startDrawing = (mode: string) => {
+    setDrawingMode(mode);
+    setSelectedTab("view"); // Switch to view tab for drawing
+  };
+
+  // Handle mouse events for drawing
+  const handleImageMouseDown = (event: React.MouseEvent) => {
+    if (!drawingMode) return;
+    
+    const position = getRelativePosition(event);
+    if (!position) return;
+    
+    setIsDrawing(true);
+    setCurrentDrawing({
+      startX: position.x,
+      startY: position.y,
+      currentX: position.x,
+      currentY: position.y,
+      mode: drawingMode
+    });
+  };
+
+  const handleImageMouseMove = (event: React.MouseEvent) => {
+    if (!isDrawing || !currentDrawing) return;
+    
+    const position = getRelativePosition(event);
+    if (!position) return;
+    
+    setCurrentDrawing((prev: any) => ({
+      ...prev,
+      currentX: position.x,
+      currentY: position.y
+    }));
+  };
+
+  const handleImageMouseUp = (event: React.MouseEvent) => {
+    if (!isDrawing || !currentDrawing) return;
+    
+    setIsDrawing(false);
+    
+    // Complete the drawing and show form to add details
+    const position = getRelativePosition(event);
+    if (!position) return;
+    
+    // Create annotation or measurement based on drawing mode
+    const drawingData = {
+      ...currentDrawing,
+      endX: position.x,
+      endY: position.y
+    };
+    
+    setCurrentDrawing(drawingData);
+    // Keep the drawing mode active so user can fill in details
+  };
+
+  // Cancel current drawing
+  const cancelDrawing = () => {
+    setIsDrawing(false);
+    setDrawingMode(null);
+    setCurrentDrawing(null);
+  };
+
+  // Render current drawing preview
+  const renderCurrentDrawing = () => {
+    if (!currentDrawing) return null;
+
+    const { startX, startY, currentX, currentY, mode } = currentDrawing;
+    const x = Math.min(startX, currentX);
+    const y = Math.min(startY, currentY);
+    const width = Math.abs(currentX - startX);
+    const height = Math.abs(currentY - startY);
+
+    if (mode === "rectangle") {
+      return (
+        <div
+          className="absolute border-2 border-red-400 bg-red-400/10"
+          style={{
+            left: `${x}%`,
+            top: `${y}%`,
+            width: `${width}%`,
+            height: `${height}%`,
+            pointerEvents: "none",
+          }}
+        />
+      );
+    }
+
+    if (mode === "circle") {
+      return (
+        <div
+          className="absolute border-2 border-red-400 bg-red-400/10 rounded-full"
+          style={{
+            left: `${x}%`,
+            top: `${y}%`,
+            width: `${width}%`,
+            height: `${width}%`, // Force circle to be square
+            pointerEvents: "none",
+          }}
+        />
+      );
+    }
+
+    if (mode === "line") {
+      const angle = Math.atan2(currentY - startY, currentX - startX) * 180 / Math.PI;
+      const length = Math.sqrt(Math.pow(currentX - startX, 2) + Math.pow(currentY - startY, 2));
+      
+      return (
+        <div
+          className="absolute border-t-2 border-blue-400"
+          style={{
+            left: `${startX}%`,
+            top: `${startY}%`,
+            width: `${length}%`,
+            transformOrigin: "0 0",
+            transform: `rotate(${angle}deg)`,
+            pointerEvents: "none",
+          }}
+        />
+      );
+    }
+
+    return null;
+  };
 
   // Effect to enter/exit fullscreen mode
   useEffect(() => {
@@ -209,6 +418,11 @@ const ImagingViewer: React.FC<ImagingViewerProps> = ({
       description: `${annotation.shape} annotation "${annotation.label}" has been added to the image.`,
     });
     setSelectedTab("view");
+    
+    // Call parent callback to update the query cache
+    if (onAnnotationAdded) {
+      onAnnotationAdded(annotation);
+    }
   };
 
   // Handle new measurement
@@ -219,89 +433,193 @@ const ImagingViewer: React.FC<ImagingViewerProps> = ({
       description: `${measurement.type} measurement of ${measurement.value} ${measurement.unit} has been added to the image.`,
     });
     setSelectedTab("view");
+    
+    // Call parent callback to update the query cache
+    if (onMeasurementAdded) {
+      onMeasurementAdded(measurement);
+    }
   };
 
   // Render annotations on the image
   const renderAnnotations = () => {
-    if (!series || !series.annotations) return null;
+    if (!activeAnnotations || activeAnnotations.length === 0) return null;
 
-    // Combine existing annotations with active ones
-    const allAnnotations = [...(series.annotations || []), ...activeAnnotations];
+    console.log('Rendering annotations from state:', activeAnnotations);
 
-    return allAnnotations.map((annotation) => {
-      if (annotation.shape === "rectangle") {
+    return activeAnnotations.map((annotation) => {
+      // Parse annotation data if it's from the database (string format)
+      let annotationData = annotation;
+      if (typeof annotation.annotation_data === 'string') {
+        try {
+          const parsedData = JSON.parse(annotation.annotation_data);
+          annotationData = {
+            ...annotation,
+            ...parsedData, // Spread the parsed data (shape, x, y, width, height, etc.)
+          };
+          console.log('Parsed annotation data:', annotationData);
+        } catch (error) {
+          console.error('Error parsing annotation data:', error);
+          return null;
+        }
+      }
+
+      // Use the annotationType field if shape is not available
+      const shape = annotationData.shape || annotation.annotationType;
+
+      if (shape === "rectangle") {
         return (
           <div
             key={annotation.id}
             className="absolute border-2 border-yellow-400 bg-yellow-400/10"
             style={{
-              left: `${annotation.x}%`,
-              top: `${annotation.y}%`,
-              width: `${annotation.width}%`,
-              height: `${annotation.height}%`,
+              left: `${annotationData.x}%`,
+              top: `${annotationData.y}%`,
+              width: `${annotationData.width}%`,
+              height: `${annotationData.height}%`,
               pointerEvents: "none",
             }}
-            title={annotation.label}
+            title={annotationData.label || annotation.text || ''}
           />
         );
       }
 
-      if (annotation.shape === "circle") {
+      if (shape === "circle") {
         return (
           <div
             key={annotation.id}
             className="absolute border-2 border-yellow-400 bg-yellow-400/10 rounded-full"
             style={{
-              left: `${annotation.x}%`,
-              top: `${annotation.y}%`,
-              width: `${annotation.width}%`,
-              height: `${annotation.height}%`,
+              left: `${annotationData.x}%`,
+              top: `${annotationData.y}%`,
+              width: `${annotationData.width}%`,
+              height: `${annotationData.height}%`,
               pointerEvents: "none",
             }}
-            title={annotation.label}
+            title={annotationData.label || annotation.text || ''}
           />
         );
       }
 
-      if (annotation.shape === "text") {
+      if (shape === "text") {
         return (
           <div
             key={annotation.id}
             className="absolute bg-yellow-400 text-black text-xs px-1 py-0.5 rounded"
             style={{
-              left: `${annotation.x}%`,
-              top: `${annotation.y}%`,
+              left: `${annotationData.x}%`,
+              top: `${annotationData.y}%`,
               pointerEvents: "none",
             }}
           >
-            {annotation.label}
+            {annotationData.label || annotation.text || ''}
           </div>
         );
       }
 
-      if (annotation.shape === "freehand" && annotation.points) {
-        const pathPoints = annotation.points.map((p) => `${p.x}%,${p.y}%`).join(" ");
+      if (shape === "freehand" && (annotationData.points || annotation.points)) {
+        const points = annotationData.points || annotation.points;
+        if (points) {
+          const pathPoints = points.map((p: { x: number; y: number }) => `${p.x}%,${p.y}%`).join(" ");
 
-        return (
-          <div
-            key={annotation.id}
-            className="absolute top-0 left-0 w-full h-full pointer-events-none"
-            title={annotation.label}
-          >
-            <svg className="absolute top-0 left-0 w-full h-full">
-              <polyline
-                points={pathPoints}
-                fill="none"
-                stroke="rgba(250, 204, 21, 0.8)"
-                strokeWidth="2"
-              />
-            </svg>
-          </div>
-        );
+          return (
+            <div
+              key={annotation.id}
+              className="absolute top-0 left-0 w-full h-full pointer-events-none"
+              title={annotationData.label || annotation.text || ''}
+            >
+              <svg className="absolute top-0 left-0 w-full h-full">
+                <polyline
+                  points={pathPoints}
+                  fill="none"
+                  stroke="rgba(250, 204, 21, 0.8)"
+                  strokeWidth="2"
+                />
+              </svg>
+            </div>
+          );
+        }
       }
 
       return null;
     });
+  };
+
+  // Render annotation preview while drawing
+  const renderAnnotationPreview = () => {
+    if (!annotationPreview) {
+      console.log('No annotation preview data');
+      return null;
+    }
+    
+    console.log('Rendering annotation preview:', annotationPreview);
+    
+    const { previewAnnotation, freehandPoints, shape } = annotationPreview;
+    
+    if (shape === "freehand" && freehandPoints && freehandPoints.length > 0) {
+      const pathPoints = freehandPoints.map((p: any) => `${p.x}%,${p.y}%`).join(" ");
+      
+      return (
+        <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+          <svg className="absolute top-0 left-0 w-full h-full">
+            <polyline
+              points={pathPoints}
+              fill="none"
+              stroke="rgba(250, 204, 21, 0.8)"
+              strokeWidth="2"
+            />
+          </svg>
+        </div>
+      );
+    }
+    
+    if (!previewAnnotation) return null;
+    
+    if (previewAnnotation.shape === "rectangle") {
+      return (
+        <div
+          className="absolute border-2 border-yellow-400 bg-yellow-400/10"
+          style={{
+            left: `${previewAnnotation.x}%`,
+            top: `${previewAnnotation.y}%`,
+            width: `${previewAnnotation.width}%`,
+            height: `${previewAnnotation.height}%`,
+            pointerEvents: 'none'
+          }}
+        />
+      );
+    }
+    
+    if (previewAnnotation.shape === "circle") {
+      return (
+        <div
+          className="absolute border-2 border-yellow-400 bg-yellow-400/10 rounded-full"
+          style={{
+            left: `${previewAnnotation.x}%`,
+            top: `${previewAnnotation.y}%`,
+            width: `${previewAnnotation.width}%`,
+            height: `${previewAnnotation.height}%`,
+            pointerEvents: 'none'
+          }}
+        />
+      );
+    }
+    
+    if (previewAnnotation.shape === "text") {
+      return (
+        <div
+          className="absolute bg-yellow-400 text-black text-xs px-1 py-0.5 rounded"
+          style={{
+            left: `${previewAnnotation.x}%`,
+            top: `${previewAnnotation.y}%`,
+            pointerEvents: 'none'
+          }}
+        >
+          Text annotation
+        </div>
+      );
+    }
+    
+    return null;
   };
 
   // Render measurements on the image
@@ -519,13 +837,28 @@ const ImagingViewer: React.FC<ImagingViewerProps> = ({
                     transform: `rotate(${rotation}deg) scale(${zoomLevel})`,
                     transition: "transform 0.2s ease",
                   }}
+                  onError={handleImageError}
                 />
+                
+                {/* Drawing overlay */}
+                {(drawingMode || selectedTab === "annotate") && (
+                  <div 
+                    className="absolute inset-0 cursor-crosshair"
+                    onMouseDown={selectedTab === "annotate" && annotationMouseHandlers ? annotationMouseHandlers.onMouseDown : handleImageMouseDown}
+                    onMouseMove={selectedTab === "annotate" && annotationMouseHandlers ? annotationMouseHandlers.onMouseMove : handleImageMouseMove}
+                    onMouseUp={selectedTab === "annotate" && annotationMouseHandlers ? annotationMouseHandlers.onMouseUp : handleImageMouseUp}
+                  />
+                )}
+                
                 {selectedTab === "view" && (
                   <>
                     {renderAnnotations()}
                     {renderMeasurements()}
+                    {renderCurrentDrawing()}
                   </>
                 )}
+                
+                {selectedTab === "annotate" && renderAnnotationPreview()}
               </div>
             </div>
 
@@ -609,6 +942,7 @@ const ImagingViewer: React.FC<ImagingViewerProps> = ({
                           src={image.url}
                           alt={`Thumbnail ${idx + 1}`}
                           className="w-full h-full object-cover"
+                          onError={handleImageError}
                         />
                       </button>
                     ))}
@@ -667,15 +1001,18 @@ const ImagingViewer: React.FC<ImagingViewerProps> = ({
             <TabsContent value="annotate" className="mt-0">
               <AnnotationTools
                 imageRef={imageRef}
-                seriesId={seriesId}
+                seriesId={parseInt(seriesId)}
                 onAnnotationAdded={handleAnnotationAdded}
+                onPreviewChange={setAnnotationPreview}
+                onDrawingStateChange={setAnnotationDrawing}
+                onMouseHandlers={setAnnotationMouseHandlers}
               />
             </TabsContent>
 
             <TabsContent value="measure" className="mt-0">
               <MeasurementTools
                 imageRef={imageRef}
-                seriesId={seriesId}
+                seriesId={parseInt(seriesId)}
                 onMeasurementAdded={handleMeasurementAdded}
               />
             </TabsContent>

@@ -7,6 +7,8 @@ import { AppHeader } from '@/components/layout/AppHeader'; // Import the new App
 import { Loader2 } from 'lucide-react';
 import { PracticeProvider } from '@/hooks/use-practice';
 import { FeatureAccessProvider } from '@/hooks/use-feature-access';
+import { NotificationProvider } from '@/components/notifications/notification-provider';
+import { useUser } from '@/context/UserContext';
 
 export default function MainApplicationLayout({
   children,
@@ -15,6 +17,7 @@ export default function MainApplicationLayout({
 }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const { user, userPracticeId } = useUser();
 
   useEffect(() => {
     setIsMounted(true);
@@ -33,28 +36,33 @@ export default function MainApplicationLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <AppSidebar 
-        isCollapsed={isSidebarCollapsed} 
-        onToggleCollapse={toggleSidebarCollapse} 
-      />
-      <div 
-        className='flex flex-col flex-1 transition-all duration-300 ease-in-out'
-      >
-        <AppHeader /> {/* Add the AppHeader here */}
-        <main 
-          className="flex-1 overflow-y-auto" // Added overflow-y-auto for scrollable main content
+    <NotificationProvider 
+      userId={user?.id} 
+      practiceId={userPracticeId}
+    >
+      <div className="flex min-h-screen bg-background">
+        <AppSidebar 
+          isCollapsed={isSidebarCollapsed} 
+          onToggleCollapse={toggleSidebarCollapse} 
+        />
+        <div 
+          className='flex flex-col flex-1 transition-all duration-300 ease-in-out'
         >
-          {/* Add a container for consistent padding */}
-          <div className="p-4 sm:p-6 md:p-8">
-            <PracticeProvider>
-              <FeatureAccessProvider>
-                {children}
-              </FeatureAccessProvider>
-            </PracticeProvider>
-          </div>
-        </main>
+          <AppHeader /> {/* Add the AppHeader here */}
+          <main 
+            className="flex-1 overflow-y-auto" // Added overflow-y-auto for scrollable main content
+          >
+            {/* Add a container for consistent padding */}
+            <div className="p-4 sm:p-6 md:p-8">
+              <PracticeProvider>
+                <FeatureAccessProvider>
+                  {children}
+                </FeatureAccessProvider>
+              </PracticeProvider>
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </NotificationProvider>
   );
 }

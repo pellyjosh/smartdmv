@@ -260,7 +260,53 @@ export async function getCurrentUser(request: NextRequest) {
       where: eq(usersTable.id, session.userId),
     });
 
-    return userRecord;
+    if (!userRecord) return null;
+
+    // Map DB user record to the application User shape and include a legacy
+    // `roles` array so server-side RBAC helpers (isAdmin, hasRole, etc.) work
+    // without requiring per-call mapping elsewhere.
+    const mapRoleToPermissions = (roleStr: string) => {
+      switch (roleStr) {
+        case 'CLIENT':
+          return getUserRolePermissions(UserRoleEnum.CLIENT);
+        case 'PRACTICE_ADMINISTRATOR':
+          return getUserRolePermissions(UserRoleEnum.PRACTICE_ADMINISTRATOR);
+        case 'VETERINARIAN':
+          return getUserRolePermissions(UserRoleEnum.VETERINARIAN);
+        case 'PRACTICE_MANAGER':
+          return getUserRolePermissions(UserRoleEnum.PRACTICE_MANAGER);
+        case 'ADMINISTRATOR':
+          return getUserRolePermissions(UserRoleEnum.ADMINISTRATOR);
+        case 'SUPER_ADMIN':
+          return getUserRolePermissions(UserRoleEnum.SUPER_ADMIN);
+        default:
+          return [];
+      }
+    };
+
+    const permissions = mapRoleToPermissions(userRecord.role as string);
+
+    const userData: any = {
+      id: userRecord.id,
+      email: userRecord.email,
+      name: userRecord.name,
+      role: userRecord.role,
+      // Preserve practice ids if present on the DB record
+      practiceId: (userRecord as any).practiceId || (userRecord as any).currentPracticeId || undefined,
+      currentPracticeId: (userRecord as any).currentPracticeId || undefined,
+      accessiblePracticeIds: (userRecord as any).accessiblePracticeIds || undefined,
+      // Provide a legacy single-role mapping for compatibility with RBAC helpers
+      roles: [
+        {
+          id: `legacy-${userRecord.role}`,
+          name: userRecord.role,
+          displayName: userRecord.role,
+          permissions: permissions.map(p => ({ resource: p.resource, action: p.action, granted: p.granted }))
+        }
+      ]
+    };
+
+    return userData;
   } catch (error) {
     console.error('Error getting current user:', error);
     return null;

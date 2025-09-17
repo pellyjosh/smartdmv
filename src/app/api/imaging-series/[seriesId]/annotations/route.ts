@@ -26,8 +26,8 @@ export async function POST(request: Request, context: { params: Promise<{ series
     const newAnnotationData = {
       seriesId,
       createdById: body.createdById || "user-1", // Default user for now
-      annotationType: body.annotationType,
-      annotationData: JSON.stringify(body.annotationData),
+      annotationType: body.annotationType, // This should come from the form
+      annotationData: JSON.stringify(body.annotationData), // This should be the JSON data
       color: body.color || "#FF0000",
       text: body.text,
     };

@@ -1,0 +1,1 @@
+ALTER TABLE "inventory_transactions" ALTER COLUMN "performed_by_id" SET DATA TYPE integer;

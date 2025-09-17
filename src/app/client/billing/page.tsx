@@ -269,8 +269,8 @@ export default function BillingPage() {
                       <div>
                         <CardTitle className="text-lg">{invoice.id}</CardTitle>
                         <p className="text-sm text-muted-foreground">
-                          Service Date: {format(new Date(invoice.date), 'MMM d, yyyy')} • 
-                          Due: {format(new Date(invoice.dueDate), 'MMM d, yyyy')}
+                          Service Date: {format(new Date(invoice.date), 'MMM d, YYYY')} • 
+                          Due: {format(new Date(invoice.dueDate), 'MMM d, YYYY')}
                         </p>
                       </div>
                       <div className="text-right">
@@ -346,7 +346,7 @@ export default function BillingPage() {
                     <div>
                       <CardTitle className="text-lg">{payment.id}</CardTitle>
                       <p className="text-sm text-muted-foreground">
-                        {format(new Date(payment.date), 'MMM d, yyyy')} • {payment.method}
+                        {format(new Date(payment.date), 'MMM d, YYYY')} • {payment.method}
                       </p>
                     </div>
                     <div className="text-right">
