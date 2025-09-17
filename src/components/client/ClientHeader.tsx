@@ -15,8 +15,10 @@ import {
   LogOut,
   Settings,
   ChevronDown,
-  ArrowLeft
+  ArrowLeft,
+  Loader2
 } from "lucide-react";
+import { useState } from 'react';
 import Link from "next/link";
 
 interface ClientHeaderProps {
@@ -35,6 +37,8 @@ export function ClientHeader({
   backLabel = "Back"
 }: ClientHeaderProps) {
   const { user, logout } = useUser();
+
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   if (!user) return null;
 
@@ -78,16 +82,34 @@ export function ClientHeader({
               <span>Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout}>
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Sign Out</span>
+            <DropdownMenuItem onClick={async () => {
+              try {
+                setIsSigningOut(true);
+                await logout();
+              } catch (e) {
+                console.error('Sign out failed', e);
+              } finally {
+                setIsSigningOut(false);
+              }
+            }} className={isSigningOut ? 'opacity-60 pointer-events-none' : ''}>
+              {isSigningOut ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
+              <span>{isSigningOut ? 'Signing out...' : 'Sign Out'}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         
-        <Button variant="outline" className="flex items-center" onClick={logout}>
-          <LogOut className="h-4 w-4 mr-2" />
-          Sign Out
+        <Button variant="outline" className="flex items-center" onClick={async () => {
+          try {
+            setIsSigningOut(true);
+            await logout();
+          } catch (e) {
+            console.error('Sign out failed', e);
+          } finally {
+            setIsSigningOut(false);
+          }
+        }} disabled={isSigningOut}>
+          {isSigningOut ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LogOut className="h-4 w-4 mr-2" />}
+          {isSigningOut ? 'Signing out...' : 'Sign Out'}
         </Button>
       </div>
     </div>

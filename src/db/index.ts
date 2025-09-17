@@ -58,3 +58,5 @@ const dbInstance = drizzle(pool, { schema, logger: process.env.NODE_ENV === 'dev
 console.log('✅ PostgreSQL Drizzle instance created.');
 
 export const db = dbInstance;
+// Also export the raw pg Pool for low-level queries when needed
+export const pgPool = pool;

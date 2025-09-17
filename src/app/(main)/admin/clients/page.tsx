@@ -66,7 +66,7 @@ import { type User, type Pet } from "@/db/schema";
 import { isPracticeAdministrator, isAdmin, hasRole } from '@/lib/rbac-helpers';
 import { getPetAvatarColors, formatDate } from "@/lib/utils";
 import { SimpleCustomFieldSelect } from "@/components/form/simple-custom-field-select";
-import { 
+import {
   Loader2, Search, UserPlus, PlusCircle, User as UserIcon, Edit, Trash, Camera, X,
   Calendar, Clock, AlertCircle, CheckCircle, RefreshCw, ArrowUpRight
 } from "lucide-react";
@@ -161,7 +161,7 @@ function ComboboxSelect({
   emptyMessage?: string;
 }) {
   const [open, setOpen] = useState(false);
-  
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -228,7 +228,12 @@ const clientFormSchema = z.object({
 const updateClientFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters" }),
   email: z.string().email({ message: "Please enter a valid email" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }).optional().transform(e => e === "" ? undefined : e), 
+  // Accept empty string for password on edit; transform empty -> undefined so API doesn't attempt to set it
+  password: z.string().optional().transform((e) => {
+    if (e === undefined || e === null) return undefined;
+    if (typeof e === 'string' && e.trim() === '') return undefined;
+    return e;
+  }),
   phone: z.string().optional(),
   address: z.string().optional(),
   city: z.string().optional(),
@@ -279,10 +284,10 @@ export default function ClientsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, userPracticeId } = useUser();
   const { toast } = useToast();
-  
+
   // Use the custom fields hook to access field values from the database
-  const { 
-    groups, 
+  const {
+    groups,
     getValuesByGroupKey,
     getGroupByKey,
     getValuesByGroupId,
@@ -298,7 +303,7 @@ export default function ClientsPage() {
     try {
       // Try multiple possible group keys for species
       const possibleKeys = ['pet_species', 'species', 'animal_species'];
-      
+
       for (const key of possibleKeys) {
         const speciesValues = getValuesByGroupKey(key);
         if (speciesValues && speciesValues.length > 0) {
@@ -306,13 +311,13 @@ export default function ClientsPage() {
           return speciesValues.map(v => ({ value: v.value, label: v.label }));
         }
       }
-      
+
       // Try getting all groups to find the species group
-  const speciesGroup = groupsArray.find((g: any) => 
-        g.name?.toLowerCase().includes('species') || 
+      const speciesGroup = groupsArray.find((g: any) =>
+        g.name?.toLowerCase().includes('species') ||
         g.key?.toLowerCase().includes('species')
       );
-      
+
       if (speciesGroup) {
         console.log('Found species group by name/key search:', speciesGroup);
         const values = getValuesByGroupId(speciesGroup.id);
@@ -323,7 +328,7 @@ export default function ClientsPage() {
     } catch (err) {
       console.error('Error getting custom species list:', err);
     }
-    
+
     // Fall back to hardcoded species if custom fields fail
     console.log('Falling back to hardcoded species list');
     return speciesList;
@@ -339,7 +344,7 @@ export default function ClientsPage() {
         'pet_breed',
         'breeds'
       ];
-      
+
       // Try each possible key
       for (const key of possibleBreedKeys) {
         const breedValues = getValuesByGroupKey(key);
@@ -348,13 +353,13 @@ export default function ClientsPage() {
           return breedValues.map(v => ({ value: v.value, label: v.label }));
         }
       }
-      
+
       // Try getting all groups to find a breed group
-  const breedGroup = groupsArray.find((g: any) => 
+      const breedGroup = groupsArray.find((g: any) =>
         (g.name?.toLowerCase().includes('breed') || g.key?.toLowerCase().includes('breed')) &&
         (g.name?.toLowerCase().includes(species.toLowerCase()) || g.key?.toLowerCase().includes(species.toLowerCase()))
       );
-      
+
       if (breedGroup) {
         console.log(`Found breed group for ${species} by name/key search:`, breedGroup);
         const values = getValuesByGroupId(breedGroup.id);
@@ -362,12 +367,12 @@ export default function ClientsPage() {
           return values.map(v => ({ value: v.value, label: v.label }));
         }
       }
-      
+
       // Look for any breed group if we can't find a species-specific one
-  const anyBreedGroup = groupsArray.find((g: any) => 
+      const anyBreedGroup = groupsArray.find((g: any) =>
         g.name?.toLowerCase().includes('breed') || g.key?.toLowerCase().includes('breed')
       );
-      
+
       if (anyBreedGroup) {
         console.log('Found general breed group by name/key search:', anyBreedGroup);
         const values = getValuesByGroupId(anyBreedGroup.id);
@@ -378,7 +383,7 @@ export default function ClientsPage() {
     } catch (err) {
       console.error(`Error getting breeds list for ${species}:`, err);
     }
-    
+
     // Fall back to hardcoded breeds if custom fields fail
     console.log(`Falling back to hardcoded breeds for ${species}`);
     if (!species) {
@@ -394,7 +399,7 @@ export default function ClientsPage() {
     try {
       // Try multiple possible keys
       const possibleKeys = ['pet_color', 'color', 'colors', 'fur_color', 'coat_color'];
-      
+
       for (const key of possibleKeys) {
         const colorValues = getValuesByGroupKey(key);
         if (colorValues && colorValues.length > 0) {
@@ -402,13 +407,13 @@ export default function ClientsPage() {
           return colorValues.map(v => ({ value: v.value, label: v.label }));
         }
       }
-      
+
       // Try getting all groups to find color group
-  const colorGroup = groupsArray.find((g: any) => 
-        g.name?.toLowerCase().includes('color') || 
+      const colorGroup = groupsArray.find((g: any) =>
+        g.name?.toLowerCase().includes('color') ||
         g.key?.toLowerCase().includes('color')
       );
-      
+
       if (colorGroup) {
         console.log('Found color group by name/key search:', colorGroup);
         const values = getValuesByGroupId(colorGroup.id);
@@ -419,7 +424,7 @@ export default function ClientsPage() {
     } catch (err) {
       console.error('Error getting custom color list:', err);
     }
-    
+
     // Fall back to hardcoded colors if custom fields fail
     console.log('Falling back to hardcoded color list');
     return colorList;
@@ -429,7 +434,7 @@ export default function ClientsPage() {
     try {
       // Try multiple possible keys
       const possibleKeys = ['pet_gender', 'gender', 'sex', 'animal_gender'];
-      
+
       for (const key of possibleKeys) {
         const genderValues = getValuesByGroupKey(key);
         if (genderValues && genderValues.length > 0) {
@@ -437,15 +442,15 @@ export default function ClientsPage() {
           return genderValues.map(v => ({ value: v.value, label: v.label }));
         }
       }
-      
+
       // Try getting all groups to find gender group
-  const genderGroup = groupsArray.find((g: any) => 
-        g.name?.toLowerCase().includes('gender') || 
+      const genderGroup = groupsArray.find((g: any) =>
+        g.name?.toLowerCase().includes('gender') ||
         g.key?.toLowerCase().includes('gender') ||
-        g.name?.toLowerCase().includes('sex') || 
+        g.name?.toLowerCase().includes('sex') ||
         g.key?.toLowerCase().includes('sex')
       );
-      
+
       if (genderGroup) {
         console.log('Found gender group by name/key search:', genderGroup);
         const values = getValuesByGroupId(genderGroup.id);
@@ -456,7 +461,7 @@ export default function ClientsPage() {
     } catch (err) {
       console.error('Error getting custom gender list:', err);
     }
-    
+
     // Fall back to hardcoded genders if custom fields fail
     console.log('Falling back to hardcoded gender list');
     return genderList;
@@ -466,7 +471,7 @@ export default function ClientsPage() {
     try {
       // Try multiple possible keys
       const possibleKeys = ['pet_type', 'type', 'animal_type', 'pet_types'];
-      
+
       for (const key of possibleKeys) {
         const petTypeValues = getValuesByGroupKey(key);
         if (petTypeValues && petTypeValues.length > 0) {
@@ -474,13 +479,13 @@ export default function ClientsPage() {
           return petTypeValues.map(v => ({ value: v.value, label: v.label }));
         }
       }
-      
+
       // Try getting all groups to find pet type group
-  const petTypeGroup = groupsArray.find((g: any) => 
-        (g.name?.toLowerCase().includes('type') && g.name?.toLowerCase().includes('pet')) || 
+      const petTypeGroup = groupsArray.find((g: any) =>
+        (g.name?.toLowerCase().includes('type') && g.name?.toLowerCase().includes('pet')) ||
         (g.key?.toLowerCase().includes('type') && g.key?.toLowerCase().includes('pet'))
       );
-      
+
       if (petTypeGroup) {
         console.log('Found pet type group by name/key search:', petTypeGroup);
         const values = getValuesByGroupId(petTypeGroup.id);
@@ -491,7 +496,7 @@ export default function ClientsPage() {
     } catch (err) {
       console.error('Error getting custom pet type list:', err);
     }
-    
+
     // Fall back to a minimal list
     console.log('Falling back to hardcoded pet type list');
     return [
@@ -506,7 +511,7 @@ export default function ClientsPage() {
   // Fetch clients (users with CLIENT role)
   const { data: clients, isLoading: isClientsLoading, refetch: refetchClients } = useQuery<User[]>({
     queryKey: ["/api/users/clients", userPracticeId],
-  enabled: !!user && !hasRole(user as any, 'CLIENT') && !!userPracticeId && userPracticeId.toString().trim() !== '',
+    enabled: !!user && !hasRole(user as any, 'CLIENT') && !!userPracticeId && userPracticeId.toString().trim() !== '',
     queryFn: async () => {
       if (!userPracticeId || userPracticeId.toString().trim() === '') {
         throw new Error('Practice ID is required');
@@ -555,7 +560,7 @@ export default function ClientsPage() {
       emergencyContactName: "",
       emergencyContactPhone: "",
       emergencyContactRelationship: "",
-      practiceId: userPracticeId,
+      practiceId: String(userPracticeId || ""),
       role: "CLIENT" // All users created on the clients page are automatically assigned CLIENT role
     },
   });
@@ -565,7 +570,7 @@ export default function ClientsPage() {
     defaultValues: {
       name: "",
       email: "",
-  password: undefined,
+      password: undefined,
       phone: "",
       address: "",
       city: "",
@@ -575,7 +580,7 @@ export default function ClientsPage() {
       emergencyContactName: "",
       emergencyContactPhone: "",
       emergencyContactRelationship: "",
-      practiceId: userPracticeId || "",
+      practiceId: String(userPracticeId || ""),
       role: "CLIENT",
     },
   });
@@ -587,8 +592,8 @@ export default function ClientsPage() {
       return await res.json();
     },
     onSuccess: (newClient) => {
-  // Immediately refetch clients list
-  refetchClients();
+      // Immediately refetch clients list
+      refetchClients();
       // Show success message
       toast({
         title: "Client created",
@@ -597,7 +602,7 @@ export default function ClientsPage() {
       // Close dialog and reset form
       setIsAddClientDialogOpen(false);
       clientForm.reset();
-      
+
       // Optional: Select the newly created client
       // This helps avoid the 404 error by directly selecting the client instead of navigating
       if (newClient) {
@@ -612,59 +617,64 @@ export default function ClientsPage() {
       });
     },
   });
-  
-// Update client mutation
-const updateClientMutation = useMutation({
-  mutationFn: async (data: (UpdateClientFormValues & { id: string })) => {
-    const { id, password, ...clientData } = data as any;
 
-    const payload: any = { ...clientData };
+  // Update client mutation
+  const updateClientMutation = useMutation({
+    mutationFn: async (data: (UpdateClientFormValues & { id: string })) => {
+      const { id, password, ...clientData } = data as any;
 
-    if (password && password.length > 0) {
-      payload.password = password;
-    }
+      const payload: any = { ...clientData };
 
-    const res = await apiRequest("PATCH", `/api/users/${id}`, payload);
-    return await res.json();
-  },
-  onSuccess: (updatedClient) => {
-  refetchClients();
-    toast({
-      title: "Client updated",
-      description: "The client has been successfully updated.",
-    });
-    setIsEditClientDialogOpen(false);
-    
-    // Reset the form with the updated client's data, but clear password field
-    if (updatedClient) {
-      updateClientForm.reset({
-        name: updatedClient.name || "",
-        email: updatedClient.email || "",
-        password: undefined,
-        phone: updatedClient.phone || "",
-        address: updatedClient.address || "",
-        city: updatedClient.city || "",
-        state: updatedClient.state || "",
-        zipCode: updatedClient.zipCode || "",
-        country: updatedClient.country || "",
-        emergencyContactName: updatedClient.emergencyContactName || "",
-        emergencyContactPhone: updatedClient.emergencyContactPhone || "",
-        emergencyContactRelationship: updatedClient.emergencyContactRelationship || "",
-        practiceId: updatedClient.practiceId || userPracticeId || "",
-        role: updatedClient.role || "CLIENT",
+      if (password && password.length > 0) {
+        payload.password = password;
+      }
+
+      // Coerce practiceId to number if present
+      if (payload.practiceId !== undefined) {
+        payload.practiceId = Number(payload.practiceId);
+      }
+
+      const res = await apiRequest("PATCH", `/api/users/${id}`, payload);
+      return await res.json();
+    },
+    onSuccess: (updatedClient) => {
+      refetchClients();
+      toast({
+        title: "Client updated",
+        description: "The client has been successfully updated.",
       });
-      setSelectedClient(updatedClient); // Update selected client in state
-    }
-  },
-  onError: (error: Error) => {
-    toast({
-      title: "Failed to update client",
-      description: error.message,
-      variant: "destructive",
-    });
-  },
-});
-  
+      setIsEditClientDialogOpen(false);
+
+      // Reset the form with the updated client's data, but clear password field
+      if (updatedClient) {
+        updateClientForm.reset({
+          name: updatedClient.name || "",
+          email: updatedClient.email || "",
+          password: undefined,
+          phone: updatedClient.phone || "",
+          address: updatedClient.address || "",
+          city: updatedClient.city || "",
+          state: updatedClient.state || "",
+          zipCode: updatedClient.zipCode || "",
+          country: updatedClient.country || "",
+          emergencyContactName: updatedClient.emergencyContactName || "",
+          emergencyContactPhone: updatedClient.emergencyContactPhone || "",
+          emergencyContactRelationship: updatedClient.emergencyContactRelationship || "",
+          practiceId: String(updatedClient.practiceId || userPracticeId || ""),
+          role: updatedClient.role || "CLIENT",
+        });
+        setSelectedClient(updatedClient); // Update selected client in state
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update client",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // Delete client mutation
   const deleteClientMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -676,22 +686,22 @@ const updateClientMutation = useMutation({
       return id;
     },
     onSuccess: (deletedId) => {
-  // Immediately refetch clients list
-  refetchClients();
-  // Also refetch pets in case of cascade deletions or ownership changes
-  refetchPets();
-      
+      // Immediately refetch clients list
+      refetchClients();
+      // Also refetch pets in case of cascade deletions or ownership changes
+      refetchPets();
+
       // Show success message
       toast({
         title: "Client deleted",
         description: "The client has been successfully deleted.",
       });
-      
+
       // Close dialog
       setIsDeleteClientDialogOpen(false);
-      
+
       // Clear selected client if it was the one deleted
-      if (selectedClient && selectedClient.id === deletedId) {
+      if (selectedClient && String(selectedClient.id) === String(deletedId)) {
         setSelectedClient(null);
       }
     },
@@ -723,6 +733,19 @@ const updateClientMutation = useMutation({
   });
 
   // Keep critical IDs in sync with selected client/practice for Add Pet
+  const safeDateToInput = (val: any) => {
+    try {
+      if (!val) return "";
+      // If it's already a string in YYYY-MM-DD, accept it
+      if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) return val.split('T')[0];
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return "";
+      return d.toISOString().split('T')[0];
+    } catch (e) {
+      return "";
+    }
+  };
+
   useEffect(() => {
     if (selectedClient) {
       petForm.setValue("ownerId", String(selectedClient.id));
@@ -757,13 +780,17 @@ const updateClientMutation = useMutation({
           const uploadData = await uploadRes.json();
           photoPath = uploadData.photoPath;
         }
-        
+
         // Create the pet with the photo path
-  const petData = {
-          ...data,
-          photoPath
-        };
-        
+        const petData: any = { ...data };
+        if (photoPath) {
+          petData.photoPath = photoPath;
+        }
+
+        // Coerce numeric ids to numbers (API expects numbers)
+        if (petData.ownerId !== undefined) petData.ownerId = Number(petData.ownerId);
+        if (petData.practiceId !== undefined) petData.practiceId = Number(petData.practiceId);
+
         const res = await apiRequest("POST", "/api/pets", petData);
         return await res.json();
       } catch (error) {
@@ -792,7 +819,7 @@ const updateClientMutation = useMutation({
       });
     },
   });
-  
+
   // Update pet mutation
   const updatePetMutation = useMutation({
     mutationFn: async (data: PetFormValues & { id: number }) => {
@@ -818,11 +845,16 @@ const updateClientMutation = useMutation({
           const uploadData = await uploadRes.json();
           photoPath = uploadData.photoPath;
         }
-        
+
         // Create the pet update data with the photo path
-  const { id, ...updateData } = data;
-  const petData = photoPath ? { ...updateData, photoPath } : updateData;
-        
+        const { id, ...updateData } = data;
+        const petData: any = { ...updateData };
+        if (photoPath) petData.photoPath = photoPath;
+
+        // Coerce numeric ids to numbers
+        if (petData.ownerId !== undefined) petData.ownerId = Number(petData.ownerId);
+        if (petData.practiceId !== undefined) petData.practiceId = Number(petData.practiceId);
+
         const res = await apiRequest("PATCH", `/api/pets/${id}`, petData);
         return await res.json();
       } catch (error) {
@@ -872,7 +904,7 @@ const updateClientMutation = useMutation({
   const handleClientSelect = (client: User) => {
     setSelectedClient(client);
     // Set owner ID in pet form
-    petForm.setValue("ownerId", client.id);
+    petForm.setValue("ownerId", String(client.id));
     // Set practice ID in pet form if it exists
     if (userPracticeId) {
       petForm.setValue("practiceId", userPracticeId);
@@ -886,45 +918,45 @@ const updateClientMutation = useMutation({
       // Ensure you pass the correct ID to the mutation
       updateClientMutation.mutate({
         ...(data as UpdateClientFormValues), // Cast to UpdateClientFormValues for clarity
-        id: selectedClient.id // Pass the actual ID of the selected client
+        id: String(selectedClient.id) // Pass the actual ID of the selected client as string
       });
     } else {
       // This is a create operation
       createClientMutation.mutate(data as ClientFormValues); // Cast to ClientFormValues
     }
   };
-  
-  
-// Open edit client dialog with the selected client's data
-const handleEditClient = () => {
-  if (selectedClient) {
-    // Populate the updateClientForm with the selected client's data
-    updateClientForm.reset({
-      name: selectedClient.name || "",
-      email: selectedClient.email || "",
-      // password: "", // Always clear password for security when opening edit form
-      phone: selectedClient.phone || "",
-      address: selectedClient.address || "",
-      city: selectedClient.city || "",
-      state: selectedClient.state || "",
-      zipCode: selectedClient.zipCode || "",
-      country: selectedClient.country || "",
-      emergencyContactName: selectedClient.emergencyContactName || "",
-      emergencyContactPhone: selectedClient.emergencyContactPhone || "",
-      emergencyContactRelationship: selectedClient.emergencyContactRelationship || "",
-      practiceId: selectedClient.practiceId || userPracticeId || "",
-      role: selectedClient.role || "CLIENT"
-    });
-    setIsEditClientDialogOpen(true);
-  }
-};
+
+
+  // Open edit client dialog with the selected client's data
+  const handleEditClient = () => {
+    if (selectedClient) {
+      // Populate the updateClientForm with the selected client's data
+      updateClientForm.reset({
+        name: selectedClient.name || "",
+        email: selectedClient.email || "",
+        // password: "", // Always clear password for security when opening edit form
+        phone: selectedClient.phone || "",
+        address: selectedClient.address || "",
+        city: selectedClient.city || "",
+        state: selectedClient.state || "",
+        zipCode: selectedClient.zipCode || "",
+        country: selectedClient.country || "",
+        emergencyContactName: selectedClient.emergencyContactName || "",
+        emergencyContactPhone: selectedClient.emergencyContactPhone || "",
+        emergencyContactRelationship: selectedClient.emergencyContactRelationship || "",
+        practiceId: String(selectedClient.practiceId || userPracticeId || ""),
+        role: selectedClient.role || "CLIENT"
+      });
+      setIsEditClientDialogOpen(true);
+    }
+  };
 
   // Handle pet form submission
   const onPetFormSubmit = (data: PetFormValues) => {
     if (editPetId) {
       // Update existing pet
-      updatePetMutation.mutate({ 
-        ...data, 
+      updatePetMutation.mutate({
+        ...data,
         id: editPetId as number
       });
     } else {
@@ -934,7 +966,7 @@ const handleEditClient = () => {
   };
 
   // Get client's pets
-  const clientPets = pets?.filter(pet => 
+  const clientPets = pets?.filter(pet =>
     selectedClient && pet.ownerId === selectedClient.id
   );
 
@@ -990,7 +1022,7 @@ const handleEditClient = () => {
                           Add a new client to your practice. Clients created here will automatically be assigned the CLIENT role.
                         </DialogDescription>
                       </DialogHeader>
-                      
+
                       <Form {...clientForm}>
                         <form onSubmit={clientForm.handleSubmit(onClientFormSubmit)} className="space-y-4 pt-4">
                           {/* Main form grid with two columns */}
@@ -1000,7 +1032,7 @@ const handleEditClient = () => {
                               <h3 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                                 Contact Details
                               </h3>
-                              
+
                               <FormField
                                 control={clientForm.control}
                                 name="name"
@@ -1014,7 +1046,7 @@ const handleEditClient = () => {
                                   </FormItem>
                                 )}
                               />
-                              
+
                               <FormField
                                 control={clientForm.control}
                                 name="email"
@@ -1028,7 +1060,7 @@ const handleEditClient = () => {
                                   </FormItem>
                                 )}
                               />
-                              
+
                               <FormField
                                 control={clientForm.control}
                                 name="phone"
@@ -1042,7 +1074,7 @@ const handleEditClient = () => {
                                   </FormItem>
                                 )}
                               />
-                              
+
                               <FormField
                                 control={clientForm.control}
                                 name="username"
@@ -1056,7 +1088,7 @@ const handleEditClient = () => {
                                   </FormItem>
                                 )}
                               />
-                              
+
                               <FormField
                                 control={clientForm.control}
                                 name="password"
@@ -1070,15 +1102,15 @@ const handleEditClient = () => {
                                   </FormItem>
                                 )}
                               />
-                              
 
-                              
+
+
                               {/* Emergency Contact */}
                               <div className="space-y-4 pt-2">
                                 <h3 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                                   Emergency Contact
                                 </h3>
-                                
+
                                 <FormField
                                   control={clientForm.control}
                                   name="emergencyContactName"
@@ -1092,7 +1124,7 @@ const handleEditClient = () => {
                                     </FormItem>
                                   )}
                                 />
-                                
+
                                 <div className="grid grid-cols-2 gap-4">
                                   <FormField
                                     control={clientForm.control}
@@ -1123,13 +1155,13 @@ const handleEditClient = () => {
                                 </div>
                               </div>
                             </div>
-                            
+
                             {/* Right column - Address Information */}
                             <div className="space-y-4">
                               <h3 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                                 Address Information
                               </h3>
-                              
+
                               <FormField
                                 control={clientForm.control}
                                 name="address"
@@ -1143,7 +1175,7 @@ const handleEditClient = () => {
                                   </FormItem>
                                 )}
                               />
-                              
+
                               <div className="grid grid-cols-2 gap-4">
                                 <FormField
                                   control={clientForm.control}
@@ -1172,7 +1204,7 @@ const handleEditClient = () => {
                                   )}
                                 />
                               </div>
-                              
+
                               <div className="grid grid-cols-2 gap-4">
                                 <FormField
                                   control={clientForm.control}
@@ -1203,9 +1235,9 @@ const handleEditClient = () => {
                               </div>
                             </div>
                           </div>
-                          
+
                           <DialogFooter>
-                            <Button 
+                            <Button
                               type="submit"
                               disabled={createClientMutation.isPending}
                             >
@@ -1237,12 +1269,11 @@ const handleEditClient = () => {
                     {filteredClients.map((client) => (
                       <div
                         key={client.id}
-                        className={`p-3 rounded-md hover:bg-slate-100 transition-colors ${
-                          selectedClient?.id === client.id ? "bg-slate-100" : ""
-                        }`}
+                        className={`p-3 rounded-md hover:bg-slate-100 transition-colors ${selectedClient?.id === client.id ? "bg-slate-100" : ""
+                          }`}
                       >
                         <div className="flex items-center">
-                          <div 
+                          <div
                             className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center cursor-pointer"
                             onClick={() => handleClientSelect(client)}
                           >
@@ -1250,20 +1281,20 @@ const handleEditClient = () => {
                               {(client.name || client.email)?.charAt(0)?.toUpperCase() || '?'}
                             </span>
                           </div>
-                          <div 
+                          <div
                             className="ml-3 flex-grow cursor-pointer"
                             onClick={() => handleClientSelect(client)}
                           >
                             <p className="font-medium text-slate-900">{client.name}</p>
                             <p className="text-xs text-slate-500">{client.email}</p>
                           </div>
-                            <div className="flex gap-1">
+                          <div className="flex gap-1">
                             <Button variant="ghost" size="sm" asChild className="shrink-0">
                               <Link href={`/admin/clients/${client.id}`}>View</Link>
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               className="shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1293,7 +1324,7 @@ const handleEditClient = () => {
               </CardContent>
             </Card>
           </div>
-          
+
           {/* Client Details & Pets */}
           <div className="md:col-span-2">
             {selectedClient ? (
@@ -1323,7 +1354,7 @@ const handleEditClient = () => {
                               Add a new pet for {selectedClient.name}.
                             </DialogDescription>
                           </DialogHeader>
-                          
+
                           <Form {...petForm}>
                             <form onSubmit={petForm.handleSubmit(onPetFormSubmit)} className="space-y-4 pt-4">
                               {/* Main form grid with two columns */}
@@ -1333,7 +1364,7 @@ const handleEditClient = () => {
                                   <h3 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                                     Basic Information
                                   </h3>
-                                  
+
                                   <FormField
                                     control={petForm.control}
                                     name="name"
@@ -1347,7 +1378,7 @@ const handleEditClient = () => {
                                       </FormItem>
                                     )}
                                   />
-                                  
+
                                   <FormField
                                     control={petForm.control}
                                     name="species"
@@ -1371,7 +1402,7 @@ const handleEditClient = () => {
                                       </FormItem>
                                     )}
                                   />
-                                  
+
                                   <FormField
                                     control={petForm.control}
                                     name="breed"
@@ -1390,7 +1421,7 @@ const handleEditClient = () => {
                                       </FormItem>
                                     )}
                                   />
-                                  
+
                                   <FormField
                                     control={petForm.control}
                                     name="color"
@@ -1409,7 +1440,7 @@ const handleEditClient = () => {
                                       </FormItem>
                                     )}
                                   />
-                                  
+
                                   <FormField
                                     control={petForm.control}
                                     name="gender"
@@ -1428,7 +1459,7 @@ const handleEditClient = () => {
                                       </FormItem>
                                     )}
                                   />
-                                  
+
                                   {/* Pet Photo Upload Field */}
                                   <FormItem className="space-y-4">
                                     <FormLabel>Pet Photo</FormLabel>
@@ -1436,13 +1467,13 @@ const handleEditClient = () => {
                                       {/* Photo Preview */}
                                       {petPhoto && (
                                         <div className="relative w-32 h-32 rounded-md overflow-hidden border border-border">
-                                          <img 
-                                            src={URL.createObjectURL(petPhoto)} 
-                                            alt="Pet preview" 
+                                          <img
+                                            src={URL.createObjectURL(petPhoto)}
+                                            alt="Pet preview"
                                             className="w-full h-full object-cover"
                                           />
-                                          <Button 
-                                            variant="destructive" 
+                                          <Button
+                                            variant="destructive"
                                             size="icon"
                                             type="button"
                                             className="absolute top-1 right-1 w-6 h-6 rounded-full"
@@ -1457,7 +1488,7 @@ const handleEditClient = () => {
                                           </Button>
                                         </div>
                                       )}
-                                      
+
                                       {/* Upload Button */}
                                       {!petPhoto ? (
                                         <div className="grid w-full max-w-sm items-center gap-1.5">
@@ -1482,8 +1513,8 @@ const handleEditClient = () => {
                                           />
                                         </div>
                                       ) : (
-                                        <Button 
-                                          variant="outline" 
+                                        <Button
+                                          variant="outline"
                                           size="sm"
                                           type="button"
                                           className="mt-2"
@@ -1501,13 +1532,13 @@ const handleEditClient = () => {
                                     </FormDescription>
                                   </FormItem>
                                 </div>
-                                
+
                                 {/* Right column - Health Information */}
                                 <div className="space-y-4">
                                   <h3 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                                     Health & Additional Information
                                   </h3>
-                                  
+
                                   <FormField
                                     control={petForm.control}
                                     name="dateOfBirth"
@@ -1521,7 +1552,7 @@ const handleEditClient = () => {
                                       </FormItem>
                                     )}
                                   />
-                                  
+
                                   <FormField
                                     control={petForm.control}
                                     name="weight"
@@ -1535,7 +1566,7 @@ const handleEditClient = () => {
                                       </FormItem>
                                     )}
                                   />
-                                  
+
                                   <FormField
                                     control={petForm.control}
                                     name="allergies"
@@ -1543,16 +1574,16 @@ const handleEditClient = () => {
                                       <FormItem>
                                         <FormLabel>Allergies</FormLabel>
                                         <FormControl>
-                                          <Textarea 
-                                            placeholder="List any known allergies" 
-                                            {...field} 
+                                          <Textarea
+                                            placeholder="List any known allergies"
+                                            {...field}
                                           />
                                         </FormControl>
                                         <FormMessage />
                                       </FormItem>
                                     )}
                                   />
-                                  
+
                                   <FormField
                                     control={petForm.control}
                                     name="microchipNumber"
@@ -1566,7 +1597,7 @@ const handleEditClient = () => {
                                       </FormItem>
                                     )}
                                   />
-                                  
+
                                   {/* Pet Type Custom Field */}
                                   <FormField
                                     control={petForm.control}
@@ -1594,9 +1625,9 @@ const handleEditClient = () => {
                                   />
                                 </div>
                               </div>
-                              
+
                               <DialogFooter className="pt-4">
-                                <Button 
+                                <Button
                                   type="submit"
                                   disabled={createPetMutation.isPending}
                                 >
@@ -1625,7 +1656,7 @@ const handleEditClient = () => {
                       <TabsTrigger value="medical-records">Medical Records</TabsTrigger>
                       <TabsTrigger value="health-plans">Health Plans</TabsTrigger>
                     </TabsList>
-                    
+
                     <TabsContent value="pets">
                       {isPetsLoading ? (
                         <div className="flex items-center justify-center h-40">
@@ -1640,9 +1671,9 @@ const handleEditClient = () => {
                                   <div className="flex items-center gap-3">
                                     <Avatar className="h-12 w-12 border">
                                       {pet.photoPath ? (
-                                        <AvatarImage 
-                                          src={pet.photoPath.startsWith('/') ? pet.photoPath : `/${pet.photoPath}`} 
-                                          alt={pet.name} 
+                                        <AvatarImage
+                                          src={pet.photoPath.startsWith('/') ? pet.photoPath : `/${pet.photoPath}`}
+                                          alt={pet.name}
                                         />
                                       ) : (
                                         <AvatarFallback className={`${getPetAvatarColors(pet.name).bg} ${getPetAvatarColors(pet.name).text}`}>
@@ -1655,7 +1686,7 @@ const handleEditClient = () => {
                                       <CardDescription>
                                         {pet.pet_type ? (
                                           <>
-                                            {pet.pet_type.split('_').map(word => 
+                                            {pet.pet_type.split('_').map(word =>
                                               word.charAt(0).toUpperCase() + word.slice(1)
                                             ).join(' ')}
                                             {pet.breed ? ` · ${pet.breed}` : ''}
@@ -1667,8 +1698,8 @@ const handleEditClient = () => {
                                     </div>
                                   </div>
                                   <div className="flex space-x-1">
-                                    <Button 
-                                      variant="ghost" 
+                                    <Button
+                                      variant="ghost"
                                       size="icon"
                                       onClick={() => {
                                         // Set the form default values
@@ -1676,7 +1707,7 @@ const handleEditClient = () => {
                                           name: pet.name,
                                           species: pet.species || "",
                                           breed: pet.breed || "",
-                                          dateOfBirth: pet.dateOfBirth ? new Date(pet.dateOfBirth).toISOString().split('T')[0] : "",
+                                          dateOfBirth: safeDateToInput(pet.dateOfBirth),
                                           weight: pet.weight || "",
                                           allergies: pet.allergies || "",
                                           color: pet.color || "",
@@ -1694,8 +1725,8 @@ const handleEditClient = () => {
                                     >
                                       <Edit className="h-4 w-4" />
                                     </Button>
-                                    <Button 
-                                      variant="ghost" 
+                                    <Button
+                                      variant="ghost"
                                       size="icon"
                                       onClick={() => deletePetMutation.mutate(Number(pet.id))}
                                       disabled={deletePetMutation.isPending}
@@ -1714,7 +1745,7 @@ const handleEditClient = () => {
                                   {pet.dateOfBirth && (
                                     <div className="flex justify-between">
                                       <span className="text-slate-500">Date of Birth:</span>
-                                      <span className="font-medium">{new Date(pet.dateOfBirth).toLocaleDateString()}</span>
+                                      <span className="font-medium">{(function () { try { const d = new Date(pet.dateOfBirth); return isNaN(d.getTime()) ? '' : d.toLocaleDateString(); } catch (e) { return ''; } })()}</span>
                                     </div>
                                   )}
                                   {pet.weight && (
@@ -1750,7 +1781,7 @@ const handleEditClient = () => {
                                 </div>
                               </CardContent>
                               <CardFooter className="pt-0">
-                               <div className="flex space-x-2 w-full">
+                                <div className="flex space-x-2 w-full">
                                   <Link href={`/admin/soap-notes/pet/${pet.id}`}>
                                     <Button variant="outline" size="sm" className="flex-1 w-full">
                                       View Records
@@ -1762,9 +1793,9 @@ const handleEditClient = () => {
                                     </Button>
                                   </Link> */}
                                   <Link href={`/admin/appointments?view=schedule&petId=${pet.id}`}>
-                                  <Button size="sm" className="flex-1 w-full" style={{ flex: 1 }}>
-                                    Schedule Visit
-                                  </Button>
+                                    <Button size="sm" className="flex-1 w-full" style={{ flex: 1 }}>
+                                      Schedule Visit
+                                    </Button>
                                   </Link>
                                 </div>
                               </CardFooter >
@@ -1788,13 +1819,13 @@ const handleEditClient = () => {
                         </Card>
                       )}
                     </TabsContent>
-                    
+
                     <TabsContent value="appointments">
                       {selectedClient && (
-                        <ClientAppointmentsList clientId={selectedClient.id} />
+                        <ClientAppointmentsList clientId={String(selectedClient.id)} />
                       )}
                     </TabsContent>
-                    
+
                     <TabsContent value="medical-records">
                       {clientPets && clientPets.length > 0 ? (
                         <div className="grid grid-cols-1 gap-4">
@@ -1804,9 +1835,9 @@ const handleEditClient = () => {
                                 <div className="flex items-center gap-3">
                                   <Avatar className="h-10 w-10 border">
                                     {pet.photoPath ? (
-                                      <AvatarImage 
-                                        src={pet.photoPath.startsWith('/') ? pet.photoPath : `/${pet.photoPath}`} 
-                                        alt={pet.name} 
+                                      <AvatarImage
+                                        src={pet.photoPath.startsWith('/') ? pet.photoPath : `/${pet.photoPath}`}
+                                        alt={pet.name}
                                       />
                                     ) : (
                                       <AvatarFallback className={`${getPetAvatarColors(pet.name).bg} ${getPetAvatarColors(pet.name).text}`}>
@@ -1819,7 +1850,7 @@ const handleEditClient = () => {
                                     <CardDescription>
                                       {pet.pet_type ? (
                                         <>
-                                          {pet.pet_type.split('_').map(word => 
+                                          {pet.pet_type.split('_').map(word =>
                                             word.charAt(0).toUpperCase() + word.slice(1)
                                           ).join(' ')}
                                           {pet.breed ? ` · ${pet.breed}` : ''}
@@ -1841,7 +1872,7 @@ const handleEditClient = () => {
                                       </Button>
                                     </Link>
                                   </div>
-                                  
+
                                   <div className="flex items-center justify-between border-b pb-2">
                                     <span className="font-medium">Lab Results</span>
                                     <Link href={`/pet-lab-results/${pet.id}`}>
@@ -1850,7 +1881,7 @@ const handleEditClient = () => {
                                       </Button>
                                     </Link>
                                   </div>
-                                  
+
                                   <div className="flex items-center justify-between border-b pb-2">
                                     <span className="font-medium">Prescriptions</span>
                                     <Link href={`/pet-prescriptions/${pet.id}`}>
@@ -1859,7 +1890,7 @@ const handleEditClient = () => {
                                       </Button>
                                     </Link>
                                   </div>
-                                  
+
                                   <div className="flex items-center justify-between">
                                     <span className="font-medium">Timeline View</span>
                                     <Link href={`/admin/patient-timeline?petId=${pet.id}`}>
@@ -1884,7 +1915,7 @@ const handleEditClient = () => {
                         </Card>
                       )}
                     </TabsContent>
-                    
+
                     <TabsContent value="health-plans">
                       <Card>
                         <CardContent className="py-8 text-center">
@@ -1915,7 +1946,7 @@ const handleEditClient = () => {
           </div>
         </div>
       </main>
-      
+
       {/* Edit Pet Dialog */}
       <Dialog open={isEditPetDialogOpen} onOpenChange={setIsEditPetDialogOpen}>
         <DialogContent className="sm:max-w-[900px]">
@@ -1925,7 +1956,7 @@ const handleEditClient = () => {
               Edit pet information.
             </DialogDescription>
           </DialogHeader>
-          
+
           <Form {...petForm}>
             <form onSubmit={petForm.handleSubmit(onPetFormSubmit)} className="space-y-4 pt-4">
               {/* Main form grid with two columns */}
@@ -1935,7 +1966,7 @@ const handleEditClient = () => {
                   <h3 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                     Basic Information
                   </h3>
-                  
+
                   <FormField
                     control={petForm.control}
                     name="name"
@@ -1949,7 +1980,7 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={petForm.control}
                     name="species"
@@ -1973,7 +2004,7 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={petForm.control}
                     name="breed"
@@ -1993,7 +2024,7 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={petForm.control}
                     name="color"
@@ -2012,7 +2043,7 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={petForm.control}
                     name="gender"
@@ -2031,7 +2062,7 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   {/* Pet Photo Upload Field */}
                   <FormItem>
                     <FormLabel>Pet Photo</FormLabel>
@@ -2052,13 +2083,13 @@ const handleEditClient = () => {
                     </FormDescription>
                   </FormItem>
                 </div>
-                  
+
                 {/* Right column - Health Information */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                     Health & Additional Information
                   </h3>
-                  
+
                   <FormField
                     control={petForm.control}
                     name="dateOfBirth"
@@ -2072,7 +2103,7 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={petForm.control}
                     name="weight"
@@ -2086,7 +2117,7 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={petForm.control}
                     name="allergies"
@@ -2094,16 +2125,16 @@ const handleEditClient = () => {
                       <FormItem>
                         <FormLabel>Allergies</FormLabel>
                         <FormControl>
-                          <Textarea 
-                            placeholder="List any known allergies" 
-                            {...field} 
+                          <Textarea
+                            placeholder="List any known allergies"
+                            {...field}
                           />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={petForm.control}
                     name="microchipNumber"
@@ -2117,7 +2148,7 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={petForm.control}
                     name="pet_type"
@@ -2140,7 +2171,7 @@ const handleEditClient = () => {
                   />
                 </div>
               </div>
-              
+
               <DialogFooter className="pt-4">
                 <Button
                   type="button"
@@ -2157,7 +2188,7 @@ const handleEditClient = () => {
                 >
                   Cancel
                 </Button>
-                <Button 
+                <Button
                   type="submit"
                   disabled={updatePetMutation.isPending}
                 >
@@ -2175,7 +2206,7 @@ const handleEditClient = () => {
           </Form>
         </DialogContent>
       </Dialog>
-      
+
       {/* Edit Client Dialog */}
       <Dialog open={isEditClientDialogOpen} onOpenChange={setIsEditClientDialogOpen}>
         <DialogContent className="sm:max-w-[900px]">
@@ -2185,7 +2216,7 @@ const handleEditClient = () => {
               Update client information.
             </DialogDescription>
           </DialogHeader>
-          
+
           <Form {...updateClientForm}>
             <form onSubmit={updateClientForm.handleSubmit(onClientFormSubmit)} className="space-y-4 pt-4">
               {/* Main form grid with two columns */}
@@ -2195,7 +2226,7 @@ const handleEditClient = () => {
                   <h3 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                     Contact Details
                   </h3>
-                  
+
                   <FormField
                     control={updateClientForm.control}
                     name="name"
@@ -2209,7 +2240,7 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={updateClientForm.control}
                     name="email"
@@ -2223,7 +2254,7 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={updateClientForm.control}
                     name="phone"
@@ -2237,7 +2268,7 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   {/* <FormField
                     control={updateClientForm.control}
                     name="username"
@@ -2256,7 +2287,7 @@ const handleEditClient = () => {
                     <FormLabel>Username</FormLabel>
                     <Input readOnly disabled value={selectedClient?.username || ""} />
                   </div>
-                  
+
                   <FormField
                     control={updateClientForm.control}
                     name="password"
@@ -2273,13 +2304,13 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   {/* Emergency Contact */}
                   <div className="space-y-4 pt-2">
                     <h3 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                       Emergency Contact
                     </h3>
-                    
+
                     <FormField
                       control={updateClientForm.control}
                       name="emergencyContactName"
@@ -2293,7 +2324,7 @@ const handleEditClient = () => {
                         </FormItem>
                       )}
                     />
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
                         control={updateClientForm.control}
@@ -2324,13 +2355,13 @@ const handleEditClient = () => {
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Right column - Address Information */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                     Address Information
                   </h3>
-                  
+
                   <FormField
                     control={updateClientForm.control}
                     name="address"
@@ -2344,7 +2375,7 @@ const handleEditClient = () => {
                       </FormItem>
                     )}
                   />
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={updateClientForm.control}
@@ -2373,7 +2404,7 @@ const handleEditClient = () => {
                       )}
                     />
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={updateClientForm.control}
@@ -2404,7 +2435,7 @@ const handleEditClient = () => {
                   </div>
                 </div>
               </div>
-              
+
               <DialogFooter className="pt-4">
                 <Button
                   type="button"
@@ -2416,7 +2447,7 @@ const handleEditClient = () => {
                 >
                   Cancel
                 </Button>
-                <Button 
+                <Button
                   type="submit"
                   disabled={updateClientMutation.isPending}
                 >
@@ -2469,7 +2500,7 @@ const handleEditClient = () => {
               variant="destructive"
               onClick={() => {
                 if (selectedClient) {
-                  deleteClientMutation.mutate(selectedClient.id);
+                  deleteClientMutation.mutate(String(selectedClient.id));
                 }
               }}
               disabled={deleteClientMutation.isPending}
@@ -2492,27 +2523,29 @@ const handleEditClient = () => {
 
 // Client Appointments List Component
 interface ClientAppointmentsListProps {
-  clientId: string;
+  clientId: string | number;
 }
 
 function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   const { data: appointments, isLoading, error } = useQuery({
     queryKey: ['/api/appointments/client', clientId],
     queryFn: async () => {
-      const response = await fetch(`/api/appointments?clientId=${clientId}`);
-      
+      const id = String(clientId);
+      const response = await fetch(`/api/appointments?clientId=${id}`);
+      deleteClientMutation.mutate(String(selectedClient.id));
+
       if (!response.ok) {
         throw new Error('Failed to fetch client appointments');
       }
-      
+
       return response.json();
     },
     enabled: !!clientId,
   });
-  
+
   if (isLoading) {
     return (
       <Card>
@@ -2525,7 +2558,7 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
       </Card>
     );
   }
-  
+
   if (error) {
     return (
       <Card>
@@ -2535,12 +2568,12 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
           <p className="text-sm text-slate-500 mt-2">
             {error instanceof Error ? error.message : 'An unexpected error occurred.'}
           </p>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="mt-4"
             onClick={() => {
               queryClient.invalidateQueries({ queryKey: ['/api/appointments/client', clientId] });
-              toast({ 
+              toast({
                 title: "Refreshing appointments",
                 description: "Attempting to reload client appointments"
               });
@@ -2553,7 +2586,7 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
       </Card>
     );
   }
-  
+
   if (!appointments || appointments.length === 0) {
     return (
       <Card>
@@ -2576,7 +2609,7 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
       </Card>
     );
   }
-  
+
   return (
     <div className="space-y-4">
       <Card>
@@ -2603,11 +2636,11 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
                   <div className={cn(
                     "w-full sm:w-2 flex-shrink-0",
                     appointment.status === 'completed' ? "bg-green-500" :
-                    appointment.status === 'cancelled' ? "bg-red-500" :
-                    appointment.status === 'no-show' ? "bg-amber-500" :
-                    "bg-blue-500"
+                      appointment.status === 'cancelled' ? "bg-red-500" :
+                        appointment.status === 'no-show' ? "bg-amber-500" :
+                          "bg-blue-500"
                   )} />
-                  
+
                   <div className="flex-grow p-4">
                     <div className="flex flex-col sm:flex-row sm:justify-between mb-3">
                       <div>
@@ -2622,29 +2655,29 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
                           )}
                         </div>
                       </div>
-                      
+
                       <div className="mt-2 sm:mt-0 flex items-center">
                         <Badge variant={
                           appointment.status === 'completed' ? "secondary" :
-                          appointment.status === 'cancelled' ? "destructive" :
-                          appointment.status === 'no-show' ? "secondary" :
-                          "default"
+                            appointment.status === 'cancelled' ? "destructive" :
+                              appointment.status === 'no-show' ? "secondary" :
+                                "default"
                         } className="ml-2">
                           {appointment.status === 'completed' ? "Completed" :
-                           appointment.status === 'cancelled' ? "Cancelled" :
-                           appointment.status === 'no-show' ? "No-show" :
-                           "Scheduled"}
+                            appointment.status === 'cancelled' ? "Cancelled" :
+                              appointment.status === 'no-show' ? "No-show" :
+                                "Scheduled"}
                         </Badge>
                       </div>
                     </div>
-                    
+
                     {appointment.pet && (
                       <div className="flex items-center mb-3">
                         <Avatar className="h-6 w-6 mr-2">
                           {appointment.pet.photoPath ? (
-                            <AvatarImage 
-                              src={appointment.pet.photoPath.startsWith('/') ? appointment.pet.photoPath : `/${appointment.pet.photoPath}`} 
-                              alt={appointment.pet.name} 
+                            <AvatarImage
+                              src={appointment.pet.photoPath.startsWith('/') ? appointment.pet.photoPath : `/${appointment.pet.photoPath}`}
+                              alt={appointment.pet.name}
                             />
                           ) : (
                             <AvatarFallback className={cn(
@@ -2661,13 +2694,13 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
                         </span>
                       </div>
                     )}
-                    
+
                     {appointment.notes && (
                       <div className="text-sm text-muted-foreground mt-2 border-t pt-2">
                         <p className="line-clamp-2">{appointment.notes}</p>
                       </div>
                     )}
-                    
+
                     <div className="flex justify-end mt-3">
                       <Button variant="ghost" size="sm" asChild>
                         <Link href={`/appointments/${appointment.id}`}>

@@ -880,6 +880,10 @@ export default function ClientPortalPage() {
   
   // Contact modal state
   const [showMessageModal, setShowMessageModal] = useState(false);
+  const [messageSubject, setMessageSubject] = useState('');
+  const [messagePriority, setMessagePriority] = useState('medium');
+  const [messageContent, setMessageContent] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   
   // Use notification context
   const { notifications, unreadCount, markAsRead, fetchNotifications, markAllAsRead } = useNotifications();
@@ -1971,13 +1975,15 @@ export default function ClientPortalPage() {
                 id="message-subject"
                 placeholder="Brief subject line"
                 className="col-span-3 p-2 border rounded"
+                value={messageSubject}
+                onChange={(e) => setMessageSubject(e.target.value)}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="message-priority" className="text-right">
                 Priority
               </label>
-              <select id="message-priority" className="col-span-3 p-2 border rounded">
+              <select id="message-priority" className="col-span-3 p-2 border rounded" value={messagePriority} onChange={(e) => setMessagePriority(e.target.value)}>
                 <option value="low">Low - General question</option>
                 <option value="medium">Medium - Concern about pet</option>
                 <option value="high">High - Urgent medical concern</option>
@@ -1992,24 +1998,56 @@ export default function ClientPortalPage() {
                 placeholder="Describe your question or concern..."
                 className="col-span-3 p-2 border rounded"
                 rows={5}
+                value={messageContent}
+                onChange={(e) => setMessageContent(e.target.value)}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setShowMessageModal(false)}>
+            <Button type="button" variant="outline" onClick={() => { setShowMessageModal(false); }} disabled={isSendingMessage}>
               Cancel
             </Button>
             <Button 
               type="submit" 
-              onClick={() => {
-                toast({
-                  title: "Message Sent",
-                  description: "Your message has been sent to the veterinary team.",
-                });
-                setShowMessageModal(false);
+              onClick={async () => {
+                if (!messageContent.trim()) {
+                  toast({ title: 'Message Required', description: 'Please enter a message before sending.', variant: 'destructive' });
+                  return;
+                }
+
+                setIsSendingMessage(true);
+                try {
+                  const res = await fetch('/api/messages/client', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                      subject: messageSubject,
+                      priority: messagePriority,
+                      message: messageContent,
+                    })
+                  });
+
+                  if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || 'Failed to send message');
+                  }
+
+                  toast({ title: 'Message Sent', description: 'Your message has been sent to the veterinary team.' });
+                  setShowMessageModal(false);
+                  setMessageSubject('');
+                  setMessagePriority('medium');
+                  setMessageContent('');
+                } catch (error: any) {
+                  console.error('Failed to send client message:', error);
+                  toast({ title: 'Send Failed', description: error.message || 'Failed to send message. Please try again later.', variant: 'destructive' });
+                } finally {
+                  setIsSendingMessage(false);
+                }
               }}
+              disabled={isSendingMessage}
             >
-              Send Message
+              {isSendingMessage ? 'Sending...' : 'Send Message'}
             </Button>
           </DialogFooter>
         </DialogContent>

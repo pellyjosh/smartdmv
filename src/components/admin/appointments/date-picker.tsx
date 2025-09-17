@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface DatePickerProps {
   selectedDate: Date;
   onDateSelect: (date: Date) => void;
+  // Optional set of dates (ISO yyyy-mm-dd) that have appointments
+  datesWithAppointments?: Set<string>;
+  // Callback fired when the visible month changes. Passes year and month (0-based).
+  onMonthChange?: (year: number, month: number) => void;
 }
 
-export function DatePicker({ selectedDate, onDateSelect }: DatePickerProps) {
+export function DatePicker({ selectedDate, onDateSelect, datesWithAppointments, onMonthChange }: DatePickerProps) {
   const [currentMonth, setCurrentMonth] = useState<Date>(selectedDate);
   
   // Get month and year of the current view
@@ -54,12 +58,22 @@ export function DatePicker({ selectedDate, onDateSelect }: DatePickerProps) {
   // Navigate to previous month
   const prevMonth = () => {
     setCurrentMonth(new Date(year, month - 1, 1));
+  if (onMonthChange) onMonthChange(year, month - 1);
   };
   
   // Navigate to next month
   const nextMonth = () => {
     setCurrentMonth(new Date(year, month + 1, 1));
+  if (onMonthChange) onMonthChange(year, month + 1);
   };
+
+  // Notify parent of initial visible month and when currentMonth changes via other means
+  // (e.g. when selectDate sets currentMonth). This ensures the parent always knows
+  // which month is visible and can fetch appointments for it.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (onMonthChange) onMonthChange(year, month);
+  }, [year, month, onMonthChange]);
   
   // Select a date
   const selectDate = (day: number, isCurrentMonth: boolean) => {
@@ -77,10 +91,18 @@ export function DatePicker({ selectedDate, onDateSelect }: DatePickerProps) {
     setCurrentMonth(new Date(newDate.getFullYear(), newDate.getMonth(), 1));
   };
   
-  // Check if a date has appointments (this would be replaced with actual logic)
   const hasAppointments = (day: number): boolean => {
-    // This is just a placeholder, you would check against real data
-    return [3, 5, 12, 20].includes(day);
+    try {
+      const checkedDate = new Date(year, month, day);
+      const checkedIso = checkedDate.toISOString().split('T')[0];
+      // if (process.env.NODE_ENV !== 'production') {
+      //   // eslint-disable-next-line no-console
+      //   console.log(`[date-picker] hasAppointments called for day=${day} -> ${checkedIso} (month=${month + 1}, year=${year})`);
+      // }
+      return !!(datesWithAppointments && datesWithAppointments.has(checkedIso));
+    } catch (e) {
+      return false;
+    }
   };
   
   // Check if a date is the selected date

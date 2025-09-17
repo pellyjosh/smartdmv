@@ -175,7 +175,7 @@ const menuGroups: MenuGroup[] = [
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER", "VETERINARIAN", "TECHNICIAN", "RECEPTIONIST"]
       },
       {
-        title: "Website Requests",
+        title: "Appointment Requests",
         href: "/admin/appointment-requests",
         icon: ClipboardCheck,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "RECEPTIONIST"],

@@ -96,6 +96,106 @@ export function EnhancedCalendar({ practiceId, userRole, userId }: EnhancedCalen
     refetchInterval: 5000,
     refetchOnWindowFocus: true,
   });
+
+    // Debug: fetch and log appointments for September 2025 (for troubleshooting calendar dots)
+    // This runs only in non-production environments.
+    useEffect(() => {
+      if (process.env.NODE_ENV === 'production') return;
+
+      (async () => {
+        try {
+          const year = 2025;
+          const month = 9; // September (1-based for readability)
+          // We'll fetch appointments for each day in September 2025 and aggregate
+          const septStart = new Date(year, 8, 1).toISOString().split('T')[0];
+          const septEnd = new Date(year, 8, 30).toISOString().split('T')[0];
+
+          // If there is an API endpoint for range, use it; otherwise fetch day-by-day.
+          // Try range endpoint first
+          try {
+            const res = await fetch(`/api/appointments?start=${septStart}&end=${septEnd}&practiceId=${practiceId || ''}`, { credentials: 'include' });
+            if (res.ok) {
+              const data = await res.json();
+              const byDate: Record<string, any[]> = {};
+              data.forEach((a: any) => {
+                const d = new Date(a.date).toISOString().split('T')[0];
+                byDate[d] = byDate[d] || [];
+                byDate[d].push(a);
+              });
+              // eslint-disable-next-line no-console
+              console.log('[enhanced-calendar] September 2025 appointments (range):', byDate);
+              return;
+            }
+          } catch (e) {
+            // ignore and fallback to per-day
+          }
+
+          // Fallback: fetch each day
+          const byDate: Record<string, any[]> = {};
+          for (let d = 1; d <= 30; d++) {
+            const dateStr = new Date(year, 8, d).toISOString().split('T')[0];
+            try {
+              const res = await fetch(`/api/appointments/by-date/${dateStr}?practiceId=${practiceId || ''}`, { credentials: 'include' });
+              if (!res.ok) continue;
+              const data = await res.json();
+              if (data && data.length > 0) byDate[dateStr] = data;
+            } catch (e) {
+              // ignore individual day failures
+            }
+          }
+          // eslint-disable-next-line no-console
+          console.log('[enhanced-calendar] September 2025 appointments (per-day):', byDate);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('[enhanced-calendar] Error fetching September 2025 appointments:', err);
+        }
+      })();
+    }, [practiceId]);
+
+    // Compute and fetch appointments for the currently selected month and expose
+    // a Set of ISO date strings so the DatePicker can mark days correctly.
+    const [datesWithAppointments, setDatesWithAppointments] = useState<Set<string>>(new Set());
+    // Track the visible month inside the DatePicker. Initialize to selectedDate's month.
+    const [visibleMonth, setVisibleMonth] = useState<{ year: number; month: number }>({
+      year: selectedDate.getFullYear(),
+      month: selectedDate.getMonth(),
+    });
+
+    useEffect(() => {
+      let mounted = true;
+      (async () => {
+        try {
+          const year = visibleMonth.year;
+          const month = visibleMonth.month; // 0-based
+          const start = new Date(year, month, 1).toISOString().split('T')[0];
+          const end = new Date(year, month + 1, 0).toISOString().split('T')[0];
+
+          // Use only the range endpoint for real-time month data.
+          try {
+            const res = await fetch(`/api/appointments?start=${start}&end=${end}&practiceId=${practiceId || ''}`, { credentials: 'include' });
+            if (res.ok) {
+              const data = await res.json();
+              const set = new Set<string>();
+              data.forEach((a: any) => set.add(new Date(a.date).toISOString().split('T')[0]));
+              if (mounted) setDatesWithAppointments(set);
+            } else {
+              // If the range endpoint returns non-OK, clear set — we should not guess.
+              if (mounted) setDatesWithAppointments(new Set());
+            }
+          } catch (e) {
+            // On error, clear the set and log. This enforces realtime-only behavior.
+            if (mounted) setDatesWithAppointments(new Set());
+            // eslint-disable-next-line no-console
+            console.error('[enhanced-calendar] Error fetching month appointments (range):', e);
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('[enhanced-calendar] Error fetching month appointments:', err);
+        }
+      })();
+
+      return () => { mounted = false; };
+    }, [visibleMonth, practiceId]);
   
   // Delete appointment mutation
   const deleteAppointmentMutation = useMutation({
@@ -442,7 +542,7 @@ export function EnhancedCalendar({ practiceId, userRole, userId }: EnhancedCalen
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {/* Calendar picker */}
       <div className="bg-white p-4 rounded-lg shadow-sm md:col-span-1">
-        <DatePicker selectedDate={selectedDate} onDateSelect={setSelectedDate} />
+  <DatePicker selectedDate={selectedDate} onDateSelect={setSelectedDate} datesWithAppointments={datesWithAppointments} />
         
         <div className="mt-6">
           <h3 className="font-medium text-lg mb-3">Pets</h3>
