@@ -43,9 +43,9 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    // Debug: log incoming body to help identify malformed date-like values
-    console.log('[PATCH /api/users] incoming body:', JSON.stringify(body, null, 2));
+  const body = await request.json();
+  // Debug: log incoming body to help identify malformed date-like values
+  console.log('[PATCH /api/users] incoming body:', JSON.stringify(body, null, 2));
     const updateSchema = z.object({
       name: z.string().min(2).optional(),
       email: z.string().email().optional(),
@@ -64,12 +64,12 @@ export async function PATCH(request: NextRequest) {
       practiceId: z.union([z.string(), z.number()]).optional(),
     });
 
-    const parsed = updateSchema.parse(body);
-    console.log('[PATCH /api/users] parsed data types:', Object.fromEntries(Object.keys(parsed).map(k => [k, typeof (parsed as any)[k]])));
+  const parsed = updateSchema.parse(body);
+  console.log('[PATCH /api/users] parsed data types:', Object.fromEntries(Object.keys(parsed).map(k => [k, typeof (parsed as any)[k]])));
 
     // Normalize practiceId -> number if provided
-    const updateData: Record<string, any> = { ...parsed };
-    console.log('[PATCH /api/users] updateData pre-normalize:', updateData);
+  const updateData: Record<string, any> = { ...parsed };
+  console.log('[PATCH /api/users] updateData pre-normalize:', updateData);
     if (parsed.practiceId !== undefined) {
       const practiceIdInt = typeof parsed.practiceId === 'string' ? parseInt(parsed.practiceId, 10) : parsed.practiceId;
       if (!Number.isFinite(practiceIdInt as number)) {
@@ -102,7 +102,7 @@ export async function PATCH(request: NextRequest) {
       if (t === 'object') {
         // If object has a toISOString property that isn't a function, remove it to avoid accidental calls
         if ('toISOString' in input && typeof (input as any).toISOString !== 'function') {
-          try { delete (input as any).toISOString; } catch { }
+          try { delete (input as any).toISOString; } catch {}
         }
         const out: any = {};
         for (const k of Object.keys(input)) {
@@ -113,7 +113,7 @@ export async function PATCH(request: NextRequest) {
       return input;
     };
 
-    const safeUpdateData = sanitizeForUpdate(updateData);
+  const safeUpdateData = sanitizeForUpdate(updateData);
     console.log('[PATCH /api/users] safeUpdateData to be written:', JSON.stringify(safeUpdateData, null, 2));
 
     // Per-field diagnostics to catch weird fields that may cause toISOString calls in nested code
@@ -188,42 +188,42 @@ export async function PATCH(request: NextRequest) {
       // Log the error and attempt a safer fallback
       console.error('[PATCH /api/users] .returning() failed, falling back to update+select. Error:', e);
       try {
-        // Use raw SQL via pgPool to avoid Drizzle internals entirely
-        // Build parameterized SET clause and values
-        const keys = Object.keys(safeUpdateData);
-        const setClauses: string[] = [];
-        const values: any[] = [];
-        keys.forEach((k, i) => {
-          // map camelCase keys back to snake_case DB columns if needed
-          const dbKey = k.replace(/([A-Z])/g, '_$1').toLowerCase();
-          setClauses.push(`"${dbKey}" = $${i + 1}`);
-          values.push((safeUpdateData as any)[k]);
-        });
-        // Append userId param
-        values.push(userId);
+          // Use raw SQL via pgPool to avoid Drizzle internals entirely
+          // Build parameterized SET clause and values
+          const keys = Object.keys(safeUpdateData);
+          const setClauses: string[] = [];
+          const values: any[] = [];
+          keys.forEach((k, i) => {
+            // map camelCase keys back to snake_case DB columns if needed
+            const dbKey = k.replace(/([A-Z])/g, '_$1').toLowerCase();
+            setClauses.push(`"${dbKey}" = $${i + 1}`);
+            values.push((safeUpdateData as any)[k]);
+          });
+          // Append userId param
+          values.push(userId);
 
-        const updateSql = `UPDATE "users" SET ${setClauses.join(', ')} WHERE id = $${values.length} RETURNING *`;
-        try {
-          const rawRes = await pgPool.query(updateSql, values);
-          console.log('[PATCH /api/users] raw update returned rows:', rawRes.rows.length);
-          if (rawRes.rows.length > 0) {
-            console.log('[PATCH /api/users] raw row sample keys:', Object.keys(rawRes.rows[0]));
-            // Log raw values as text-safe to avoid Date-toISOString issues
-            const rawInspect = rawRes.rows.map(r => {
-              const obj: Record<string, any> = {};
-              for (const kk of Object.keys(r)) {
-                const val = (r as any)[kk];
-                obj[kk] = val === null || val === undefined ? null : typeof val === 'object' ? '[object]' : String(val);
-              }
-              return obj;
-            });
-            console.log('[PATCH /api/users] raw rows (text-safe):', rawInspect);
-            updated = rawRes.rows[0];
+          const updateSql = `UPDATE "users" SET ${setClauses.join(', ')} WHERE id = $${values.length} RETURNING *`;
+          try {
+            const rawRes = await pgPool.query(updateSql, values);
+            console.log('[PATCH /api/users] raw update returned rows:', rawRes.rows.length);
+            if (rawRes.rows.length > 0) {
+              console.log('[PATCH /api/users] raw row sample keys:', Object.keys(rawRes.rows[0]));
+              // Log raw values as text-safe to avoid Date-toISOString issues
+              const rawInspect = rawRes.rows.map(r => {
+                const obj: Record<string, any> = {};
+                for (const kk of Object.keys(r)) {
+                  const val = (r as any)[kk];
+                  obj[kk] = val === null || val === undefined ? null : typeof val === 'object' ? '[object]' : String(val);
+                }
+                return obj;
+              });
+              console.log('[PATCH /api/users] raw rows (text-safe):', rawInspect);
+              updated = rawRes.rows[0];
+            }
+          } catch (rawErr) {
+            console.error('[PATCH /api/users] raw SQL fallback failed:', rawErr);
+            throw rawErr;
           }
-        } catch (rawErr) {
-          console.error('[PATCH /api/users] raw SQL fallback failed:', rawErr);
-          throw rawErr;
-        }
       } catch (e2) {
         console.error('[PATCH /api/users] fallback update+select failed:', e2);
         throw e2; // let outer catch handle the response
@@ -256,7 +256,7 @@ export async function PATCH(request: NextRequest) {
       const v = (updated as any)[k];
       // If a value is an object with a non-function toISOString, remove that property
       if (v && typeof v === 'object' && 'toISOString' in v && typeof (v as any).toISOString !== 'function') {
-        try { delete (v as any).toISOString; } catch { }
+        try { delete (v as any).toISOString; } catch {}
       }
       // For known date fields, coerce to ISO string safely
       if (['createdAt', 'updatedAt', 'lastLogin'].includes(k)) {

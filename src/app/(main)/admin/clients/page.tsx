@@ -1,4 +1,4 @@
-'use client';
+"use client";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -63,12 +63,25 @@ import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/context/UserContext";
 import { type User, type Pet } from "@/db/schema";
-import { isPracticeAdministrator, isAdmin, hasRole } from '@/lib/rbac-helpers';
+import { isPracticeAdministrator, isAdmin, hasRole } from "@/lib/rbac-helpers";
 import { getPetAvatarColors, formatDate } from "@/lib/utils";
 import { SimpleCustomFieldSelect } from "@/components/form/simple-custom-field-select";
 import {
-  Loader2, Search, UserPlus, PlusCircle, User as UserIcon, Edit, Trash, Camera, X,
-  Calendar, Clock, AlertCircle, CheckCircle, RefreshCw, ArrowUpRight
+  Loader2,
+  Search,
+  UserPlus,
+  PlusCircle,
+  User as UserIcon,
+  Edit,
+  Trash,
+  Camera,
+  X,
+  Calendar,
+  Clock,
+  AlertCircle,
+  CheckCircle,
+  RefreshCw,
+  ArrowUpRight,
 } from "lucide-react";
 import { useCustomFields } from "@/hooks/use-custom-fields";
 import { apiRequest } from "@/lib/queryClient";
@@ -151,7 +164,7 @@ function ComboboxSelect({
   onValueChange,
   placeholder,
   className,
-  emptyMessage = "No option found."
+  emptyMessage = "No option found.",
 }: {
   options: { value: string; label: string }[];
   value: string | undefined;
@@ -171,13 +184,17 @@ function ComboboxSelect({
           aria-expanded={open}
           className={cn("w-full justify-between", className)}
         >
-          {value ? options.find((option) => option.value === value)?.label : placeholder || "Select option..."}
+          {value
+            ? options.find((option) => option.value === value)?.label
+            : placeholder || "Select option..."}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0">
         <Command>
-          <CommandInput placeholder={`Search ${placeholder?.toLowerCase() || "options"}...`} />
+          <CommandInput
+            placeholder={`Search ${placeholder?.toLowerCase() || "options"}...`}
+          />
           <CommandEmpty>{emptyMessage}</CommandEmpty>
           <CommandGroup className="max-h-60 overflow-y-auto">
             {options.map((option) => (
@@ -210,8 +227,12 @@ function ComboboxSelect({
 const clientFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters" }),
   email: z.string().email({ message: "Please enter a valid email" }),
-  username: z.string().min(3, { message: "Username must be at least 3 characters" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+  username: z
+    .string()
+    .min(3, { message: "Username must be at least 3 characters" }),
+  password: z
+    .string()
+    .min(6, { message: "Password must be at least 6 characters" }),
   phone: z.string().optional(),
   address: z.string().optional(),
   city: z.string().optional(),
@@ -229,11 +250,14 @@ const updateClientFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters" }),
   email: z.string().email({ message: "Please enter a valid email" }),
   // Accept empty string for password on edit; transform empty -> undefined so API doesn't attempt to set it
-  password: z.string().optional().transform((e) => {
-    if (e === undefined || e === null) return undefined;
-    if (typeof e === 'string' && e.trim() === '') return undefined;
-    return e;
-  }),
+  password: z
+    .string()
+    .optional()
+    .transform((e) => {
+      if (e === undefined || e === null) return undefined;
+      if (typeof e === "string" && e.trim() === "") return undefined;
+      return e;
+    }),
   phone: z.string().optional(),
   address: z.string().optional(),
   city: z.string().optional(),
@@ -275,12 +299,14 @@ export default function ClientsPage() {
   const [isEditPetDialogOpen, setIsEditPetDialogOpen] = useState(false);
   const [isAddClientDialogOpen, setIsAddClientDialogOpen] = useState(false);
   const [isEditClientDialogOpen, setIsEditClientDialogOpen] = useState(false);
-  const [isDeleteClientDialogOpen, setIsDeleteClientDialogOpen] = useState(false);
+  const [isDeleteClientDialogOpen, setIsDeleteClientDialogOpen] =
+    useState(false);
   const [selectedClient, setSelectedClient] = useState<User | null>(null);
   const [petPhoto, setPetPhoto] = useState<File | null>(null);
   const [editPetId, setEditPetId] = useState<number | null>(null);
   const [selectedSpecies, setSelectedSpecies] = useState<string>("");
-  const [selectedAddPetSpecies, setSelectedAddPetSpecies] = useState<string>("");
+  const [selectedAddPetSpecies, setSelectedAddPetSpecies] =
+    useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, userPracticeId } = useUser();
   const { toast } = useToast();
@@ -292,7 +318,7 @@ export default function ClientsPage() {
     getGroupByKey,
     getValuesByGroupId,
     error: customFieldsError,
-    isLoading: isCustomFieldsLoading
+    isLoading: isCustomFieldsLoading,
   } = useCustomFields();
 
   // Ensure we have an array of groups when searching by name/key
@@ -302,35 +328,39 @@ export default function ClientsPage() {
   const getSpeciesList = () => {
     try {
       // Try multiple possible group keys for species
-      const possibleKeys = ['pet_species', 'species', 'animal_species'];
+      const possibleKeys = ["pet_species", "species", "animal_species"];
 
       for (const key of possibleKeys) {
         const speciesValues = getValuesByGroupKey(key);
         if (speciesValues && speciesValues.length > 0) {
-          console.log(`Using custom field species values with key ${key}:`, speciesValues);
-          return speciesValues.map(v => ({ value: v.value, label: v.label }));
+          console.log(
+            `Using custom field species values with key ${key}:`,
+            speciesValues
+          );
+          return speciesValues.map((v) => ({ value: v.value, label: v.label }));
         }
       }
 
       // Try getting all groups to find the species group
-      const speciesGroup = groupsArray.find((g: any) =>
-        g.name?.toLowerCase().includes('species') ||
-        g.key?.toLowerCase().includes('species')
+      const speciesGroup = groupsArray.find(
+        (g: any) =>
+          g.name?.toLowerCase().includes("species") ||
+          g.key?.toLowerCase().includes("species")
       );
 
       if (speciesGroup) {
-        console.log('Found species group by name/key search:', speciesGroup);
+        console.log("Found species group by name/key search:", speciesGroup);
         const values = getValuesByGroupId(speciesGroup.id);
         if (values && values.length > 0) {
-          return values.map(v => ({ value: v.value, label: v.label }));
+          return values.map((v) => ({ value: v.value, label: v.label }));
         }
       }
     } catch (err) {
-      console.error('Error getting custom species list:', err);
+      console.error("Error getting custom species list:", err);
     }
 
     // Fall back to hardcoded species if custom fields fail
-    console.log('Falling back to hardcoded species list');
+    console.log("Falling back to hardcoded species list");
     return speciesList;
   };
 
@@ -338,46 +368,60 @@ export default function ClientsPage() {
     try {
       // Try different formats for breed key naming
       const possibleBreedKeys = [
-        `pet_breed_${species.toLowerCase().replace(/\s+/g, '_')}`,
-        `breed_${species.toLowerCase().replace(/\s+/g, '_')}`,
-        `${species.toLowerCase().replace(/\s+/g, '_')}_breeds`,
-        'pet_breed',
-        'breeds'
+        `pet_breed_${species.toLowerCase().replace(/\s+/g, "_")}`,
+        `breed_${species.toLowerCase().replace(/\s+/g, "_")}`,
+        `${species.toLowerCase().replace(/\s+/g, "_")}_breeds`,
+        "pet_breed",
+        "breeds",
       ];
 
       // Try each possible key
       for (const key of possibleBreedKeys) {
         const breedValues = getValuesByGroupKey(key);
         if (breedValues && breedValues.length > 0) {
-          console.log(`Using custom field breed values with key ${key}:`, breedValues);
-          return breedValues.map(v => ({ value: v.value, label: v.label }));
+          console.log(
+            `Using custom field breed values with key ${key}:`,
+            breedValues
+          );
+          return breedValues.map((v) => ({ value: v.value, label: v.label }));
         }
       }
 
       // Try getting all groups to find a breed group
-      const breedGroup = groupsArray.find((g: any) =>
-        (g.name?.toLowerCase().includes('breed') || g.key?.toLowerCase().includes('breed')) &&
-        (g.name?.toLowerCase().includes(species.toLowerCase()) || g.key?.toLowerCase().includes(species.toLowerCase()))
+      const breedGroup = groupsArray.find(
+        (g: any) =>
+          (g.name?.toLowerCase().includes("breed") ||
+            g.key?.toLowerCase().includes("breed")) &&
+          (g.name?.toLowerCase().includes(species.toLowerCase()) ||
+            g.key?.toLowerCase().includes(species.toLowerCase()))
       );
 
       if (breedGroup) {
-        console.log(`Found breed group for ${species} by name/key search:`, breedGroup);
+        console.log(
+          `Found breed group for ${species} by name/key search:`,
+          breedGroup
+        );
         const values = getValuesByGroupId(breedGroup.id);
         if (values && values.length > 0) {
-          return values.map(v => ({ value: v.value, label: v.label }));
+          return values.map((v) => ({ value: v.value, label: v.label }));
         }
       }
 
       // Look for any breed group if we can't find a species-specific one
-      const anyBreedGroup = groupsArray.find((g: any) =>
-        g.name?.toLowerCase().includes('breed') || g.key?.toLowerCase().includes('breed')
+      const anyBreedGroup = groupsArray.find(
+        (g: any) =>
+          g.name?.toLowerCase().includes("breed") ||
+          g.key?.toLowerCase().includes("breed")
       );
 
       if (anyBreedGroup) {
-        console.log('Found general breed group by name/key search:', anyBreedGroup);
+        console.log(
+          "Found general breed group by name/key search:",
+          anyBreedGroup
+        );
         const values = getValuesByGroupId(anyBreedGroup.id);
         if (values && values.length > 0) {
-          return values.map(v => ({ value: v.value, label: v.label }));
+          return values.map((v) => ({ value: v.value, label: v.label }));
         }
       }
     } catch (err) {
@@ -390,144 +434,185 @@ export default function ClientsPage() {
       return [];
     }
     // Find the key in a case-insensitive way to handle potential inconsistencies from the combobox
-    const speciesKey = Object.keys(breedsBySpecies).find(key => key.toLowerCase() === species.toLowerCase());
+    const speciesKey = Object.keys(breedsBySpecies).find(
+      (key) => key.toLowerCase() === species.toLowerCase()
+    );
     // Return the breeds for the found key, or an empty array if not found
-    return speciesKey ? breedsBySpecies[speciesKey as keyof typeof breedsBySpecies] : [];
+    return speciesKey
+      ? breedsBySpecies[speciesKey as keyof typeof breedsBySpecies]
+      : [];
   };
 
   const getColorList = () => {
     try {
       // Try multiple possible keys
-      const possibleKeys = ['pet_color', 'color', 'colors', 'fur_color', 'coat_color'];
+      const possibleKeys = [
+        "pet_color",
+        "color",
+        "colors",
+        "fur_color",
+        "coat_color",
+      ];
 
       for (const key of possibleKeys) {
         const colorValues = getValuesByGroupKey(key);
         if (colorValues && colorValues.length > 0) {
-          console.log(`Using custom field color values with key ${key}:`, colorValues);
-          return colorValues.map(v => ({ value: v.value, label: v.label }));
+          console.log(
+            `Using custom field color values with key ${key}:`,
+            colorValues
+          );
+          return colorValues.map((v) => ({ value: v.value, label: v.label }));
         }
       }
 
       // Try getting all groups to find color group
-      const colorGroup = groupsArray.find((g: any) =>
-        g.name?.toLowerCase().includes('color') ||
-        g.key?.toLowerCase().includes('color')
+      const colorGroup = groupsArray.find(
+        (g: any) =>
+          g.name?.toLowerCase().includes("color") ||
+          g.key?.toLowerCase().includes("color")
       );
 
       if (colorGroup) {
-        console.log('Found color group by name/key search:', colorGroup);
+        console.log("Found color group by name/key search:", colorGroup);
         const values = getValuesByGroupId(colorGroup.id);
         if (values && values.length > 0) {
-          return values.map(v => ({ value: v.value, label: v.label }));
+          return values.map((v) => ({ value: v.value, label: v.label }));
         }
       }
     } catch (err) {
-      console.error('Error getting custom color list:', err);
+      console.error("Error getting custom color list:", err);
     }
 
     // Fall back to hardcoded colors if custom fields fail
-    console.log('Falling back to hardcoded color list');
+    console.log("Falling back to hardcoded color list");
     return colorList;
   };
 
   const getGenderList = () => {
     try {
       // Try multiple possible keys
-      const possibleKeys = ['pet_gender', 'gender', 'sex', 'animal_gender'];
+      const possibleKeys = ["pet_gender", "gender", "sex", "animal_gender"];
 
       for (const key of possibleKeys) {
         const genderValues = getValuesByGroupKey(key);
         if (genderValues && genderValues.length > 0) {
-          console.log(`Using custom field gender values with key ${key}:`, genderValues);
-          return genderValues.map(v => ({ value: v.value, label: v.label }));
+          console.log(
+            `Using custom field gender values with key ${key}:`,
+            genderValues
+          );
+          return genderValues.map((v) => ({ value: v.value, label: v.label }));
         }
       }
 
       // Try getting all groups to find gender group
-      const genderGroup = groupsArray.find((g: any) =>
-        g.name?.toLowerCase().includes('gender') ||
-        g.key?.toLowerCase().includes('gender') ||
-        g.name?.toLowerCase().includes('sex') ||
-        g.key?.toLowerCase().includes('sex')
+      const genderGroup = groupsArray.find(
+        (g: any) =>
+          g.name?.toLowerCase().includes("gender") ||
+          g.key?.toLowerCase().includes("gender") ||
+          g.name?.toLowerCase().includes("sex") ||
+          g.key?.toLowerCase().includes("sex")
       );
 
       if (genderGroup) {
-        console.log('Found gender group by name/key search:', genderGroup);
+        console.log("Found gender group by name/key search:", genderGroup);
         const values = getValuesByGroupId(genderGroup.id);
         if (values && values.length > 0) {
-          return values.map(v => ({ value: v.value, label: v.label }));
+          return values.map((v) => ({ value: v.value, label: v.label }));
         }
       }
     } catch (err) {
-      console.error('Error getting custom gender list:', err);
+      console.error("Error getting custom gender list:", err);
     }
 
     // Fall back to hardcoded genders if custom fields fail
-    console.log('Falling back to hardcoded gender list');
+    console.log("Falling back to hardcoded gender list");
     return genderList;
   };
 
   const getPetTypeList = () => {
     try {
       // Try multiple possible keys
-      const possibleKeys = ['pet_type', 'type', 'animal_type', 'pet_types'];
+      const possibleKeys = ["pet_type", "type", "animal_type", "pet_types"];
 
       for (const key of possibleKeys) {
         const petTypeValues = getValuesByGroupKey(key);
         if (petTypeValues && petTypeValues.length > 0) {
-          console.log(`Using custom field pet type values with key ${key}:`, petTypeValues);
-          return petTypeValues.map(v => ({ value: v.value, label: v.label }));
+          console.log(
+            `Using custom field pet type values with key ${key}:`,
+            petTypeValues
+          );
+          return petTypeValues.map((v) => ({ value: v.value, label: v.label }));
         }
       }
 
       // Try getting all groups to find pet type group
-      const petTypeGroup = groupsArray.find((g: any) =>
-        (g.name?.toLowerCase().includes('type') && g.name?.toLowerCase().includes('pet')) ||
-        (g.key?.toLowerCase().includes('type') && g.key?.toLowerCase().includes('pet'))
+      const petTypeGroup = groupsArray.find(
+        (g: any) =>
+          (g.name?.toLowerCase().includes("type") &&
+            g.name?.toLowerCase().includes("pet")) ||
+          (g.key?.toLowerCase().includes("type") &&
+            g.key?.toLowerCase().includes("pet"))
       );
 
       if (petTypeGroup) {
-        console.log('Found pet type group by name/key search:', petTypeGroup);
+        console.log("Found pet type group by name/key search:", petTypeGroup);
         const values = getValuesByGroupId(petTypeGroup.id);
         if (values && values.length > 0) {
-          return values.map(v => ({ value: v.value, label: v.label }));
+          return values.map((v) => ({ value: v.value, label: v.label }));
         }
       }
     } catch (err) {
-      console.error('Error getting custom pet type list:', err);
+      console.error("Error getting custom pet type list:", err);
     }
 
     // Fall back to a minimal list
-    console.log('Falling back to hardcoded pet type list');
+    console.log("Falling back to hardcoded pet type list");
     return [
       { value: "Domestic", label: "Domestic" },
       { value: "Exotic", label: "Exotic" },
       { value: "Farm", label: "Farm" },
       { value: "Wildlife", label: "Wildlife" },
-      { value: "Other", label: "Other" }
+      { value: "Other", label: "Other" },
     ];
   };
 
   // Fetch clients (users with CLIENT role)
-  const { data: clients, isLoading: isClientsLoading, refetch: refetchClients } = useQuery<User[]>({
+  const {
+    data: clients,
+    isLoading: isClientsLoading,
+    refetch: refetchClients,
+  } = useQuery<User[]>({
     queryKey: ["/api/users/clients", userPracticeId],
-    enabled: !!user && !hasRole(user as any, 'CLIENT') && !!userPracticeId && userPracticeId.toString().trim() !== '',
+    enabled:
+      !!user &&
+      !hasRole(user as any, "CLIENT") &&
+      !!userPracticeId &&
+      userPracticeId.toString().trim() !== "",
     queryFn: async () => {
-      if (!userPracticeId || userPracticeId.toString().trim() === '') {
-        throw new Error('Practice ID is required');
+      if (!userPracticeId || userPracticeId.toString().trim() === "") {
+        throw new Error("Practice ID is required");
       }
-      const res = await fetch(`/api/auth/clients?practiceId=${userPracticeId}`, { credentials: "include" });
+      const res = await fetch(
+        `/api/auth/clients?practiceId=${userPracticeId}`,
+        { credentials: "include" }
+      );
       if (!res.ok) throw new Error("Failed to fetch clients");
       return res.json();
     },
   });
 
   // Fetch pets
-  const { data: pets, isLoading: isPetsLoading, refetch: refetchPets } = useQuery<Pet[]>({
+  const {
+    data: pets,
+    isLoading: isPetsLoading,
+    refetch: refetchPets,
+  } = useQuery<Pet[]>({
     queryKey: ["/api/pets", userPracticeId], // Include userPracticeId in the query key
     enabled: !!user && !!userPracticeId, // Only enable if user and practiceId are available
-    queryFn: async () => { // Define the query function
-      const res = await fetch(`/api/pets?practiceId=${userPracticeId}`, { // Pass practiceId to the API
+    queryFn: async () => {
+      // Define the query function
+      const res = await fetch(`/api/pets?practiceId=${userPracticeId}`, {
+        // Pass practiceId to the API
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch pets");
@@ -536,7 +621,7 @@ export default function ClientsPage() {
   });
 
   // Filter clients by search query
-  const filteredClients = clients?.filter(client => {
+  const filteredClients = clients?.filter((client) => {
     const name = client.name ?? "";
     const email = client.email ?? "";
     const q = searchQuery.toLowerCase();
@@ -561,7 +646,7 @@ export default function ClientsPage() {
       emergencyContactPhone: "",
       emergencyContactRelationship: "",
       practiceId: String(userPracticeId || ""),
-      role: "CLIENT" // All users created on the clients page are automatically assigned CLIENT role
+      role: "CLIENT", // All users created on the clients page are automatically assigned CLIENT role
     },
   });
 
@@ -620,7 +705,7 @@ export default function ClientsPage() {
 
   // Update client mutation
   const updateClientMutation = useMutation({
-    mutationFn: async (data: (UpdateClientFormValues & { id: string })) => {
+    mutationFn: async (data: UpdateClientFormValues & { id: string }) => {
       const { id, password, ...clientData } = data as any;
 
       const payload: any = { ...clientData };
@@ -659,7 +744,8 @@ export default function ClientsPage() {
           country: updatedClient.country || "",
           emergencyContactName: updatedClient.emergencyContactName || "",
           emergencyContactPhone: updatedClient.emergencyContactPhone || "",
-          emergencyContactRelationship: updatedClient.emergencyContactRelationship || "",
+          emergencyContactRelationship:
+            updatedClient.emergencyContactRelationship || "",
           practiceId: String(updatedClient.practiceId || userPracticeId || ""),
           role: updatedClient.role || "CLIENT",
         });
@@ -727,8 +813,8 @@ export default function ClientsPage() {
       color: "",
       gender: "",
       microchipNumber: "",
-      ownerId: '0',
-      practiceId: userPracticeId || '0',
+      ownerId: "0",
+      practiceId: userPracticeId || "0",
     },
   });
 
@@ -737,10 +823,11 @@ export default function ClientsPage() {
     try {
       if (!val) return "";
       // If it's already a string in YYYY-MM-DD, accept it
-      if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) return val.split('T')[0];
+      if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}/.test(val))
+        return val.split("T")[0];
       const d = new Date(val);
       if (isNaN(d.getTime())) return "";
-      return d.toISOString().split('T')[0];
+      return d.toISOString().split("T")[0];
     } catch (e) {
       return "";
     }
@@ -763,19 +850,19 @@ export default function ClientsPage() {
         let photoPath: string | null = null;
         if (petPhoto) {
           const formData = new FormData();
-          formData.append('photo', petPhoto);
-          formData.append('practiceId', String(userPracticeId || 'general'));
-          formData.append('clientId', String(data.ownerId));
-          formData.append('petId', 'new');
+          formData.append("photo", petPhoto);
+          formData.append("practiceId", String(userPracticeId || "general"));
+          formData.append("clientId", String(data.ownerId));
+          formData.append("petId", "new");
 
-          const uploadRes = await fetch('/api/pets/upload-photo', {
-            method: 'POST',
+          const uploadRes = await fetch("/api/pets/upload-photo", {
+            method: "POST",
             body: formData,
-            credentials: 'include',
+            credentials: "include",
           });
           if (!uploadRes.ok) {
-            const errText = await uploadRes.text().catch(() => '');
-            throw new Error(errText || 'Failed to upload pet photo');
+            const errText = await uploadRes.text().catch(() => "");
+            throw new Error(errText || "Failed to upload pet photo");
           }
           const uploadData = await uploadRes.json();
           photoPath = uploadData.photoPath;
@@ -788,8 +875,10 @@ export default function ClientsPage() {
         }
 
         // Coerce numeric ids to numbers (API expects numbers)
-        if (petData.ownerId !== undefined) petData.ownerId = Number(petData.ownerId);
-        if (petData.practiceId !== undefined) petData.practiceId = Number(petData.practiceId);
+        if (petData.ownerId !== undefined)
+          petData.ownerId = Number(petData.ownerId);
+        if (petData.practiceId !== undefined)
+          petData.practiceId = Number(petData.practiceId);
 
         const res = await apiRequest("POST", "/api/pets", petData);
         return await res.json();
@@ -807,7 +896,7 @@ export default function ClientsPage() {
       setIsAddPetDialogOpen(false);
       setPetPhoto(null);
       if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        fileInputRef.current.value = "";
       }
       petForm.reset();
     },
@@ -828,19 +917,19 @@ export default function ClientsPage() {
         let photoPath: string | undefined = undefined;
         if (petPhoto) {
           const formData = new FormData();
-          formData.append('photo', petPhoto);
-          formData.append('practiceId', String(userPracticeId || 'general'));
-          formData.append('clientId', String(data.ownerId));
-          formData.append('petId', String(data.id));
+          formData.append("photo", petPhoto);
+          formData.append("practiceId", String(userPracticeId || "general"));
+          formData.append("clientId", String(data.ownerId));
+          formData.append("petId", String(data.id));
 
-          const uploadRes = await fetch('/api/pets/upload-photo', {
-            method: 'POST',
+          const uploadRes = await fetch("/api/pets/upload-photo", {
+            method: "POST",
             body: formData,
-            credentials: 'include',
+            credentials: "include",
           });
           if (!uploadRes.ok) {
-            const errText = await uploadRes.text().catch(() => '');
-            throw new Error(errText || 'Failed to upload pet photo');
+            const errText = await uploadRes.text().catch(() => "");
+            throw new Error(errText || "Failed to upload pet photo");
           }
           const uploadData = await uploadRes.json();
           photoPath = uploadData.photoPath;
@@ -852,8 +941,10 @@ export default function ClientsPage() {
         if (photoPath) petData.photoPath = photoPath;
 
         // Coerce numeric ids to numbers
-        if (petData.ownerId !== undefined) petData.ownerId = Number(petData.ownerId);
-        if (petData.practiceId !== undefined) petData.practiceId = Number(petData.practiceId);
+        if (petData.ownerId !== undefined)
+          petData.ownerId = Number(petData.ownerId);
+        if (petData.practiceId !== undefined)
+          petData.practiceId = Number(petData.practiceId);
 
         const res = await apiRequest("PATCH", `/api/pets/${id}`, petData);
         return await res.json();
@@ -872,7 +963,7 @@ export default function ClientsPage() {
       setPetPhoto(null);
       setEditPetId(null);
       if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        fileInputRef.current.value = "";
       }
       petForm.reset();
     },
@@ -896,8 +987,12 @@ export default function ClientsPage() {
       toast({ title: "Pet deleted", description: "The pet has been removed." });
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to delete pet", description: error.message, variant: "destructive" });
-    }
+      toast({
+        title: "Failed to delete pet",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   // Handle selecting a client
@@ -911,21 +1006,23 @@ export default function ClientsPage() {
     }
   };
 
-  const onClientFormSubmit = (data: ClientFormValues | UpdateClientFormValues) => { // Adjust type to accept both
+  const onClientFormSubmit = (
+    data: ClientFormValues | UpdateClientFormValues
+  ) => {
+    // Adjust type to accept both
     // The selectedClient will already be populated if it's an edit action
     if (selectedClient && isEditClientDialogOpen) {
       // This is an update operation
       // Ensure you pass the correct ID to the mutation
       updateClientMutation.mutate({
         ...(data as UpdateClientFormValues), // Cast to UpdateClientFormValues for clarity
-        id: String(selectedClient.id) // Pass the actual ID of the selected client as string
+        id: String(selectedClient.id), // Pass the actual ID of the selected client as string
       });
     } else {
       // This is a create operation
       createClientMutation.mutate(data as ClientFormValues); // Cast to ClientFormValues
     }
   };
-
 
   // Open edit client dialog with the selected client's data
   const handleEditClient = () => {
@@ -943,9 +1040,10 @@ export default function ClientsPage() {
         country: selectedClient.country || "",
         emergencyContactName: selectedClient.emergencyContactName || "",
         emergencyContactPhone: selectedClient.emergencyContactPhone || "",
-        emergencyContactRelationship: selectedClient.emergencyContactRelationship || "",
+        emergencyContactRelationship:
+          selectedClient.emergencyContactRelationship || "",
         practiceId: String(selectedClient.practiceId || userPracticeId || ""),
-        role: selectedClient.role || "CLIENT"
+        role: selectedClient.role || "CLIENT",
       });
       setIsEditClientDialogOpen(true);
     }
@@ -957,7 +1055,7 @@ export default function ClientsPage() {
       // Update existing pet
       updatePetMutation.mutate({
         ...data,
-        id: editPetId as number
+        id: editPetId as number,
       });
     } else {
       // Create new pet
@@ -966,12 +1064,12 @@ export default function ClientsPage() {
   };
 
   // Get client's pets
-  const clientPets = pets?.filter(pet =>
-    selectedClient && pet.ownerId === selectedClient.id
+  const clientPets = pets?.filter(
+    (pet) => selectedClient && pet.ownerId === selectedClient.id
   );
 
   // Determine if the user has permission to view this page
-  const hasPermission = user && !hasRole(user as any, 'CLIENT');
+  const hasPermission = user && !hasRole(user as any, "CLIENT");
 
   if (!user) return null;
 
@@ -988,7 +1086,8 @@ export default function ClientsPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-slate-500">
-                This page is only accessible to practice staff and administrators.
+                This page is only accessible to practice staff and
+                administrators.
               </p>
             </CardContent>
           </Card>
@@ -1008,7 +1107,10 @@ export default function ClientsPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle>Clients</CardTitle>
-                  <Dialog open={isAddClientDialogOpen} onOpenChange={setIsAddClientDialogOpen}>
+                  <Dialog
+                    open={isAddClientDialogOpen}
+                    onOpenChange={setIsAddClientDialogOpen}
+                  >
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm">
                         <UserPlus className="h-4 w-4 mr-2" />
@@ -1019,12 +1121,16 @@ export default function ClientsPage() {
                       <DialogHeader>
                         <DialogTitle>Add New Client</DialogTitle>
                         <DialogDescription>
-                          Add a new client to your practice. Clients created here will automatically be assigned the CLIENT role.
+                          Add a new client to your practice. Clients created
+                          here will automatically be assigned the CLIENT role.
                         </DialogDescription>
                       </DialogHeader>
 
                       <Form {...clientForm}>
-                        <form onSubmit={clientForm.handleSubmit(onClientFormSubmit)} className="space-y-4 pt-4">
+                        <form
+                          onSubmit={clientForm.handleSubmit(onClientFormSubmit)}
+                          className="space-y-4 pt-4"
+                        >
                           {/* Main form grid with two columns */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* Left column - Contact Details */}
@@ -1040,7 +1146,10 @@ export default function ClientsPage() {
                                   <FormItem>
                                     <FormLabel>Name</FormLabel>
                                     <FormControl>
-                                      <Input placeholder="John Smith" {...field} />
+                                      <Input
+                                        placeholder="John Smith"
+                                        {...field}
+                                      />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
@@ -1054,7 +1163,11 @@ export default function ClientsPage() {
                                   <FormItem>
                                     <FormLabel>Email</FormLabel>
                                     <FormControl>
-                                      <Input type="email" placeholder="john@example.com" {...field} />
+                                      <Input
+                                        type="email"
+                                        placeholder="john@example.com"
+                                        {...field}
+                                      />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
@@ -1068,7 +1181,10 @@ export default function ClientsPage() {
                                   <FormItem>
                                     <FormLabel>Phone</FormLabel>
                                     <FormControl>
-                                      <Input placeholder="(555) 123-4567" {...field} />
+                                      <Input
+                                        placeholder="(555) 123-4567"
+                                        {...field}
+                                      />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
@@ -1082,7 +1198,10 @@ export default function ClientsPage() {
                                   <FormItem>
                                     <FormLabel>Username</FormLabel>
                                     <FormControl>
-                                      <Input placeholder="johnsmith" {...field} />
+                                      <Input
+                                        placeholder="johnsmith"
+                                        {...field}
+                                      />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
@@ -1096,14 +1215,16 @@ export default function ClientsPage() {
                                   <FormItem>
                                     <FormLabel>Password</FormLabel>
                                     <FormControl>
-                                      <Input type="password" placeholder="********" {...field} />
+                                      <Input
+                                        type="password"
+                                        placeholder="********"
+                                        {...field}
+                                      />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
                                 )}
                               />
-
-
 
                               {/* Emergency Contact */}
                               <div className="space-y-4 pt-2">
@@ -1118,7 +1239,10 @@ export default function ClientsPage() {
                                     <FormItem>
                                       <FormLabel>Name</FormLabel>
                                       <FormControl>
-                                        <Input placeholder="Jane Smith" {...field} />
+                                        <Input
+                                          placeholder="Jane Smith"
+                                          {...field}
+                                        />
                                       </FormControl>
                                       <FormMessage />
                                     </FormItem>
@@ -1133,7 +1257,10 @@ export default function ClientsPage() {
                                       <FormItem>
                                         <FormLabel>Phone</FormLabel>
                                         <FormControl>
-                                          <Input placeholder="(555) 987-6543" {...field} />
+                                          <Input
+                                            placeholder="(555) 987-6543"
+                                            {...field}
+                                          />
                                         </FormControl>
                                         <FormMessage />
                                       </FormItem>
@@ -1146,7 +1273,10 @@ export default function ClientsPage() {
                                       <FormItem>
                                         <FormLabel>Relationship</FormLabel>
                                         <FormControl>
-                                          <Input placeholder="Spouse" {...field} />
+                                          <Input
+                                            placeholder="Spouse"
+                                            {...field}
+                                          />
                                         </FormControl>
                                         <FormMessage />
                                       </FormItem>
@@ -1169,7 +1299,10 @@ export default function ClientsPage() {
                                   <FormItem>
                                     <FormLabel>Street Address</FormLabel>
                                     <FormControl>
-                                      <Input placeholder="123 Main St" {...field} />
+                                      <Input
+                                        placeholder="123 Main St"
+                                        {...field}
+                                      />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
@@ -1184,7 +1317,10 @@ export default function ClientsPage() {
                                     <FormItem>
                                       <FormLabel>City</FormLabel>
                                       <FormControl>
-                                        <Input placeholder="Anytown" {...field} />
+                                        <Input
+                                          placeholder="Anytown"
+                                          {...field}
+                                        />
                                       </FormControl>
                                       <FormMessage />
                                     </FormItem>
@@ -1241,7 +1377,9 @@ export default function ClientsPage() {
                               type="submit"
                               disabled={createClientMutation.isPending}
                             >
-                              {createClientMutation.isPending ? "Adding..." : "Add Client"}
+                              {createClientMutation.isPending
+                                ? "Adding..."
+                                : "Add Client"}
                             </Button>
                           </DialogFooter>
                         </form>
@@ -1269,8 +1407,9 @@ export default function ClientsPage() {
                     {filteredClients.map((client) => (
                       <div
                         key={client.id}
-                        className={`p-3 rounded-md hover:bg-slate-100 transition-colors ${selectedClient?.id === client.id ? "bg-slate-100" : ""
-                          }`}
+                        className={`p-3 rounded-md hover:bg-slate-100 transition-colors ${
+                          selectedClient?.id === client.id ? "bg-slate-100" : ""
+                        }`}
                       >
                         <div className="flex items-center">
                           <div
@@ -1278,19 +1417,32 @@ export default function ClientsPage() {
                             onClick={() => handleClientSelect(client)}
                           >
                             <span className="text-primary-700 font-semibold text-lg">
-                              {(client.name || client.email)?.charAt(0)?.toUpperCase() || '?'}
+                              {(client.name || client.email)
+                                ?.charAt(0)
+                                ?.toUpperCase() || "?"}
                             </span>
                           </div>
                           <div
                             className="ml-3 flex-grow cursor-pointer"
                             onClick={() => handleClientSelect(client)}
                           >
-                            <p className="font-medium text-slate-900">{client.name}</p>
-                            <p className="text-xs text-slate-500">{client.email}</p>
+                            <p className="font-medium text-slate-900">
+                              {client.name}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {client.email}
+                            </p>
                           </div>
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="sm" asChild className="shrink-0">
-                              <Link href={`/admin/clients/${client.id}`}>View</Link>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              asChild
+                              className="shrink-0"
+                            >
+                              <Link href={`/admin/clients/${client.id}`}>
+                                View
+                              </Link>
                             </Button>
                             <Button
                               variant="ghost"
@@ -1313,7 +1465,9 @@ export default function ClientsPage() {
                 ) : (
                   <div className="text-center py-8">
                     <UserIcon className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                    <h3 className="text-lg font-medium text-slate-900">No clients found</h3>
+                    <h3 className="text-lg font-medium text-slate-900">
+                      No clients found
+                    </h3>
                     <p className="text-sm text-slate-500 mt-1">
                       {searchQuery
                         ? "Try a different search term"
@@ -1336,11 +1490,18 @@ export default function ClientsPage() {
                       <CardDescription>{selectedClient.email}</CardDescription>
                     </div>
                     <div className="flex space-x-2">
-                      <Button variant="outline" size="sm" onClick={handleEditClient}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleEditClient}
+                      >
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                       </Button>
-                      <Dialog open={isAddPetDialogOpen} onOpenChange={setIsAddPetDialogOpen}>
+                      <Dialog
+                        open={isAddPetDialogOpen}
+                        onOpenChange={setIsAddPetDialogOpen}
+                      >
                         <DialogTrigger asChild>
                           <Button size="sm">
                             <PlusCircle className="h-4 w-4 mr-2" />
@@ -1356,7 +1517,10 @@ export default function ClientsPage() {
                           </DialogHeader>
 
                           <Form {...petForm}>
-                            <form onSubmit={petForm.handleSubmit(onPetFormSubmit)} className="space-y-4 pt-4">
+                            <form
+                              onSubmit={petForm.handleSubmit(onPetFormSubmit)}
+                              className="space-y-4 pt-4"
+                            >
                               {/* Main form grid with two columns */}
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {/* Left column - Basic Information */}
@@ -1372,7 +1536,10 @@ export default function ClientsPage() {
                                       <FormItem>
                                         <FormLabel>Pet Name</FormLabel>
                                         <FormControl>
-                                          <Input placeholder="Buddy" {...field} />
+                                          <Input
+                                            placeholder="Buddy"
+                                            {...field}
+                                          />
                                         </FormControl>
                                         <FormMessage />
                                       </FormItem>
@@ -1411,7 +1578,13 @@ export default function ClientsPage() {
                                         <FormLabel>Breed</FormLabel>
                                         <FormControl>
                                           <ComboboxSelect
-                                            options={selectedAddPetSpecies ? getBreedsList(selectedAddPetSpecies) : []}
+                                            options={
+                                              selectedAddPetSpecies
+                                                ? getBreedsList(
+                                                    selectedAddPetSpecies
+                                                  )
+                                                : []
+                                            }
                                             value={field.value}
                                             onValueChange={field.onChange}
                                             placeholder="Select breed"
@@ -1480,7 +1653,7 @@ export default function ClientsPage() {
                                             onClick={() => {
                                               setPetPhoto(null);
                                               if (fileInputRef.current) {
-                                                fileInputRef.current.value = '';
+                                                fileInputRef.current.value = "";
                                               }
                                             }}
                                           >
@@ -1492,11 +1665,25 @@ export default function ClientsPage() {
                                       {/* Upload Button */}
                                       {!petPhoto ? (
                                         <div className="grid w-full max-w-sm items-center gap-1.5">
-                                          <Label htmlFor="pet-photo" className="sr-only">Pet Photo</Label>
-                                          <div className="border-2 border-dashed border-border rounded-md p-6 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors" onClick={() => fileInputRef.current?.click()}>
+                                          <Label
+                                            htmlFor="pet-photo"
+                                            className="sr-only"
+                                          >
+                                            Pet Photo
+                                          </Label>
+                                          <div
+                                            className="border-2 border-dashed border-border rounded-md p-6 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors"
+                                            onClick={() =>
+                                              fileInputRef.current?.click()
+                                            }
+                                          >
                                             <Camera className="h-8 w-8 text-muted-foreground mb-2" />
-                                            <p className="text-sm font-medium text-center">Click to upload a photo</p>
-                                            <p className="text-xs text-muted-foreground text-center mt-1">PNG, JPG or JPEG</p>
+                                            <p className="text-sm font-medium text-center">
+                                              Click to upload a photo
+                                            </p>
+                                            <p className="text-xs text-muted-foreground text-center mt-1">
+                                              PNG, JPG or JPEG
+                                            </p>
                                           </div>
                                           <Input
                                             id="pet-photo"
@@ -1505,7 +1692,8 @@ export default function ClientsPage() {
                                             ref={fileInputRef}
                                             className="hidden"
                                             onChange={(e) => {
-                                              const file = e.target.files?.[0] || null;
+                                              const file =
+                                                e.target.files?.[0] || null;
                                               if (file) {
                                                 setPetPhoto(file);
                                               }
@@ -1560,7 +1748,10 @@ export default function ClientsPage() {
                                       <FormItem>
                                         <FormLabel>Weight</FormLabel>
                                         <FormControl>
-                                          <Input placeholder="32 kg" {...field} />
+                                          <Input
+                                            placeholder="32 kg"
+                                            {...field}
+                                          />
                                         </FormControl>
                                         <FormMessage />
                                       </FormItem>
@@ -1591,7 +1782,10 @@ export default function ClientsPage() {
                                       <FormItem>
                                         <FormLabel>Microchip Number</FormLabel>
                                         <FormControl>
-                                          <Input placeholder="Enter microchip ID" {...field} />
+                                          <Input
+                                            placeholder="Enter microchip ID"
+                                            {...field}
+                                          />
                                         </FormControl>
                                         <FormMessage />
                                       </FormItem>
@@ -1637,7 +1831,7 @@ export default function ClientsPage() {
                                       Saving...
                                     </>
                                   ) : (
-                                    'Add Pet'
+                                    "Add Pet"
                                   )}
                                 </Button>
                               </DialogFooter>
@@ -1652,9 +1846,15 @@ export default function ClientsPage() {
                   <Tabs defaultValue="pets">
                     <TabsList className="mb-4">
                       <TabsTrigger value="pets">Pets</TabsTrigger>
-                      <TabsTrigger value="appointments">Appointments</TabsTrigger>
-                      <TabsTrigger value="medical-records">Medical Records</TabsTrigger>
-                      <TabsTrigger value="health-plans">Health Plans</TabsTrigger>
+                      <TabsTrigger value="appointments">
+                        Appointments
+                      </TabsTrigger>
+                      <TabsTrigger value="medical-records">
+                        Medical Records
+                      </TabsTrigger>
+                      <TabsTrigger value="health-plans">
+                        Health Plans
+                      </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="pets">
@@ -1672,27 +1872,49 @@ export default function ClientsPage() {
                                     <Avatar className="h-12 w-12 border">
                                       {pet.photoPath ? (
                                         <AvatarImage
-                                          src={pet.photoPath.startsWith('/') ? pet.photoPath : `/${pet.photoPath}`}
+                                          src={
+                                            pet.photoPath.startsWith("/")
+                                              ? pet.photoPath
+                                              : `/${pet.photoPath}`
+                                          }
                                           alt={pet.name}
                                         />
                                       ) : (
-                                        <AvatarFallback className={`${getPetAvatarColors(pet.name).bg} ${getPetAvatarColors(pet.name).text}`}>
-                                          {pet.name.substring(0, 2).toUpperCase()}
+                                        <AvatarFallback
+                                          className={`${
+                                            getPetAvatarColors(pet.name).bg
+                                          } ${
+                                            getPetAvatarColors(pet.name).text
+                                          }`}
+                                        >
+                                          {pet.name
+                                            .substring(0, 2)
+                                            .toUpperCase()}
                                         </AvatarFallback>
                                       )}
                                     </Avatar>
                                     <div>
-                                      <CardTitle className="text-lg">{pet.name}</CardTitle>
+                                      <CardTitle className="text-lg">
+                                        {pet.name}
+                                      </CardTitle>
                                       <CardDescription>
                                         {pet.pet_type ? (
                                           <>
-                                            {pet.pet_type.split('_').map(word =>
-                                              word.charAt(0).toUpperCase() + word.slice(1)
-                                            ).join(' ')}
-                                            {pet.breed ? ` · ${pet.breed}` : ''}
+                                            {pet.pet_type
+                                              .split("_")
+                                              .map(
+                                                (word) =>
+                                                  word.charAt(0).toUpperCase() +
+                                                  word.slice(1)
+                                              )
+                                              .join(" ")}
+                                            {pet.breed ? ` · ${pet.breed}` : ""}
                                           </>
                                         ) : (
-                                          <>{pet.species} {pet.breed ? `· ${pet.breed}` : ''}</>
+                                          <>
+                                            {pet.species}{" "}
+                                            {pet.breed ? `· ${pet.breed}` : ""}
+                                          </>
                                         )}
                                       </CardDescription>
                                     </div>
@@ -1707,12 +1929,15 @@ export default function ClientsPage() {
                                           name: pet.name,
                                           species: pet.species || "",
                                           breed: pet.breed || "",
-                                          dateOfBirth: safeDateToInput(pet.dateOfBirth),
+                                          dateOfBirth: safeDateToInput(
+                                            pet.dateOfBirth
+                                          ),
                                           weight: pet.weight || "",
                                           allergies: pet.allergies || "",
                                           color: pet.color || "",
                                           gender: pet.gender || "",
-                                          microchipNumber: pet.microchipNumber || "",
+                                          microchipNumber:
+                                            pet.microchipNumber || "",
                                           pet_type: pet.pet_type || "",
                                           ownerId: String(pet.ownerId),
                                           practiceId: String(pet.practiceId),
@@ -1728,7 +1953,9 @@ export default function ClientsPage() {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      onClick={() => deletePetMutation.mutate(Number(pet.id))}
+                                      onClick={() =>
+                                        deletePetMutation.mutate(Number(pet.id))
+                                      }
                                       disabled={deletePetMutation.isPending}
                                     >
                                       {deletePetMutation.isPending ? (
@@ -1744,46 +1971,85 @@ export default function ClientsPage() {
                                 <div className="space-y-2 text-sm">
                                   {pet.dateOfBirth && (
                                     <div className="flex justify-between">
-                                      <span className="text-slate-500">Date of Birth:</span>
-                                      <span className="font-medium">{(function () { try { const d = new Date(pet.dateOfBirth); return isNaN(d.getTime()) ? '' : d.toLocaleDateString(); } catch (e) { return ''; } })()}</span>
+                                      <span className="text-slate-500">
+                                        Date of Birth:
+                                      </span>
+                                      <span className="font-medium">
+                                        {(function () {
+                                          try {
+                                            const d = new Date(pet.dateOfBirth);
+                                            return isNaN(d.getTime())
+                                              ? ""
+                                              : d.toLocaleDateString();
+                                          } catch (e) {
+                                            return "";
+                                          }
+                                        })()}
+                                      </span>
                                     </div>
                                   )}
                                   {pet.weight && (
                                     <div className="flex justify-between">
-                                      <span className="text-slate-500">Weight:</span>
-                                      <span className="font-medium">{pet.weight}</span>
+                                      <span className="text-slate-500">
+                                        Weight:
+                                      </span>
+                                      <span className="font-medium">
+                                        {pet.weight}
+                                      </span>
                                     </div>
                                   )}
                                   {pet.allergies && (
                                     <div className="flex justify-between">
-                                      <span className="text-slate-500">Allergies:</span>
-                                      <span className="font-medium">{pet.allergies}</span>
+                                      <span className="text-slate-500">
+                                        Allergies:
+                                      </span>
+                                      <span className="font-medium">
+                                        {pet.allergies}
+                                      </span>
                                     </div>
                                   )}
                                   {pet.color && (
                                     <div className="flex justify-between">
-                                      <span className="text-slate-500">Color:</span>
-                                      <span className="font-medium">{pet.color}</span>
+                                      <span className="text-slate-500">
+                                        Color:
+                                      </span>
+                                      <span className="font-medium">
+                                        {pet.color}
+                                      </span>
                                     </div>
                                   )}
                                   {pet.gender && (
                                     <div className="flex justify-between">
-                                      <span className="text-slate-500">Gender:</span>
-                                      <span className="font-medium">{pet.gender}</span>
+                                      <span className="text-slate-500">
+                                        Gender:
+                                      </span>
+                                      <span className="font-medium">
+                                        {pet.gender}
+                                      </span>
                                     </div>
                                   )}
                                   {pet.microchipNumber && (
                                     <div className="flex justify-between">
-                                      <span className="text-slate-500">Microchip ID:</span>
-                                      <span className="font-medium">{pet.microchipNumber}</span>
+                                      <span className="text-slate-500">
+                                        Microchip ID:
+                                      </span>
+                                      <span className="font-medium">
+                                        {pet.microchipNumber}
+                                      </span>
                                     </div>
                                   )}
                                 </div>
                               </CardContent>
                               <CardFooter className="pt-0">
                                 <div className="flex space-x-2 w-full">
-                                  <Link href={`/admin/soap-notes/pet/${pet.id}`}>
-                                    <Button variant="outline" size="sm" className="flex-1 w-full">
+                                  <Link
+                                    href={`/admin/soap-notes/pet/${pet.id}`}
+                                  >
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="flex-1 w-full"
+                                    >
                                       View Records
                                     </Button>
                                   </Link>
@@ -1792,13 +2058,19 @@ export default function ClientsPage() {
                                       Timeline
                                     </Button>
                                   </Link> */}
-                                  <Link href={`/admin/appointments?view=schedule&petId=${pet.id}`}>
-                                    <Button size="sm" className="flex-1 w-full" style={{ flex: 1 }}>
+                                  <Link
+                                    href={`/admin/appointments?view=schedule&petId=${pet.id}`}
+                                  >
+                                    <Button
+                                      size="sm"
+                                      className="flex-1 w-full"
+                                      style={{ flex: 1 }}
+                                    >
                                       Schedule Visit
                                     </Button>
                                   </Link>
                                 </div>
-                              </CardFooter >
+                              </CardFooter>
                             </Card>
                           ))}
                         </div>
@@ -1808,7 +2080,9 @@ export default function ClientsPage() {
                             <div className="rounded-full bg-slate-100 p-3 mb-3">
                               <PlusCircle className="h-8 w-8 text-slate-400" />
                             </div>
-                            <h3 className="text-lg font-medium text-slate-900">No pets found</h3>
+                            <h3 className="text-lg font-medium text-slate-900">
+                              No pets found
+                            </h3>
                             <p className="text-sm text-slate-500 mt-1 mb-4 text-center">
                               This client doesn't have any pets registered yet.
                             </p>
@@ -1822,7 +2096,9 @@ export default function ClientsPage() {
 
                     <TabsContent value="appointments">
                       {selectedClient && (
-                        <ClientAppointmentsList clientId={String(selectedClient.id)} />
+                        <ClientAppointmentsList
+                          clientId={String(selectedClient.id)}
+                        />
                       )}
                     </TabsContent>
 
@@ -1836,27 +2112,45 @@ export default function ClientsPage() {
                                   <Avatar className="h-10 w-10 border">
                                     {pet.photoPath ? (
                                       <AvatarImage
-                                        src={pet.photoPath.startsWith('/') ? pet.photoPath : `/${pet.photoPath}`}
+                                        src={
+                                          pet.photoPath.startsWith("/")
+                                            ? pet.photoPath
+                                            : `/${pet.photoPath}`
+                                        }
                                         alt={pet.name}
                                       />
                                     ) : (
-                                      <AvatarFallback className={`${getPetAvatarColors(pet.name).bg} ${getPetAvatarColors(pet.name).text}`}>
+                                      <AvatarFallback
+                                        className={`${
+                                          getPetAvatarColors(pet.name).bg
+                                        } ${getPetAvatarColors(pet.name).text}`}
+                                      >
                                         {pet.name.substring(0, 2).toUpperCase()}
                                       </AvatarFallback>
                                     )}
                                   </Avatar>
                                   <div>
-                                    <CardTitle className="text-base">{pet.name}'s Medical Records</CardTitle>
+                                    <CardTitle className="text-base">
+                                      {pet.name}'s Medical Records
+                                    </CardTitle>
                                     <CardDescription>
                                       {pet.pet_type ? (
                                         <>
-                                          {pet.pet_type.split('_').map(word =>
-                                            word.charAt(0).toUpperCase() + word.slice(1)
-                                          ).join(' ')}
-                                          {pet.breed ? ` · ${pet.breed}` : ''}
+                                          {pet.pet_type
+                                            .split("_")
+                                            .map(
+                                              (word) =>
+                                                word.charAt(0).toUpperCase() +
+                                                word.slice(1)
+                                            )
+                                            .join(" ")}
+                                          {pet.breed ? ` · ${pet.breed}` : ""}
                                         </>
                                       ) : (
-                                        <>{pet.species} {pet.breed ? `· ${pet.breed}` : ''}</>
+                                        <>
+                                          {pet.species}{" "}
+                                          {pet.breed ? `· ${pet.breed}` : ""}
+                                        </>
                                       )}
                                     </CardDescription>
                                   </div>
@@ -1865,7 +2159,9 @@ export default function ClientsPage() {
                               <CardContent>
                                 <div className="space-y-3">
                                   <div className="flex items-center justify-between border-b pb-2">
-                                    <span className="font-medium">SOAP Notes</span>
+                                    <span className="font-medium">
+                                      SOAP Notes
+                                    </span>
                                     <Link href={`/pet-soap-notes/${pet.id}`}>
                                       <Button variant="outline" size="sm">
                                         View All
@@ -1874,7 +2170,9 @@ export default function ClientsPage() {
                                   </div>
 
                                   <div className="flex items-center justify-between border-b pb-2">
-                                    <span className="font-medium">Lab Results</span>
+                                    <span className="font-medium">
+                                      Lab Results
+                                    </span>
                                     <Link href={`/pet-lab-results/${pet.id}`}>
                                       <Button variant="outline" size="sm">
                                         View All
@@ -1883,7 +2181,9 @@ export default function ClientsPage() {
                                   </div>
 
                                   <div className="flex items-center justify-between border-b pb-2">
-                                    <span className="font-medium">Prescriptions</span>
+                                    <span className="font-medium">
+                                      Prescriptions
+                                    </span>
                                     <Link href={`/pet-prescriptions/${pet.id}`}>
                                       <Button variant="outline" size="sm">
                                         View All
@@ -1892,8 +2192,12 @@ export default function ClientsPage() {
                                   </div>
 
                                   <div className="flex items-center justify-between">
-                                    <span className="font-medium">Timeline View</span>
-                                    <Link href={`/admin/patient-timeline?petId=${pet.id}`}>
+                                    <span className="font-medium">
+                                      Timeline View
+                                    </span>
+                                    <Link
+                                      href={`/admin/patient-timeline?petId=${pet.id}`}
+                                    >
                                       <Button size="sm">
                                         Complete History
                                       </Button>
@@ -1907,9 +2211,12 @@ export default function ClientsPage() {
                       ) : (
                         <Card>
                           <CardContent className="py-8 text-center">
-                            <h3 className="text-lg font-medium text-slate-900">No Medical Records</h3>
+                            <h3 className="text-lg font-medium text-slate-900">
+                              No Medical Records
+                            </h3>
                             <p className="text-sm text-slate-500 mt-2">
-                              There are no pets registered for this client. Add a pet first to access medical records.
+                              There are no pets registered for this client. Add
+                              a pet first to access medical records.
                             </p>
                           </CardContent>
                         </Card>
@@ -1919,9 +2226,12 @@ export default function ClientsPage() {
                     <TabsContent value="health-plans">
                       <Card>
                         <CardContent className="py-8 text-center">
-                          <h3 className="text-lg font-medium text-slate-900">Health Plans Coming Soon</h3>
+                          <h3 className="text-lg font-medium text-slate-900">
+                            Health Plans Coming Soon
+                          </h3>
                           <p className="text-sm text-slate-500 mt-2">
-                            Health plan management for this client will be available in a future update.
+                            Health plan management for this client will be
+                            available in a future update.
                           </p>
                         </CardContent>
                       </Card>
@@ -1935,10 +2245,12 @@ export default function ClientsPage() {
                   <div className="rounded-full bg-slate-100 p-4 mb-4">
                     <UserIcon className="h-10 w-10 text-slate-400" />
                   </div>
-                  <h3 className="text-lg font-medium text-slate-900">Select a client</h3>
+                  <h3 className="text-lg font-medium text-slate-900">
+                    Select a client
+                  </h3>
                   <p className="text-sm text-slate-500 mt-2 text-center max-w-md">
-                    Choose a client from the list to view their details,
-                    manage their pets, appointments, and health plans.
+                    Choose a client from the list to view their details, manage
+                    their pets, appointments, and health plans.
                   </p>
                 </CardContent>
               </Card>
@@ -1952,13 +2264,14 @@ export default function ClientsPage() {
         <DialogContent className="sm:max-w-[900px]">
           <DialogHeader>
             <DialogTitle>Edit Pet</DialogTitle>
-            <DialogDescription>
-              Edit pet information.
-            </DialogDescription>
+            <DialogDescription>Edit pet information.</DialogDescription>
           </DialogHeader>
 
           <Form {...petForm}>
-            <form onSubmit={petForm.handleSubmit(onPetFormSubmit)} className="space-y-4 pt-4">
+            <form
+              onSubmit={petForm.handleSubmit(onPetFormSubmit)}
+              className="space-y-4 pt-4"
+            >
               {/* Main form grid with two columns */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Left column - Basic Information */}
@@ -2013,11 +2326,19 @@ export default function ClientsPage() {
                         <FormLabel>Breed</FormLabel>
                         <FormControl>
                           <ComboboxSelect
-                            options={selectedSpecies ? getBreedsList(selectedSpecies) : []}
+                            options={
+                              selectedSpecies
+                                ? getBreedsList(selectedSpecies)
+                                : []
+                            }
                             value={field.value}
                             onValueChange={field.onChange}
                             placeholder="Select breed"
-                            emptyMessage={selectedSpecies ? "No breeds found." : "Select a species first."}
+                            emptyMessage={
+                              selectedSpecies
+                                ? "No breeds found."
+                                : "Select a species first."
+                            }
                           />
                         </FormControl>
                         <FormMessage />
@@ -2181,24 +2502,21 @@ export default function ClientsPage() {
                     setEditPetId(null);
                     setPetPhoto(null);
                     if (fileInputRef.current) {
-                      fileInputRef.current.value = '';
+                      fileInputRef.current.value = "";
                     }
                     petForm.reset();
                   }}
                 >
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={updatePetMutation.isPending}
-                >
+                <Button type="submit" disabled={updatePetMutation.isPending}>
                   {updatePetMutation.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Updating...
                     </>
                   ) : (
-                    'Update Pet'
+                    "Update Pet"
                   )}
                 </Button>
               </DialogFooter>
@@ -2208,17 +2526,21 @@ export default function ClientsPage() {
       </Dialog>
 
       {/* Edit Client Dialog */}
-      <Dialog open={isEditClientDialogOpen} onOpenChange={setIsEditClientDialogOpen}>
+      <Dialog
+        open={isEditClientDialogOpen}
+        onOpenChange={setIsEditClientDialogOpen}
+      >
         <DialogContent className="sm:max-w-[900px]">
           <DialogHeader>
             <DialogTitle>Edit Client</DialogTitle>
-            <DialogDescription>
-              Update client information.
-            </DialogDescription>
+            <DialogDescription>Update client information.</DialogDescription>
           </DialogHeader>
 
           <Form {...updateClientForm}>
-            <form onSubmit={updateClientForm.handleSubmit(onClientFormSubmit)} className="space-y-4 pt-4">
+            <form
+              onSubmit={updateClientForm.handleSubmit(onClientFormSubmit)}
+              className="space-y-4 pt-4"
+            >
               {/* Main form grid with two columns */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Left column - Contact Details */}
@@ -2248,7 +2570,11 @@ export default function ClientsPage() {
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input type="email" placeholder="john@example.com" {...field} />
+                          <Input
+                            type="email"
+                            placeholder="john@example.com"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -2285,7 +2611,11 @@ export default function ClientsPage() {
 
                   <div className="space-y-2">
                     <FormLabel>Username</FormLabel>
-                    <Input readOnly disabled value={selectedClient?.username || ""} />
+                    <Input
+                      readOnly
+                      disabled
+                      value={selectedClient?.username || ""}
+                    />
                   </div>
 
                   <FormField
@@ -2298,7 +2628,11 @@ export default function ClientsPage() {
                           Leave blank to keep the current password
                         </FormDescription>
                         <FormControl>
-                          <Input type="password" placeholder="New password (optional)" {...field} />
+                          <Input
+                            type="password"
+                            placeholder="New password (optional)"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -2447,17 +2781,14 @@ export default function ClientsPage() {
                 >
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={updateClientMutation.isPending}
-                >
+                <Button type="submit" disabled={updateClientMutation.isPending}>
                   {updateClientMutation.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Updating...
                     </>
                   ) : (
-                    'Update Client'
+                    "Update Client"
                   )}
                 </Button>
               </DialogFooter>
@@ -2466,12 +2797,16 @@ export default function ClientsPage() {
         </DialogContent>
       </Dialog>
       {/* Delete Client Confirmation Dialog */}
-      <Dialog open={isDeleteClientDialogOpen} onOpenChange={setIsDeleteClientDialogOpen}>
+      <Dialog
+        open={isDeleteClientDialogOpen}
+        onOpenChange={setIsDeleteClientDialogOpen}
+      >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Delete Client</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this client? This action cannot be undone.
+              Are you sure you want to delete this client? This action cannot be
+              undone.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -2479,12 +2814,18 @@ export default function ClientsPage() {
               <div className="flex items-center p-3 border rounded-md">
                 <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
                   <span className="text-primary-700 font-semibold">
-                    {(selectedClient.name || selectedClient.email)?.charAt(0)?.toUpperCase() || '?'}
+                    {(selectedClient.name || selectedClient.email)
+                      ?.charAt(0)
+                      ?.toUpperCase() || "?"}
                   </span>
                 </div>
                 <div className="ml-3">
-                  <p className="font-medium text-slate-900">{selectedClient.name}</p>
-                  <p className="text-xs text-slate-500">{selectedClient.email}</p>
+                  <p className="font-medium text-slate-900">
+                    {selectedClient.name}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {selectedClient.email}
+                  </p>
                 </div>
               </div>
             )}
@@ -2530,15 +2871,18 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: appointments, isLoading, error } = useQuery({
-    queryKey: ['/api/appointments/client', clientId],
+  const {
+    data: appointments,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["/api/appointments/client", clientId],
     queryFn: async () => {
       const id = String(clientId);
       const response = await fetch(`/api/appointments?clientId=${id}`);
-      deleteClientMutation.mutate(String(selectedClient.id));
 
       if (!response.ok) {
-        throw new Error('Failed to fetch client appointments');
+        throw new Error("Failed to fetch client appointments");
       }
 
       return response.json();
@@ -2552,7 +2896,9 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
         <CardContent className="py-8 flex justify-center">
           <div className="flex flex-col items-center space-y-4">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Loading appointments...</p>
+            <p className="text-sm text-muted-foreground">
+              Loading appointments...
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -2564,18 +2910,24 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
       <Card>
         <CardContent className="py-8 text-center">
           <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-slate-900">Error Loading Appointments</h3>
+          <h3 className="text-lg font-medium text-slate-900">
+            Error Loading Appointments
+          </h3>
           <p className="text-sm text-slate-500 mt-2">
-            {error instanceof Error ? error.message : 'An unexpected error occurred.'}
+            {error instanceof Error
+              ? error.message
+              : "An unexpected error occurred."}
           </p>
           <Button
             variant="outline"
             className="mt-4"
             onClick={() => {
-              queryClient.invalidateQueries({ queryKey: ['/api/appointments/client', clientId] });
+              queryClient.invalidateQueries({
+                queryKey: ["/api/appointments/client", clientId],
+              });
               toast({
                 title: "Refreshing appointments",
-                description: "Attempting to reload client appointments"
+                description: "Attempting to reload client appointments",
               });
             }}
           >
@@ -2591,15 +2943,13 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
     return (
       <Card>
         <CardContent className="py-8 text-center">
-          <h3 className="text-lg font-medium text-slate-900">No Appointments Found</h3>
+          <h3 className="text-lg font-medium text-slate-900">
+            No Appointments Found
+          </h3>
           <p className="text-sm text-slate-500 mt-2">
             This client has no upcoming or past appointments.
           </p>
-          <Button
-            variant="outline"
-            className="mt-4"
-            asChild
-          >
+          <Button variant="outline" className="mt-4" asChild>
             <Link href="/appointments">
               <Calendar className="mr-2 h-4 w-4" />
               Schedule Appointment
@@ -2624,7 +2974,8 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
             </Button>
           </div>
           <CardDescription>
-            Showing {appointments.length} appointment{appointments.length !== 1 ? 's' : ''}
+            Showing {appointments.length} appointment
+            {appointments.length !== 1 ? "s" : ""}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -2633,40 +2984,61 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
               <Card key={appointment.id} className="overflow-hidden">
                 <div className="flex flex-col sm:flex-row">
                   {/* Status indicator */}
-                  <div className={cn(
-                    "w-full sm:w-2 flex-shrink-0",
-                    appointment.status === 'completed' ? "bg-green-500" :
-                      appointment.status === 'cancelled' ? "bg-red-500" :
-                        appointment.status === 'no-show' ? "bg-amber-500" :
-                          "bg-blue-500"
-                  )} />
+                  <div
+                    className={cn(
+                      "w-full sm:w-2 flex-shrink-0",
+                      appointment.status === "completed"
+                        ? "bg-green-500"
+                        : appointment.status === "cancelled"
+                        ? "bg-red-500"
+                        : appointment.status === "no-show"
+                        ? "bg-amber-500"
+                        : "bg-blue-500"
+                    )}
+                  />
 
                   <div className="flex-grow p-4">
                     <div className="flex flex-col sm:flex-row sm:justify-between mb-3">
                       <div>
-                        <h4 className="text-base font-medium">{appointment.title}</h4>
+                        <h4 className="text-base font-medium">
+                          {appointment.title}
+                        </h4>
                         <div className="flex items-center text-sm text-muted-foreground mt-1">
                           <Calendar className="mr-1 h-4 w-4" />
                           {formatDate(new Date(appointment.date))}
                           <Clock className="ml-2 mr-1 h-4 w-4" />
-                          {new Date(appointment.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(appointment.date).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                           {appointment.duration && (
-                            <span className="ml-2">{appointment.duration} min</span>
+                            <span className="ml-2">
+                              {appointment.duration} min
+                            </span>
                           )}
                         </div>
                       </div>
 
                       <div className="mt-2 sm:mt-0 flex items-center">
-                        <Badge variant={
-                          appointment.status === 'completed' ? "secondary" :
-                            appointment.status === 'cancelled' ? "destructive" :
-                              appointment.status === 'no-show' ? "secondary" :
-                                "default"
-                        } className="ml-2">
-                          {appointment.status === 'completed' ? "Completed" :
-                            appointment.status === 'cancelled' ? "Cancelled" :
-                              appointment.status === 'no-show' ? "No-show" :
-                                "Scheduled"}
+                        <Badge
+                          variant={
+                            appointment.status === "completed"
+                              ? "secondary"
+                              : appointment.status === "cancelled"
+                              ? "destructive"
+                              : appointment.status === "no-show"
+                              ? "secondary"
+                              : "default"
+                          }
+                          className="ml-2"
+                        >
+                          {appointment.status === "completed"
+                            ? "Completed"
+                            : appointment.status === "cancelled"
+                            ? "Cancelled"
+                            : appointment.status === "no-show"
+                            ? "No-show"
+                            : "Scheduled"}
                         </Badge>
                       </div>
                     </div>
@@ -2676,21 +3048,34 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
                         <Avatar className="h-6 w-6 mr-2">
                           {appointment.pet.photoPath ? (
                             <AvatarImage
-                              src={appointment.pet.photoPath.startsWith('/') ? appointment.pet.photoPath : `/${appointment.pet.photoPath}`}
+                              src={
+                                appointment.pet.photoPath.startsWith("/")
+                                  ? appointment.pet.photoPath
+                                  : `/${appointment.pet.photoPath}`
+                              }
                               alt={appointment.pet.name}
                             />
                           ) : (
-                            <AvatarFallback className={cn(
-                              getPetAvatarColors(appointment.pet.name).bg,
-                              getPetAvatarColors(appointment.pet.name).text
-                            )}>
-                              {appointment.pet.name.substring(0, 2).toUpperCase()}
+                            <AvatarFallback
+                              className={cn(
+                                getPetAvatarColors(appointment.pet.name).bg,
+                                getPetAvatarColors(appointment.pet.name).text
+                              )}
+                            >
+                              {appointment.pet.name
+                                .substring(0, 2)
+                                .toUpperCase()}
                             </AvatarFallback>
                           )}
                         </Avatar>
                         <span className="text-sm">
-                          {appointment.pet.name}{appointment.pet.species ? `, ${appointment.pet.species}` : ''}
-                          {appointment.pet.breed ? ` (${appointment.pet.breed})` : ''}
+                          {appointment.pet.name}
+                          {appointment.pet.species
+                            ? `, ${appointment.pet.species}`
+                            : ""}
+                          {appointment.pet.breed
+                            ? ` (${appointment.pet.breed})`
+                            : ""}
                         </span>
                       </div>
                     )}

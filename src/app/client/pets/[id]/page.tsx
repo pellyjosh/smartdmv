@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -7,14 +7,20 @@ import { useUser } from "@/context/UserContext";
 import { useToast } from "@/hooks/use-toast";
 import { ClientHeader } from "@/components/client/ClientHeader";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { 
+import {
   Calendar as CalendarIcon,
   Activity,
   FileText,
@@ -35,7 +41,7 @@ import {
   Ruler,
   AlertCircle,
   CheckCircle,
-  Camera
+  Camera,
 } from "lucide-react";
 import { format } from "@/lib/date-utils";
 import Link from "next/link";
@@ -44,13 +50,13 @@ import Link from "next/link";
 const MedicalRecordCard = ({ record }: { record: any }) => {
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'checkup':
+      case "checkup":
         return <Stethoscope className="h-4 w-4 text-blue-500" />;
-      case 'vaccination':
+      case "vaccination":
         return <Syringe className="h-4 w-4 text-green-500" />;
-      case 'surgery':
+      case "surgery":
         return <Activity className="h-4 w-4 text-red-500" />;
-      case 'medication':
+      case "medication":
         return <Pill className="h-4 w-4 text-purple-500" />;
       default:
         return <FileText className="h-4 w-4 text-gray-500" />;
@@ -66,7 +72,7 @@ const MedicalRecordCard = ({ record }: { record: any }) => {
             <CardTitle className="text-base">{record.title}</CardTitle>
           </div>
           <Badge variant="outline" className="text-xs">
-            {format(new Date(record.date), 'MMM d, YYYY')}
+            {format(new Date(record.date), "MMM d, YYYY")}
           </Badge>
         </div>
       </CardHeader>
@@ -76,32 +82,34 @@ const MedicalRecordCard = ({ record }: { record: any }) => {
             <span className="text-muted-foreground">Veterinarian:</span>
             <span className="ml-2 font-medium">{record.veterinarian}</span>
           </div>
-          
+
           {record.diagnosis && (
             <div className="text-sm">
               <span className="text-muted-foreground">Diagnosis:</span>
               <p className="mt-1">{record.diagnosis}</p>
             </div>
           )}
-          
+
           {record.treatment && (
             <div className="text-sm">
               <span className="text-muted-foreground">Treatment:</span>
               <p className="mt-1">{record.treatment}</p>
             </div>
           )}
-          
+
           {record.medications && record.medications.length > 0 && (
             <div className="text-sm">
               <span className="text-muted-foreground">Medications:</span>
               <ul className="mt-1 list-disc list-inside">
                 {record.medications.map((med: any, index: number) => (
-                  <li key={index}>{med.name} - {med.dosage}</li>
+                  <li key={index}>
+                    {med.name} - {med.dosage}
+                  </li>
                 ))}
               </ul>
             </div>
           )}
-          
+
           {record.notes && (
             <div className="text-sm">
               <span className="text-muted-foreground">Notes:</span>
@@ -129,15 +137,32 @@ const MedicalRecordCard = ({ record }: { record: any }) => {
 // Vaccination record component
 const VaccinationCard = ({ vaccination }: { vaccination: any }) => {
   const isUpcoming = new Date(vaccination.dueDate) > new Date();
-  const isOverdue = new Date(vaccination.dueDate) < new Date() && !vaccination.completed;
-  
+  const isOverdue =
+    new Date(vaccination.dueDate) < new Date() && !vaccination.completed;
+
   return (
-    <Card className={`mb-3 ${isOverdue ? 'border-red-200 bg-red-50' : isUpcoming ? 'border-blue-200 bg-blue-50' : 'border-green-200 bg-green-50'}`}>
+    <Card
+      className={`mb-3 ${
+        isOverdue
+          ? "border-red-200 bg-red-50"
+          : isUpcoming
+          ? "border-blue-200 bg-blue-50"
+          : "border-green-200 bg-green-50"
+      }`}
+    >
       <CardContent className="p-4">
         <div className="flex justify-between items-start">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <Syringe className={`h-4 w-4 ${isOverdue ? 'text-red-500' : isUpcoming ? 'text-blue-500' : 'text-green-500'}`} />
+              <Syringe
+                className={`h-4 w-4 ${
+                  isOverdue
+                    ? "text-red-500"
+                    : isUpcoming
+                    ? "text-blue-500"
+                    : "text-green-500"
+                }`}
+              />
               <h4 className="font-medium">{vaccination.name}</h4>
               {vaccination.completed ? (
                 <CheckCircle className="h-4 w-4 text-green-500" />
@@ -149,22 +174,148 @@ const VaccinationCard = ({ vaccination }: { vaccination: any }) => {
             </div>
             <div className="text-sm text-muted-foreground">
               {vaccination.completed ? (
-                <span>Completed: {format(new Date(vaccination.completedDate), 'MMM d, YYYY')}</span>
+                <span>
+                  Completed:{" "}
+                  {format(new Date(vaccination.completedDate), "MMM d, YYYY")}
+                </span>
               ) : (
-                <span>Due: {format(new Date(vaccination.dueDate), 'MMM d, YYYY')}</span>
+                <span>
+                  Due: {format(new Date(vaccination.dueDate), "MMM d, YYYY")}
+                </span>
               )}
             </div>
             {vaccination.nextDue && (
               <div className="text-sm text-muted-foreground">
-                Next due: {format(new Date(vaccination.nextDue), 'MMM d, YYYY')}
+                Next due: {format(new Date(vaccination.nextDue), "MMM d, YYYY")}
               </div>
             )}
           </div>
-          <Badge variant={vaccination.completed ? "default" : isOverdue ? "destructive" : "secondary"}>
-            {vaccination.completed ? "Completed" : isOverdue ? "Overdue" : "Upcoming"}
+          <Badge
+            variant={
+              vaccination.completed
+                ? "default"
+                : isOverdue
+                ? "destructive"
+                : "secondary"
+            }
+          >
+            {vaccination.completed
+              ? "Completed"
+              : isOverdue
+              ? "Overdue"
+              : "Upcoming"}
           </Badge>
         </div>
       </CardContent>
+    </Card>
+  );
+};
+
+// Appointment record component
+const AppointmentCard = ({ appointment }: { appointment: any }) => {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "text-green-600 bg-green-50 border-green-200";
+      case "pending":
+        return "text-blue-600 bg-blue-50 border-blue-200";
+      case "approved":
+        return "text-green-600 bg-green-50 border-green-200";
+      case "cancelled":
+        return "text-red-600 bg-red-50 border-red-200";
+      case "no_show":
+        return "text-gray-600 bg-gray-50 border-gray-200";
+      default:
+        return "text-gray-600 bg-gray-50 border-gray-200";
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "completed":
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case "pending":
+        return <Clock className="h-4 w-4 text-blue-500" />;
+      case "approved":
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case "cancelled":
+        return <AlertCircle className="h-4 w-4 text-red-500" />;
+      default:
+        return <CalendarIcon className="h-4 w-4 text-gray-500" />;
+    }
+  };
+
+  return (
+    <Card className="mb-4 hover:shadow-md transition-shadow">
+      <CardHeader className="pb-2">
+        <div className="flex justify-between items-start">
+          <div className="flex items-center gap-2">
+            {getStatusIcon(appointment.status)}
+            <CardTitle className="text-base">{appointment.title}</CardTitle>
+          </div>
+          <Badge
+            variant="outline"
+            className={getStatusColor(appointment.status)}
+          >
+            {appointment.status.replace("_", " ").toUpperCase()}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          <div className="text-sm">
+            <span className="text-muted-foreground">Date & Time:</span>
+            <span className="ml-2 font-medium">
+              {format(new Date(appointment.date), "MMM d, YYYY")} at{" "}
+              {format(new Date(appointment.date), "h:mm a")}
+            </span>
+          </div>
+
+          {appointment.practitioner && (
+            <div className="text-sm">
+              <span className="text-muted-foreground">Veterinarian:</span>
+              <span className="ml-2 font-medium">
+                {appointment.practitioner}
+              </span>
+            </div>
+          )}
+
+          {appointment.type && (
+            <div className="text-sm">
+              <span className="text-muted-foreground">Type:</span>
+              <span className="ml-2">{appointment.type}</span>
+            </div>
+          )}
+
+          {appointment.description && (
+            <div className="text-sm">
+              <span className="text-muted-foreground">Description:</span>
+              <p className="mt-1">{appointment.description}</p>
+            </div>
+          )}
+
+          {appointment.notes && (
+            <div className="text-sm">
+              <span className="text-muted-foreground">Notes:</span>
+              <p className="mt-1">{appointment.notes}</p>
+            </div>
+          )}
+        </div>
+      </CardContent>
+      <CardFooter className="pt-0">
+        <div className="flex gap-2">
+          {appointment.status === "pending" && (
+            <Button variant="outline" size="sm">
+              <Edit className="h-4 w-4 mr-2" />
+              Reschedule
+            </Button>
+          )}
+          <Button variant="outline" size="sm">
+            <FileText className="h-4 w-4 mr-2" />
+            View Details
+          </Button>
+        </div>
+      </CardFooter>
     </Card>
   );
 };
@@ -175,14 +326,14 @@ export default function PetDetailsPage() {
   const { user } = useUser();
   const { toast } = useToast();
   const petId = params.id as string;
-  
+
   const [activeTab, setActiveTab] = useState("overview");
 
   // Fetch pet details
-  const { 
-    data: pet, 
-    isLoading: isPetLoading, 
-    error: petError 
+  const {
+    data: pet,
+    isLoading: isPetLoading,
+    error: petError,
   } = useQuery({
     queryKey: [`/api/pets/${petId}`, petId],
     queryFn: async () => {
@@ -192,14 +343,11 @@ export default function PetDetailsPage() {
       }
       return await res.json();
     },
-    enabled: !!petId && user?.role === 'CLIENT',
+    enabled: !!petId && user?.role === "CLIENT",
   });
 
   // Fetch medical records
-  const { 
-    data: medicalRecords = [], 
-    isLoading: isRecordsLoading 
-  } = useQuery({
+  const { data: medicalRecords = [], isLoading: isRecordsLoading } = useQuery({
     queryKey: [`/api/pets/${petId}/medical-records`, petId],
     queryFn: async () => {
       const res = await fetch(`/api/pets/${petId}/medical-records`);
@@ -208,30 +356,42 @@ export default function PetDetailsPage() {
       }
       return await res.json();
     },
-    enabled: !!petId && user?.role === 'CLIENT',
+    enabled: !!petId && user?.role === "CLIENT",
   });
 
   // Fetch vaccinations
-  const { 
-    data: vaccinations = [], 
-    isLoading: isVaccinationsLoading 
-  } = useQuery({
-    queryKey: [`/api/pets/${petId}/vaccinations`, petId],
-    queryFn: async () => {
-      const res = await fetch(`/api/pets/${petId}/vaccinations`);
-      if (!res.ok) {
-        throw new Error("Failed to fetch vaccinations");
-      }
-      return await res.json();
-    },
-    enabled: !!petId && user?.role === 'CLIENT',
-  });
+  const { data: vaccinations = [], isLoading: isVaccinationsLoading } =
+    useQuery({
+      queryKey: [`/api/pets/${petId}/vaccinations`, petId],
+      queryFn: async () => {
+        const res = await fetch(`/api/pets/${petId}/vaccinations`);
+        if (!res.ok) {
+          throw new Error("Failed to fetch vaccinations");
+        }
+        return await res.json();
+      },
+      enabled: !!petId && user?.role === "CLIENT",
+    });
+
+  // Fetch appointments
+  const { data: appointments = [], isLoading: isAppointmentsLoading } =
+    useQuery({
+      queryKey: [`/api/pets/${petId}/appointments`, petId],
+      queryFn: async () => {
+        const res = await fetch(`/api/pets/${petId}/appointments`);
+        if (!res.ok) {
+          throw new Error("Failed to fetch appointments");
+        }
+        return await res.json();
+      },
+      enabled: !!petId && user?.role === "CLIENT",
+    });
 
   if (isPetLoading) {
     return (
       <div className="container mx-auto py-6 px-4 max-w-5xl">
-        <ClientHeader 
-          title="Pet Details" 
+        <ClientHeader
+          title="Pet Details"
           showBackButton={true}
           backHref="/client?tab=pets"
           backLabel="Back to My Pets"
@@ -248,8 +408,8 @@ export default function PetDetailsPage() {
   if (petError || !pet) {
     return (
       <div className="container mx-auto py-6 px-4 max-w-5xl">
-        <ClientHeader 
-          title="Pet Details" 
+        <ClientHeader
+          title="Pet Details"
           showBackButton={true}
           backHref="/client?tab=pets"
           backLabel="Back to My Pets"
@@ -259,7 +419,8 @@ export default function PetDetailsPage() {
             <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-4" />
             <h3 className="font-medium text-base mb-2">Pet Not Found</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              The pet you're looking for doesn't exist or you don't have access to view it.
+              The pet you're looking for doesn't exist or you don't have access
+              to view it.
             </p>
             <Button asChild>
               <Link href="/client?tab=pets">Back to My Pets</Link>
@@ -276,20 +437,67 @@ export default function PetDetailsPage() {
     const today = new Date();
     const ageInMs = today.getTime() - birth.getTime();
     const ageInYears = Math.floor(ageInMs / (1000 * 60 * 60 * 24 * 365.25));
-    const ageInMonths = Math.floor((ageInMs % (1000 * 60 * 60 * 24 * 365.25)) / (1000 * 60 * 60 * 24 * 30.44));
-    
+    const ageInMonths = Math.floor(
+      (ageInMs % (1000 * 60 * 60 * 24 * 365.25)) / (1000 * 60 * 60 * 24 * 30.44)
+    );
+
     if (ageInYears > 0) {
-      return `${ageInYears} year${ageInYears > 1 ? 's' : ''}`;
+      return `${ageInYears} year${ageInYears > 1 ? "s" : ""}`;
     } else {
-      return `${ageInMonths} month${ageInMonths > 1 ? 's' : ''}`;
+      return `${ageInMonths} month${ageInMonths > 1 ? "s" : ""}`;
     }
   };
 
+  // Calculate vaccination status based on actual data
+  const getVaccinationStatus = () => {
+    if (!vaccinations || vaccinations.length === 0) {
+      return {
+        status: "No records",
+        percentage: 0,
+        description: "No vaccination records found",
+      };
+    }
+
+    const completedVaccinations = vaccinations.filter((v: any) => v.completed);
+    const overdueVaccinations = vaccinations.filter(
+      (v: any) => !v.completed && new Date(v.dueDate) < new Date()
+    );
+    const upcomingVaccinations = vaccinations.filter(
+      (v: any) => !v.completed && new Date(v.dueDate) >= new Date()
+    );
+
+    if (overdueVaccinations.length > 0) {
+      return {
+        status: "Overdue",
+        percentage: 25,
+        description: `${overdueVaccinations.length} vaccination(s) overdue`,
+      };
+    }
+
+    if (upcomingVaccinations.length > 0) {
+      const percentage =
+        (completedVaccinations.length / vaccinations.length) * 100;
+      return {
+        status: "Partial",
+        percentage: Math.max(percentage, 50),
+        description: `${upcomingVaccinations.length} vaccination(s) due soon`,
+      };
+    }
+
+    return {
+      status: "Up to date",
+      percentage: 100,
+      description: "All vaccinations current",
+    };
+  };
+
+  const vaccinationStatus = getVaccinationStatus();
+
   return (
     <div className="container mx-auto py-6 px-4 max-w-5xl">
-      <ClientHeader 
+      <ClientHeader
         title={`${pet.name}'s Medical Records`}
-        subtitle={`${pet.species} • ${pet.breed || 'Mixed breed'}`}
+        subtitle={`${pet.species} • ${pet.breed || "Mixed breed"}`}
         showBackButton={true}
         backHref="/client?tab=pets"
         backLabel="Back to My Pets"
@@ -312,7 +520,9 @@ export default function PetDetailsPage() {
               <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
                 <div>
                   <h2 className="text-2xl font-bold">{pet.name}</h2>
-                  <p className="text-muted-foreground">{pet.species} • {pet.breed || 'Mixed breed'}</p>
+                  <p className="text-muted-foreground">
+                    {pet.species} • {pet.breed || "Mixed breed"}
+                  </p>
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm">
@@ -325,12 +535,14 @@ export default function PetDetailsPage() {
                   </Button>
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 {pet.dateOfBirth && (
                   <div>
                     <span className="text-muted-foreground block">Age</span>
-                    <span className="font-medium">{calculateAge(pet.dateOfBirth)}</span>
+                    <span className="font-medium">
+                      {calculateAge(pet.dateOfBirth)}
+                    </span>
                   </div>
                 )}
                 {pet.sex && (
@@ -347,7 +559,9 @@ export default function PetDetailsPage() {
                 )}
                 {pet.microchipId && (
                   <div>
-                    <span className="text-muted-foreground block">Microchip</span>
+                    <span className="text-muted-foreground block">
+                      Microchip
+                    </span>
                     <span className="font-medium">{pet.microchipId}</span>
                   </div>
                 )}
@@ -361,19 +575,25 @@ export default function PetDetailsPage() {
             <div className="grid md:grid-cols-3 gap-4 text-sm">
               {pet.allergies && (
                 <div>
-                  <span className="text-muted-foreground block mb-1">Allergies</span>
+                  <span className="text-muted-foreground block mb-1">
+                    Allergies
+                  </span>
                   <p className="text-red-600 font-medium">{pet.allergies}</p>
                 </div>
               )}
               {pet.medications && (
                 <div>
-                  <span className="text-muted-foreground block mb-1">Current Medications</span>
+                  <span className="text-muted-foreground block mb-1">
+                    Current Medications
+                  </span>
                   <p>{pet.medications}</p>
                 </div>
               )}
               {pet.specialNotes && (
                 <div>
-                  <span className="text-muted-foreground block mb-1">Special Notes</span>
+                  <span className="text-muted-foreground block mb-1">
+                    Special Notes
+                  </span>
                   <p>{pet.specialNotes}</p>
                 </div>
               )}
@@ -414,31 +634,35 @@ export default function PetDetailsPage() {
             </CardHeader>
             <CardContent>
               <div className="grid md:grid-cols-2 gap-6">
-                {pet.vaccinationStatus && (
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Vaccination Status</span>
-                      <span className="font-medium">{pet.vaccinationStatus}</span>
-                    </div>
-                    <Progress 
-                      value={pet.vaccinationStatus === "Up to date" ? 100 : pet.vaccinationStatus === "Partial" ? 50 : 0} 
-                      className="h-2 mb-2"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {pet.vaccinationStatus === "Up to date" ? "All vaccinations current" : 
-                       pet.vaccinationStatus === "Partial" ? "Some vaccinations needed" : 
-                       "Vaccinations overdue"}
-                    </p>
-                  </div>
-                )}
-                
                 <div>
                   <div className="flex justify-between text-sm mb-2">
-                    <span className="text-muted-foreground">Overall Health</span>
+                    <span className="text-muted-foreground">
+                      Vaccination Status
+                    </span>
+                    <span className="font-medium">
+                      {vaccinationStatus.status}
+                    </span>
+                  </div>
+                  <Progress
+                    value={vaccinationStatus.percentage}
+                    className="h-2 mb-2"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {vaccinationStatus.description}
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-muted-foreground">
+                      Overall Health
+                    </span>
                     <span className="font-medium">Good</span>
                   </div>
                   <Progress value={85} className="h-2 mb-2" />
-                  <p className="text-xs text-muted-foreground">Based on recent checkups</p>
+                  <p className="text-xs text-muted-foreground">
+                    Based on recent checkups
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -458,23 +682,35 @@ export default function PetDetailsPage() {
               ) : medicalRecords && medicalRecords.length > 0 ? (
                 <div className="space-y-3">
                   {medicalRecords.slice(0, 3).map((record: any) => (
-                    <div key={record.id} className="flex items-center gap-3 p-3 border rounded-lg">
+                    <div
+                      key={record.id}
+                      className="flex items-center gap-3 p-3 border rounded-lg"
+                    >
                       <div className="p-2 bg-primary/10 rounded-full">
-                        {record.type === 'checkup' && <Stethoscope className="h-4 w-4 text-primary" />}
-                        {record.type === 'vaccination' && <Syringe className="h-4 w-4 text-primary" />}
-                        {record.type === 'surgery' && <Activity className="h-4 w-4 text-primary" />}
+                        {record.type === "checkup" && (
+                          <Stethoscope className="h-4 w-4 text-primary" />
+                        )}
+                        {record.type === "vaccination" && (
+                          <Syringe className="h-4 w-4 text-primary" />
+                        )}
+                        {record.type === "surgery" && (
+                          <Activity className="h-4 w-4 text-primary" />
+                        )}
                       </div>
                       <div className="flex-1">
                         <h4 className="font-medium text-sm">{record.title}</h4>
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(record.date), 'MMM d, YYYY')} • Dr. {record.veterinarian}
+                          {format(new Date(record.date), "MMM d, YYYY")} • Dr.{" "}
+                          {record.veterinarian}
                         </p>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-muted-foreground text-center py-4">No recent medical records</p>
+                <p className="text-muted-foreground text-center py-4">
+                  No recent medical records
+                </p>
               )}
             </CardContent>
           </Card>
@@ -486,17 +722,27 @@ export default function PetDetailsPage() {
             </CardHeader>
             <CardContent>
               <div className="grid md:grid-cols-3 gap-4">
-                <Button variant="outline" className="h-auto p-4 flex flex-col gap-2" asChild>
+                <Button
+                  variant="outline"
+                  className="h-auto p-4 flex flex-col gap-2"
+                  asChild
+                >
                   <Link href="/client/book-appointment">
                     <CalendarIcon className="h-5 w-5" />
                     <span>Book Appointment</span>
                   </Link>
                 </Button>
-                <Button variant="outline" className="h-auto p-4 flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  className="h-auto p-4 flex flex-col gap-2"
+                >
                   <Download className="h-5 w-5" />
                   <span>Download Records</span>
                 </Button>
-                <Button variant="outline" className="h-auto p-4 flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  className="h-auto p-4 flex flex-col gap-2"
+                >
                   <Mail className="h-5 w-5" />
                   <span>Contact Veterinarian</span>
                 </Button>
@@ -513,7 +759,7 @@ export default function PetDetailsPage() {
               Request New Record
             </Button>
           </div>
-          
+
           {isRecordsLoading ? (
             <div className="space-y-4">
               <Skeleton className="h-48 w-full" />
@@ -527,7 +773,9 @@ export default function PetDetailsPage() {
             <Card>
               <CardContent className="py-8 text-center">
                 <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-4" />
-                <h3 className="font-medium text-base mb-2">No Medical Records</h3>
+                <h3 className="font-medium text-base mb-2">
+                  No Medical Records
+                </h3>
                 <p className="text-sm text-muted-foreground">
                   Medical records will appear here after veterinary visits.
                 </p>
@@ -544,7 +792,7 @@ export default function PetDetailsPage() {
               Schedule Vaccination
             </Button>
           </div>
-          
+
           {isVaccinationsLoading ? (
             <div className="space-y-3">
               <Skeleton className="h-20 w-full" />
@@ -554,14 +802,19 @@ export default function PetDetailsPage() {
           ) : vaccinations && vaccinations.length > 0 ? (
             <div className="space-y-3">
               {vaccinations.map((vaccination: any) => (
-                <VaccinationCard key={vaccination.id} vaccination={vaccination} />
+                <VaccinationCard
+                  key={vaccination.id}
+                  vaccination={vaccination}
+                />
               ))}
             </div>
           ) : (
             <Card>
               <CardContent className="py-8 text-center">
                 <Syringe className="h-8 w-8 text-muted-foreground mx-auto mb-4" />
-                <h3 className="font-medium text-base mb-2">No Vaccination Records</h3>
+                <h3 className="font-medium text-base mb-2">
+                  No Vaccination Records
+                </h3>
                 <p className="text-sm text-muted-foreground">
                   Vaccination records will appear here after immunizations.
                 </p>
@@ -580,23 +833,33 @@ export default function PetDetailsPage() {
               </Link>
             </Button>
           </div>
-          
-          {/* This would be populated with appointment data specific to this pet */}
-          <Card>
-            <CardContent className="py-8 text-center">
-              <CalendarIcon className="h-8 w-8 text-muted-foreground mx-auto mb-4" />
-              <h3 className="font-medium text-base mb-2">No Appointments</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                No appointment history found for {pet.name}.
-              </p>
-              <Button asChild>
-                <Link href="/client/book-appointment">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Book First Appointment
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
+
+          {isAppointmentsLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          ) : appointments && appointments.length > 0 ? (
+            appointments.map((appointment: any) => (
+              <AppointmentCard key={appointment.id} appointment={appointment} />
+            ))
+          ) : (
+            <Card>
+              <CardContent className="py-8 text-center">
+                <CalendarIcon className="h-8 w-8 text-muted-foreground mx-auto mb-4" />
+                <h3 className="font-medium text-base mb-2">No Appointments</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  No appointment history found for {pet.name}.
+                </p>
+                <Button asChild>
+                  <Link href="/client/book-appointment">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Book First Appointment
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>

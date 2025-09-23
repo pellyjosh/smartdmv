@@ -18,6 +18,7 @@ import { referrals, referralAttachments, referralNotes, referralsRelations, refe
 import { addons, practiceAddons, addonReviews, AddonCategory } from './schemas/marketplaceSchema';
 import { dashboardConfigs, dashboardConfigsRelations } from './schemas/dashboardConfigsSchema';
 import { notifications, notificationsRelations } from './schemas/notificationsSchema';
+import { contacts, contactsRelations } from './schemas/contactsSchema';
 import { 
   labProviderSettings, 
   labTestCatalog, 
@@ -77,6 +78,20 @@ import {
   widgetAnalyticsRelations,
   integrationApiKeysRelations
 } from './schemas/integrationSettingsSchema';
+import {
+  invoices,
+  invoiceItems,
+  payments,
+  paymentMethods,
+  invoicesRelations,
+  invoiceItemsRelations,
+  paymentsRelations,
+  paymentMethodsRelations
+} from './schemas/billingSchema';
+import {
+  healthResources,
+  healthResourcesRelations
+} from './schemas/healthResourcesSchema';
 
 export const schema = {
   users,
@@ -115,6 +130,8 @@ export const schema = {
   dashboardConfigsRelations,
   notifications,
   notificationsRelations,
+  contacts,
+  contactsRelations,
   // Lab tables
   labProviderSettings, 
   labProviderSettingsRelations,
@@ -175,6 +192,18 @@ export const schema = {
   permissionResourcesRelations,
   permissionActions,
   permissionActionsRelations,
+  // Billing tables
+  invoices,
+  invoicesRelations,
+  invoiceItems,
+  invoiceItemsRelations,
+  payments,
+  paymentsRelations,
+  paymentMethods,
+  paymentMethodsRelations,
+  // Health Resources tables
+  healthResources,
+  healthResourcesRelations,
 };
 
 // Re-export all tables and their relations for Drizzle to use
@@ -203,6 +232,7 @@ export * from './schemas/treatmentTemplatesSchema';
 export * from './schemas/referralsSchema';
 export * from './schemas/marketplaceSchema';
 export * from './schemas/notificationsSchema';
+export * from './schemas/contactsSchema';
 export * from './schemas/labSchema';
 export * from './schemas/boardingSchema';
 export * from './schemas/medicalImagingSchema';
@@ -218,6 +248,8 @@ export * from './schemas/userRolesSchema';
 export * from './schemas/permissionOverridesSchema';
 export * from './schemas/rolesSchema';
 export * from './schemas/userRolesSchema';
+export * from './schemas/billingSchema';
+export * from './schemas/healthResourcesSchema';
 
 // You might also want to re-export the userRoleEnum if it's used elsewhere for typing
 export { UserRoleEnum };

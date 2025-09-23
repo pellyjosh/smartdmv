@@ -44,13 +44,14 @@ export async function checkPermission(
   let dynamicRolePermissions: Permission[] | null = null;
   let assignedRolesFromApi: any[] | null = null;
   try {
-    const res = await fetch(`/api/user-roles/user/${userId}`);
+    const res = await fetch(`/api/user-roles/${userId}`);
     if (res.ok) {
-      const assignedRoles = await res.json();
-      if (Array.isArray(assignedRoles) && assignedRoles.length > 0) {
-        assignedRolesFromApi = assignedRoles;
+      const result = await res.json();
+      // The main API returns { roles: [...], practiceId: ... }
+      if (result && Array.isArray(result.roles) && result.roles.length > 0) {
+        assignedRolesFromApi = result.roles;
         const perms: Permission[] = [];
-        for (const r of assignedRoles) {
+        for (const r of result.roles) {
           if (Array.isArray(r.permissions)) {
             perms.push(...r.permissions);
           }
