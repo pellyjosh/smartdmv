@@ -256,9 +256,7 @@ export function TenantManagement() {
                         formData.subdomain || "subdomain-placeholder"
                       );
                       return (
-                        <span>
-                          Will be accessible at: {preview || '—'}
-                        </span>
+                        <span>Will be accessible at: {preview || "—"}</span>
                       );
                     })()}
                   </p>
