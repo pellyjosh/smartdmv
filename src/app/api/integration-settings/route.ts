@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { integrationSettings } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { getUserPractice } from '@/lib/auth-utils';
 
 // GET /api/integration-settings - Get integration settings for the practice
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -13,7 +17,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch existing settings for this practice
-    const existingSettings = await db.query.integrationSettings.findFirst({
+    const existingSettings = await tenantDb.query.integrationSettings.findFirst({
       where: eq(integrationSettings.practiceId, parseInt(userPractice.practiceId))
     });
 
@@ -45,6 +49,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/integration-settings - Save integration settings
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -60,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if settings already exist
-    const existingSettings = await db.query.integrationSettings.findFirst({
+    const existingSettings = await tenantDb.query.integrationSettings.findFirst({
       where: eq(integrationSettings.practiceId, parseInt(userPractice.practiceId))
     });
 
@@ -80,7 +87,7 @@ export async function POST(request: NextRequest) {
         .where(eq(integrationSettings.id, existingSettings.id));
     } else {
       // Create new settings
-      await db.insert(integrationSettings).values({
+      await tenantDb.insert(integrationSettings).values({
         ...settingsData,
         createdAt: new Date()
       });

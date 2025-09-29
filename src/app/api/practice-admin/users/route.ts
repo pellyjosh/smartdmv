@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 // GET users for a specific practice (practice admin endpoint)
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = request.nextUrl;
     const practiceId = searchParams.get('practiceId');

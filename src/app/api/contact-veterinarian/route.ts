@@ -1,5 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { notifications, appointments, users, contacts } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-utils";
@@ -30,6 +32,9 @@ type ContactVeterinarianRequest = {
 };
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -171,7 +176,7 @@ async function handleMessageContact({
     message,
   };
 
-  const [contact] = await db.insert(contacts).values(contactData).returning();
+  const [contact] = await tenantDb.insert(contacts).values(contactData).returning();
   console.log('Contact record created:', contact.id);
 
   // Create notification for the practice/specific practitioner
@@ -186,7 +191,7 @@ async function handleMessageContact({
     link: `/admin/contact-requests`,
   };
 
-  await db.insert(notifications).values(notificationData);
+  await tenantDb.insert(notifications).values(notificationData);
   
   console.log('Message notification created');
 }
@@ -228,7 +233,7 @@ async function handleVideoCallRequest({
     source: 'internal' as const,
   };
 
-  const [appointment] = await db.insert(appointments).values(appointmentData).returning();
+  const [appointment] = await tenantDb.insert(appointments).values(appointmentData).returning();
 
   // Create contact record
   const contactData = {
@@ -244,7 +249,7 @@ async function handleVideoCallRequest({
     roomId,
   };
 
-  const [contact] = await db.insert(contacts).values(contactData).returning();
+  const [contact] = await tenantDb.insert(contacts).values(contactData).returning();
   console.log('Contact record created:', contact.id);
 
   // Create notification for the practitioner
@@ -259,7 +264,7 @@ async function handleVideoCallRequest({
     link: `/admin/contact-requests`,
   };
 
-  await db.insert(notifications).values(notificationData);
+  await tenantDb.insert(notifications).values(notificationData);
 
   console.log('Video call appointment created:', appointment.id, 'with room:', roomId);
 
@@ -296,7 +301,7 @@ async function handlePhoneCallRequest({
   
   if (!targetUserId) {
     // Find any veterinarian in the practice to notify
-    const practitioner = await db.query.users.findFirst({
+    const practitioner = await tenantDb.query.users.findFirst({
       where: and(
         eq(users.practiceId, parseInt(practiceId)),
         eq(users.role, 'VETERINARIAN')
@@ -324,7 +329,7 @@ async function handlePhoneCallRequest({
     preferredTime,
   };
 
-  const [contact] = await db.insert(contacts).values(contactData).returning();
+  const [contact] = await tenantDb.insert(contacts).values(contactData).returning();
   console.log('Contact record created:', contact.id);
 
   // Create notification for phone call request
@@ -339,7 +344,7 @@ async function handlePhoneCallRequest({
     link: `/admin/contact-requests`,
   };
 
-  await db.insert(notifications).values(notificationData);
+  await tenantDb.insert(notifications).values(notificationData);
   
   console.log('Phone call request notification created');
 }

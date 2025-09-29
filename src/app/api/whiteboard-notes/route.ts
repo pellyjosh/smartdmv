@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq, and, desc } from 'drizzle-orm';
 import { whiteboardNotes, users } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
-import { db } from '@/db/index';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { z } from 'zod';
 
 const createNoteSchema = z.object({
@@ -12,6 +13,9 @@ const createNoteSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -59,6 +63,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {

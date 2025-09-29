@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
-import { db } from '@/db';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { labTestCatalog } from '@/db/schemas/labSchema';
 import { eq, and, like } from 'drizzle-orm';
 import { z } from 'zod';
@@ -47,6 +48,9 @@ const partialTestCatalogSchema = z.object({
 
 // GET /api/lab/test-catalog - Get all lab tests
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -89,6 +93,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/lab/test-catalog - Create a new lab test
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -125,6 +132,9 @@ export async function POST(request: NextRequest) {
 
 // PUT /api/lab/test-catalog - Update a lab test
 export async function PUT(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -172,6 +182,9 @@ export async function PUT(request: NextRequest) {
 
 // DELETE /api/lab/test-catalog - Delete a lab test
 export async function DELETE(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {

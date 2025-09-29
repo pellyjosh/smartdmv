@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { db } from '@/db';
-import { referrals, ReferralStatus } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { referrals, ReferralStatus } from '@/db/schema';
 import { canEdit } from '@/lib/rbac-helpers';
 import { eq } from 'drizzle-orm';
 
@@ -16,6 +17,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {

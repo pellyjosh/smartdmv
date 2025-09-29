@@ -1,6 +1,7 @@
 // src/app/api/users/routes.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { users, UserRoleEnum } from '@/db/schema'; // Import UserRoleEnum
 import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
@@ -15,6 +16,9 @@ export async function GET(request: NextRequest) {
   const userIdParam = pathname.split('/').pop(); // Extract user ID from the URL path if present
   const practiceId = practiceIdParam ? parseInt(practiceIdParam, 10) : undefined;
   const userId = userIdParam && userIdParam !== 'users' ? parseInt(userIdParam, 10) : undefined;
+
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
 
   console.log('Pathname:', pathname);
   console.log('Extracted User ID:', userId);
@@ -34,7 +38,7 @@ export async function GET(request: NextRequest) {
     const auditUserContext = await getUserContextFromRequest(request);
 
     if (Number.isFinite(userId as number)) {
-      const userData = await db.select().from(users).where(eq(users.id, userId as number)).limit(1);
+      const userData = await tenantDb.select().from(users).where(eq(users.id, userId as number)).limit(1);
       if (userData.length === 0) {
         console.log('User not found for ID:', userId);
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -68,23 +72,23 @@ export async function GET(request: NextRequest) {
         }
         try {
           usersData = Number.isFinite(practiceId as number)
-            ? await db.select(selectObj).from(users).where(eq(users.practiceId, practiceId as number))
-            : await db.select(selectObj).from(users);
+            ? await tenantDb.select(selectObj).from(users).where(eq(users.practiceId, practiceId as number))
+            : await tenantDb.select(selectObj).from(users);
         } catch (selectErr) {
           console.error('Failed to apply select projection, falling back to full select. selectParam:', selectParam, 'selectObj:', selectObj, 'error:', selectErr);
           usersData = Number.isFinite(practiceId as number)
-            ? await db.select().from(users).where(eq(users.practiceId, practiceId as number))
-            : await db.select().from(users);
+            ? await tenantDb.select().from(users).where(eq(users.practiceId, practiceId as number))
+            : await tenantDb.select().from(users);
         }
       } else {
         usersData = Number.isFinite(practiceId as number)
-          ? await db.select().from(users).where(eq(users.practiceId, practiceId as number))
-          : await db.select().from(users);
+          ? await tenantDb.select().from(users).where(eq(users.practiceId, practiceId as number))
+          : await tenantDb.select().from(users);
       }
     } else {
       usersData = Number.isFinite(practiceId as number)
-        ? await db.select().from(users).where(eq(users.practiceId, practiceId as number))
-        : await db.select().from(users);
+        ? await tenantDb.select().from(users).where(eq(users.practiceId, practiceId as number))
+        : await tenantDb.select().from(users);
     }
 
   // (Removed automatic audit logging for listing users to avoid noisy logs on page refresh)
@@ -100,13 +104,16 @@ export async function GET(request: NextRequest) {
 // POST: Create a new user (registration)
 export async function POST(req: NextRequest) {
   try {
+    // Get the tenant-specific database
+    const tenantDb = await getCurrentTenantDb();
+    
     const body = await req.json();
     const userSchema = z.object({
       name: z.string().min(2),
       email: z.string().email(),
       username: z.string().min(3),
       password: z.string().min(6),
-      role: z.enum([UserRoleEnum.CLIENT, UserRoleEnum.ADMINISTRATOR, UserRoleEnum.PRACTICE_ADMINISTRATOR]).default(UserRoleEnum.CLIENT), // Use the enum
+      role: z.enum([UserRoleEnum.CLIENT, UserRoleEnum.ADMINISTRATOR, UserRoleEnum.SUPER_ADMIN, UserRoleEnum.PRACTICE_ADMINISTRATOR]).default(UserRoleEnum.CLIENT), // Use the enum
       practiceId: z.coerce.number(), // Convert string to number
       phone: z.string().optional(),
       address: z.string().optional(),
@@ -122,7 +129,7 @@ export async function POST(req: NextRequest) {
     const validatedData = userSchema.parse(body);
 
     // Check for existing user with same email or username
-    const existingUser = await db.query.users.findFirst({
+    const existingUser = await tenantDb.query.users.findFirst({
       where: and(
         eq(users.email, validatedData.email),
         eq(users.username, validatedData.username),
@@ -133,7 +140,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "User with this email or username already exists" }, { status: 400 });
     }
 
-    const [newUser] = await db.insert(users).values(validatedData).returning();
+    const [newUser] = await tenantDb.insert(users).values(validatedData).returning();
 
     // Log user creation audit
     const auditUserContext = await getUserContextFromRequest(req);

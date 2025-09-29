@@ -1,6 +1,8 @@
 // src/app/api/soap-notes/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { soapNotes } from "@/db/schemas/soapNoteSchema";
 import { z } from "zod";
 import { logCreate, logView } from '@/lib/audit-logger';
@@ -81,6 +83,9 @@ const soapNotePartialSchema = soapNoteSchema.partial({
 import { eq, desc, and, or, like, gte } from "drizzle-orm";
 
 export async function GET(request: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = new URL(request.url);
     const petId = searchParams.get("petId");
@@ -147,7 +152,7 @@ export async function GET(request: Request) {
       queryOptions.limit = parseInt(limit);
     }
 
-  const notes = await db.query.soapNotes.findMany(queryOptions);
+  const notes = await tenantDb.query.soapNotes.findMany(queryOptions);
 
   // Log audit for viewing sensitive medical data
   const auditUserContext = await getUserContextFromStandardRequest(request);
@@ -184,6 +189,9 @@ export async function GET(request: Request) {
 
 // POST /api/soap-notes - Create a new SOAP note
 export async function POST(request: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const data = await request.json();
     

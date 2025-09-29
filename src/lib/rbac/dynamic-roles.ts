@@ -3,8 +3,7 @@
  * Uses database roles instead of hardcoded enum values
  * Supports user role assignments and permission overrides
  */
-
-import { db } from '@/db';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { roles, userRoles, permissionOverrides } from '@/db/schema';
 import { eq, and, or, isNull, gt } from 'drizzle-orm';
 
@@ -46,6 +45,9 @@ export async function getRoles(practiceId?: number): Promise<DynamicRole[]> {
   }
 
   try {
+    // Get the tenant-specific database
+    const db = await getCurrentTenantDb();
+    
     let rolesData;
     if (practiceId) {
       // Get both system roles and practice-specific roles
@@ -62,7 +64,7 @@ export async function getRoles(practiceId?: number): Promise<DynamicRole[]> {
       );
     }
 
-    const dynamicRoles: DynamicRole[] = rolesData.map(role => ({
+    const dynamicRoles: DynamicRole[] = rolesData.map((role: any) => ({
       id: role.id,
       name: role.name,
       displayName: role.displayName || role.name,
@@ -138,7 +140,9 @@ export async function isSuperAdmin(userRole: string, practiceId?: number): Promi
 }
 
 export async function isPracticeAdmin(userRole: string, practiceId?: number): Promise<boolean> {
-  return await hasAnyRole(userRole, ['PRACTICE_ADMINISTRATOR', 'PRACTICE_ADMIN'], practiceId);
+  const result = await hasAnyRole(userRole, ['PRACTICE_ADMINISTRATOR', 'PRACTICE_ADMIN'], practiceId);
+  console.log(`[DYNAMIC_ROLES isPracticeAdmin] userRole: ${userRole}, result: ${result}`);
+  return result;
 }
 
 export async function isVeterinarian(userRole: string, practiceId?: number): Promise<boolean> {
@@ -161,7 +165,7 @@ export async function isClient(userRole: string, practiceId?: number): Promise<b
  * Administrative role checking
  */
 export async function isAdmin(userRole: string, practiceId?: number): Promise<boolean> {
-  return await hasAnyRole(userRole, [
+  const result = await hasAnyRole(userRole, [
     'SUPER_ADMIN', 
     'PRACTICE_ADMINISTRATOR', 
     'ADMINISTRATOR', 
@@ -169,6 +173,8 @@ export async function isAdmin(userRole: string, practiceId?: number): Promise<bo
     'PRACTICE_MANAGER',
     'OFFICE_MANAGER'
   ], practiceId);
+  console.log(`[DYNAMIC_ROLES isAdmin] userRole: ${userRole}, result: ${result}`);
+  return result;
 }
 
 export async function canManageUsers(userRole: string, practiceId?: number): Promise<boolean> {
@@ -194,6 +200,9 @@ export function clearRolesCache(): void {
  */
 export async function getUserAssignedRoles(userId: string, practiceId?: number): Promise<DynamicRole[]> {
   try {
+    // Get the tenant-specific database
+    const db = await getCurrentTenantDb();
+    
     const userRoleAssignments = await db
       .select({
         role: roles,
@@ -213,7 +222,7 @@ export async function getUserAssignedRoles(userId: string, practiceId?: number):
         )
       );
 
-    return userRoleAssignments.map(({ role }) => ({
+    return userRoleAssignments.map(({ role }: any) => ({
       id: role.id,
       name: role.name,
       displayName: role.displayName || role.name,
@@ -239,6 +248,9 @@ export async function getUserPermissionOverrides(
   action?: string
 ): Promise<any[]> {
   try {
+    // Get the tenant-specific database
+    const db = await getCurrentTenantDb();
+    
     let query = db
       .select()
       .from(permissionOverrides)
@@ -432,6 +444,9 @@ export async function assignRoleToUser(
   assignedBy: number
 ): Promise<boolean> {
   try {
+    // Get the tenant-specific database
+    const db = await getCurrentTenantDb();
+    
     // Check if assignment already exists and is active
     const existingAssignment = await db
       .select()
@@ -478,6 +493,9 @@ export async function revokeRoleFromUser(
   revokedBy: number
 ): Promise<boolean> {
   try {
+    // Get the tenant-specific database
+    const db = await getCurrentTenantDb();
+    
     await db
       .update(userRoles)
       .set({
@@ -519,6 +537,9 @@ export async function createPermissionOverride(override: {
   createdBy: string;
 }): Promise<boolean> {
   try {
+    // Get the tenant-specific database
+    const db = await getCurrentTenantDb();
+    
     await db.insert(permissionOverrides).values({
       ...override,
       status: 'active',

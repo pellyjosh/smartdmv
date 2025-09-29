@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { paymentMethods } from '@/db/schema';
-import { getCurrentUser } from '@/lib/auth-utils';
 import { createAuditLog } from '@/lib/audit-logger';
 import { eq, and, desc, ne } from 'drizzle-orm';
 import { z } from 'zod';
 
 // GET /api/billing/payment-methods - Get saved payment methods for current client
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -20,7 +23,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied. Client access required.' }, { status: 403 });
     }
 
-    const userPaymentMethods = await db.query.paymentMethods.findMany({
+    const userPaymentMethods = await tenantDb.query.paymentMethods.findMany({
       where: and(
         eq(paymentMethods.clientId, user.id),
         eq(paymentMethods.isActive, 'yes')
@@ -74,6 +77,9 @@ const createPaymentMethodSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -107,7 +113,7 @@ export async function POST(request: NextRequest) {
     
     // If this is set as default, unset other defaults first
     if (paymentMethodData.isDefault) {
-      await db.update(paymentMethods)
+      await tenantDb.update(paymentMethods)
         .set({ 
           isDefault: 'no',
           updatedAt: new Date()
@@ -116,7 +122,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create payment method record
-    const [newPaymentMethod] = await db.insert(paymentMethods).values({
+    const [newPaymentMethod] = await tenantDb.insert(paymentMethods).values({
       clientId: user.id,
       type: paymentMethodData.type,
       lastFourDigits,
@@ -179,6 +185,9 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/billing/payment-methods?id=<paymentMethodId> - Delete a payment method
 export async function DELETE(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -198,7 +207,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Check if payment method exists and belongs to user
-    const paymentMethod = await db.query.paymentMethods.findFirst({
+    const paymentMethod = await tenantDb.query.paymentMethods.findFirst({
       where: and(
         eq(paymentMethods.id, parseInt(paymentMethodId)),
         eq(paymentMethods.clientId, user.id)
@@ -211,7 +220,7 @@ export async function DELETE(request: NextRequest) {
 
     // Prevent deletion of primary payment method if it's the only one
     if (paymentMethod.isDefault === 'yes') {
-      const otherMethods = await db.query.paymentMethods.findMany({
+      const otherMethods = await tenantDb.query.paymentMethods.findMany({
         where: and(
           eq(paymentMethods.clientId, user.id),
           eq(paymentMethods.isActive, 'yes'),
@@ -227,7 +236,7 @@ export async function DELETE(request: NextRequest) {
 
       // If deleting primary method and others exist, set the first other method as primary
       if (otherMethods.length > 0) {
-        await db.update(paymentMethods)
+        await tenantDb.update(paymentMethods)
           .set({ 
             isDefault: 'yes',
             updatedAt: new Date()
@@ -237,7 +246,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Soft delete the payment method
-    await db.update(paymentMethods)
+    await tenantDb.update(paymentMethods)
       .set({ 
         isActive: 'no',
         updatedAt: new Date()
@@ -267,6 +276,9 @@ export async function DELETE(request: NextRequest) {
 
 // PATCH /api/billing/payment-methods?id=<paymentMethodId> - Set payment method as primary
 export async function PATCH(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -293,7 +305,7 @@ export async function PATCH(request: NextRequest) {
     const updateData = updateSchema.parse(body);
 
     // Check if payment method exists and belongs to user
-    const paymentMethod = await db.query.paymentMethods.findFirst({
+    const paymentMethod = await tenantDb.query.paymentMethods.findFirst({
       where: and(
         eq(paymentMethods.id, parseInt(paymentMethodId)),
         eq(paymentMethods.clientId, user.id),
@@ -307,7 +319,7 @@ export async function PATCH(request: NextRequest) {
 
     // If setting as default, unset other defaults first
     if (updateData.isDefault) {
-      await db.update(paymentMethods)
+      await tenantDb.update(paymentMethods)
         .set({ 
           isDefault: 'no',
           updatedAt: new Date()
@@ -319,7 +331,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Update the payment method
-    await db.update(paymentMethods)
+    await tenantDb.update(paymentMethods)
       .set({ 
         isDefault: updateData.isDefault ? 'yes' : 'no',
         updatedAt: new Date()

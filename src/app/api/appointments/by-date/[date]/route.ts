@@ -2,13 +2,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { eq, and, gte, lte } from 'drizzle-orm';
 import { getUserPractice } from '@/lib/auth-utils';
-import { db } from '@/db/index';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments, pets } from '@/db/schema';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { date: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -53,7 +57,7 @@ export async function GET(
     }
 
     // Fetch appointments with pet information
-    const appointmentList = await (db as any)
+    const appointmentList = await tenantDb
       .select({
         id: appointments.id,
         title: appointments.title,

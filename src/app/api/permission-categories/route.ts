@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { permissionCategories, permissionResources, permissionActions } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 
@@ -15,6 +17,9 @@ const permissionCategorySchema = z.object({
 
 // GET /api/permission-categories - Get permission categories
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = request.nextUrl;
     const practiceId = searchParams.get('practiceId');
@@ -24,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch categories with their resources and actions
-    const categories = await db.query.permissionCategories.findMany({
+    const categories = await tenantDb.query.permissionCategories.findMany({
       where: eq(permissionCategories.practiceId, parseInt(practiceId)),
       with: {
         resources: {
@@ -71,6 +76,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/permission-categories - Create a new permission category
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     const validatedData = permissionCategorySchema.parse(body);

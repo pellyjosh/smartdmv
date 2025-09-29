@@ -1,11 +1,16 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-utils";
 import { z } from "zod";
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -15,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     console.log('Fetching appointments for client ID:', user.id);
 
-    const appointmentsData = await db.query.appointments.findMany({
+    const appointmentsData = await tenantDb.query.appointments.findMany({
       where: eq(appointments.clientId, user.id),
       with: {
         pet: {
@@ -122,6 +127,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -178,6 +186,9 @@ const updateAppointmentSchema = z.object({
 });
 
 export async function PATCH(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     

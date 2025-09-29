@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { practices } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
 import { eq } from 'drizzle-orm';
@@ -12,10 +12,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get the tenant-specific database
+    const tenantDb = await getCurrentTenantDb();
+
     // For now, just return the user's current practice
     // In the future, this could be expanded to handle administrators with multiple practices
-    const practice = await db.query.practices.findFirst({
-      where: eq(practices.id, userPractice.practiceId),
+    const practice = await tenantDb.query.practices.findFirst({
+      where: eq(practices.id, parseInt(userPractice.practiceId)),
     });
 
     if (!practice) {

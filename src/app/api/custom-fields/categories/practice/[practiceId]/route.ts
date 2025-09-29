@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { customFieldCategories } from '@/db/schemas/customFieldsSchema';
 import { eq } from 'drizzle-orm';
 
@@ -7,6 +9,9 @@ export async function GET(
     req: Request,
     { params }: { params: { practiceId: string } }
   ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const resolvedParams = await params;
     const { practiceId } = resolvedParams;
@@ -15,7 +20,7 @@ export async function GET(
       return NextResponse.json({ error: 'Practice ID is required' }, { status: 400 });
     }
 
-    const categories = await db.query.customFieldCategories.findMany({
+    const categories = await tenantDb.query.customFieldCategories.findMany({
       where: eq(customFieldCategories.practiceId, practiceId),
     });
 
@@ -27,6 +32,9 @@ export async function GET(
 }
 
 export async function POST(req: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const data = await req.json();
 
@@ -39,7 +47,7 @@ export async function POST(req: Request) {
     }
 
     // Check for existing category with the same name in the same practice
-    const existingCategory = await db.query.customFieldCategories.findFirst({
+    const existingCategory = await tenantDb.query.customFieldCategories.findFirst({
       where: eq(customFieldCategories.name, data.name),
     });
 

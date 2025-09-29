@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { customFieldGroups, customFieldValues } from '@/db/schemas/customFieldsSchema';
 import { practices, integrationApiKeys, integrationSettings } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -27,7 +29,7 @@ async function validateApiKeySimple(apiKey: string, practiceId: number): Promise
     // Hash the incoming API key to compare with stored hash
     const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
     
-    const keyRecord = await db.query.integrationApiKeys.findFirst({
+    const keyRecord = await tenantDb.query.integrationApiKeys.findFirst({
       where: and(
         eq(integrationApiKeys.practiceId, practiceId),
         eq(integrationApiKeys.keyHash, keyHash),
@@ -43,6 +45,9 @@ async function validateApiKeySimple(apiKey: string, practiceId: number): Promise
 }
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = new URL(request.url);
     const practiceId = searchParams.get('practiceId');
@@ -73,7 +78,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get practice details
-    const practice = await db.query.practices.findFirst({
+    const practice = await tenantDb.query.practices.findFirst({
       where: eq(practices.id, practiceIdNumber)
     });
 
@@ -85,11 +90,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Get custom field groups for this practice
-    const fieldGroups = await db.select().from(customFieldGroups)
+    const fieldGroups = await tenantDb.select().from(customFieldGroups)
       .where(eq(customFieldGroups.practiceId, practiceIdNumber));
 
     // Get custom field values for this practice
-    const fieldValues = await db.select().from(customFieldValues)
+    const fieldValues = await tenantDb.select().from(customFieldValues)
       .where(eq(customFieldValues.practiceId, practiceIdNumber));
 
     // Transform field groups and values into the expected format
@@ -111,7 +116,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Get integration settings for this practice
-    const integration = await db.query.integrationSettings.findFirst({
+    const integration = await tenantDb.query.integrationSettings.findFirst({
       where: eq(integrationSettings.practiceId, practiceIdNumber)
     });
 

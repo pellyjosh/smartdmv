@@ -1,6 +1,8 @@
 // src/app/api/soap/appointments/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments } from "@/db/schema";
 import { eq, or, and, lte } from "drizzle-orm";
 import { withNetworkErrorHandlingAndRetry } from "@/lib/api-middleware";
@@ -64,7 +66,7 @@ const getHandler = async (request: Request) => {
     undefined;
   
   if (whereCondition) {
-    appointmentsList = await db.query.appointments.findMany({
+    appointmentsList = await tenantDb.query.appointments.findMany({
       where: whereCondition,
       with: {
         pet: {
@@ -80,7 +82,7 @@ const getHandler = async (request: Request) => {
     });
   } else {
     // Include all appointments
-    appointmentsList = await db.query.appointments.findMany({
+    appointmentsList = await tenantDb.query.appointments.findMany({
       with: {
         pet: {
           with: {

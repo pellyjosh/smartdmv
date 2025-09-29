@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { invoices, invoiceItems, payments } from '@/db/schema';
-import { getCurrentUser } from '@/lib/auth-utils';
 import { hasPermission } from '@/lib/rbac-helpers';
 import { createAuditLog } from '@/lib/audit-logger';
 import { ResourceType, StandardAction } from '@/lib/rbac/types';
@@ -10,6 +10,9 @@ import { z } from 'zod';
 
 // GET /api/billing/invoices - Get invoices for current client
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -31,7 +34,7 @@ export async function GET(request: NextRequest) {
       whereConditions.push(eq(invoices.status, status as any));
     }
 
-    const userInvoices = await db.query.invoices.findMany({
+    const userInvoices = await tenantDb.query.invoices.findMany({
       where: and(...whereConditions),
       with: {
         items: true,
@@ -74,6 +77,9 @@ const createInvoiceSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -123,11 +129,11 @@ export async function POST(request: NextRequest) {
     const totalAmount = subtotal + taxAmount;
 
     // Generate invoice number
-    const [invoiceCountResult] = await db.select({ count: count() }).from(invoices).where(eq(invoices.practiceId, user.practiceId!));
+    const [invoiceCountResult] = await tenantDb.select({ count: count() }).from(invoices).where(eq(invoices.practiceId, user.practiceId!));
     const invoiceNumber = `INV-${new Date().getFullYear()}-${String((invoiceCountResult?.count || 0) + 1).padStart(3, '0')}`;
 
     // Create invoice
-    const [newInvoice] = await db.insert(invoices).values({
+    const [newInvoice] = await tenantDb.insert(invoices).values({
       practiceId: user.practiceId!,
       clientId: invoiceInfo.clientId as number,
       petId: invoiceInfo.petId as number || null,
@@ -152,7 +158,7 @@ export async function POST(request: NextRequest) {
       taxable: item.taxable,
     }));
 
-    await db.insert(invoiceItems).values(invoiceItemsToInsert);
+    await tenantDb.insert(invoiceItems).values(invoiceItemsToInsert);
 
     // Create audit log
     await createAuditLog({

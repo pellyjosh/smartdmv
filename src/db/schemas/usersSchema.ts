@@ -1,6 +1,6 @@
 
 // schema/usersSchema.ts
-import { dbTable, text, timestamp, primaryKey, primaryKeyId, foreignKeyInt } from '@/db/db.config';
+import { dbTable, text, timestamp, primaryKey, primaryKeyId, foreignKeyInt, foreignKeyText } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { practices } from './practicesSchema';
 import { sessions } from './sessionsSchema';
@@ -20,6 +20,8 @@ export enum UserRoleEnum {
   ACCOUNTANT = 'ACCOUNTANT',
   CASHIER = 'CASHIER',
   OFFICE_MANAGER = 'OFFICE_MANAGER',
+  OWNER = 'OWNER',
+  COMPANY_ADMIN = 'COMPANY_ADMIN',
 }
 
 export type UserRole = `${UserRoleEnum}`;

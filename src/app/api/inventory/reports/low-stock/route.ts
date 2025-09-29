@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { inventory } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { inventory } from '@/db/schema';
 import { eq, and, lte, or } from 'drizzle-orm';
 
 // GET /api/inventory/reports/low-stock - Get low stock and expiring items
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -13,7 +17,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch all inventory items for the practice
-    const allItems = await db.query.inventory.findMany({
+    const allItems = await tenantDb.query.inventory.findMany({
       where: eq(inventory.practiceId, userPractice.practiceId),
     });
 

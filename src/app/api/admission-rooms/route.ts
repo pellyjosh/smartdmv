@@ -1,6 +1,8 @@
 // src/app/api/admission-rooms/route.ts
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { admissions, rooms } from '@/db/schema';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
@@ -38,13 +40,16 @@ const updateRoomSchema = z.object({
 // Get all admission rooms
 // Get all rooms, with optional filtering for 'available' status
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const { searchParams } = new URL(request.url);
   const availableOnly = searchParams.get('available') === 'true';
 
   try {
     if (availableOnly) {
       console.log('[API Rooms GET] Fetching ONLY available rooms.');
-      const availableRooms = await db.query.rooms.findMany({
+      const availableRooms = await tenantDb.query.rooms.findMany({
         where: eq(rooms.status, 'available'),
       });
       console.log(`[API Rooms GET] Found ${availableRooms.length} available rooms.`);
@@ -52,7 +57,7 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('[API Rooms GET] Fetching all rooms.');
-    const allRooms = await db.select().from(rooms);
+    const allRooms = await tenantDb.select().from(rooms);
     console.log(`[API Rooms GET] Found ${allRooms.length} rooms.`);
     return NextResponse.json(allRooms, { status: 200 });
   } catch (error) {
@@ -75,7 +80,7 @@ export async function GET_BY_ID(request: NextRequest, { params }: { params: { id
   }
 
   try {
-    const admissionRoom = await db.query.admissions.findFirst({
+    const admissionRoom = await tenantDb.query.admissions.findFirst({
       where: eq(admissions.id, id),
       with: {
         room: true,
@@ -101,6 +106,9 @@ export async function GET_BY_ID(request: NextRequest, { params }: { params: { id
 
 // Create new admission room
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   console.log('[API Rooms POST] Creating new room');
   try {
     const body = await request.json();
@@ -116,7 +124,7 @@ export async function POST(request: NextRequest) {
 
     const roomData = validation.data;
 
-    const [newRoom] = await db.insert(rooms).values(roomData).returning();
+    const [newRoom] = await tenantDb.insert(rooms).values(roomData).returning();
 
     console.log('[API Rooms POST] Room created with ID:', newRoom.id);
     return NextResponse.json(newRoom, { status: 201 });
@@ -127,6 +135,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const id = parseInt(params.id);
   console.log(`[API Rooms PATCH] Updating room with ID: ${id}`);
 

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments, users, pets } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
@@ -26,6 +28,9 @@ const externalAppointmentRequestSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     // Validate API key
     const apiKeyValidation = await validateApiKey(request);
@@ -62,7 +67,7 @@ export async function POST(request: NextRequest) {
     const practiceId = apiKeyValidation.practiceId!;
 
     // Create or find client
-    let client = await db.query.users.findFirst({
+    let client = await tenantDb.query.users.findFirst({
       where: and(
         eq(users.email, requestData.clientInfo.email),
         eq(users.practiceId, practiceId)
@@ -70,7 +75,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!client) {
-      const [newClient] = await db.insert(users).values({
+      const [newClient] = await tenantDb.insert(users).values({
         email: requestData.clientInfo.email,
         username: requestData.clientInfo.email,
         password: 'external-client', // External clients don't need login
@@ -87,7 +92,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create or find pet
-    let pet = await db.query.pets.findFirst({
+    let pet = await tenantDb.query.pets.findFirst({
       where: and(
         eq(pets.name, requestData.petInfo.name),
         eq(pets.species, requestData.petInfo.species),
@@ -96,7 +101,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!pet) {
-      const [newPet] = await db.insert(pets).values({
+      const [newPet] = await tenantDb.insert(pets).values({
         name: requestData.petInfo.name,
         species: requestData.petInfo.species,
         breed: requestData.petInfo.breed || null,
@@ -125,7 +130,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the appointment with pending status
-    const [createdAppointment] = await db.insert(appointments).values({
+    const [createdAppointment] = await tenantDb.insert(appointments).values({
       title: `${requestData.reason} - ${requestData.petInfo.name}`,
       type: requestData.reason.toLowerCase().replace(/\s+/g, '-'),
       description: `Website appointment request - ${requestData.reason}`,

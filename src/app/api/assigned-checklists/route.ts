@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { assignedChecklists, checklistItems, pets, templateItems, treatmentChecklistTemplates as templates, users } from '@/db/schema';
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const ctx = await getUserPractice(request);
   if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
   // Fetch checklists for practice with pet info and items
-  const lists = await db.select().from(assignedChecklists)
+  const lists = await tenantDb.select().from(assignedChecklists)
     .where(eq(assignedChecklists.practiceId, Number(ctx.practiceId)))
     .orderBy(desc(assignedChecklists.createdAt));
 
@@ -17,13 +21,13 @@ export async function GET(request: NextRequest) {
   const petMap = new Map<number, any>();
   const petIds = Array.from(new Set(lists.map(l => l.petId).filter(Boolean))) as number[];
   if (petIds.length) {
-    const petRows = await db.select().from(pets).where(inArray(pets.id as any, petIds as any));
+    const petRows = await tenantDb.select().from(pets).where(inArray(pets.id as any, petIds as any));
     petRows.forEach(p => petMap.set(p.id as unknown as number, p));
   }
 
   const checklistIds = lists.map(l => l.id as number);
   const items = checklistIds.length 
-    ? await db.select().from(checklistItems).where(inArray(checklistItems.checklistId as any, checklistIds as any)) 
+    ? await tenantDb.select().from(checklistItems).where(inArray(checklistItems.checklistId as any, checklistIds as any)) 
     : [];
   const itemsByChecklist = items.reduce<Record<number, any[]>>((acc, it: any) => {
     const cid = it.checklistId as number; (acc[cid] ||= []).push(it); return acc;
@@ -42,11 +46,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const ctx = await getUserPractice(request);
   if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   const body = await request.json();
 
-  const [created] = await db.insert(assignedChecklists).values({
+  const [created] = await tenantDb.insert(assignedChecklists).values({
     practiceId: Number(ctx.practiceId),
     petId: Number(body.petId),
     templateId: body.templateId ? Number(body.templateId) : null,
@@ -63,9 +70,9 @@ export async function POST(request: NextRequest) {
 
   // If template provided, copy items
   if (created && created.templateId) {
-    const items = await db.select().from(templateItems).where(eq(templateItems.templateId, created.templateId as number)).orderBy(asc(templateItems.position));
+    const items = await tenantDb.select().from(templateItems).where(eq(templateItems.templateId, created.templateId as number)).orderBy(asc(templateItems.position));
     if (items.length) {
-      await db.insert(checklistItems).values(items.map((it, idx) => ({
+      await tenantDb.insert(checklistItems).values(items.map((it, idx) => ({
         checklistId: created.id as number,
         title: it.title,
         description: it.description,

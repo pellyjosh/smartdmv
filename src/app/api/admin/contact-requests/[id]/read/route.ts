@@ -1,5 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { contacts } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-utils";
@@ -8,10 +10,13 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
-    if (!user || (user.role !== "ADMINISTRATOR" && user.role !== "VETERINARIAN")) {
+    if (!user || (user.role !== "ADMINISTRATOR" && user.role !== "SUPER_ADMIN" && user.role !== "VETERINARIAN")) {
       return NextResponse.json({ error: 'Unauthorized. Administrator or veterinarian access required.' }, { status: 401 });
     }
 
@@ -24,7 +29,7 @@ export async function PATCH(
     console.log('Marking contact request as read:', id);
 
     // Update the contact to mark as read
-    const result = await db.update(contacts)
+    const result = await tenantDb.update(contacts)
       .set({ 
         isRead: true,
         updatedAt: new Date(),

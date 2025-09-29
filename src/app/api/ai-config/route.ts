@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { aiConfigs, administratorAccessiblePractices, users } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { z } from 'zod';
-import { getCurrentUser } from '@/lib/auth-utils';
 
 // Validation schema for AI config (simplified for frontend)
 const aiConfigSchema = z.object({
@@ -45,6 +46,9 @@ const decrypt = (encryptedText: string): string => {
 };
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     // Get current user from session
     const currentUser = await getCurrentUser(request);
@@ -161,6 +165,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     // Get current user from session
     const currentUser = await getCurrentUser(request);
@@ -264,6 +271,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     // Get current user from session
     const currentUser = await getCurrentUser(request);

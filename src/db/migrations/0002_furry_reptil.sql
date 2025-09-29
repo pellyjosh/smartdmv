@@ -1,1 +1,0 @@
-ALTER TABLE "appointments" ADD COLUMN "source" text DEFAULT 'internal' NOT NULL;

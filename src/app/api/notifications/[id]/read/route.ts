@@ -1,14 +1,20 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { notifications } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
-  const notificationId = parseInt(params.id, 10);
+  const { id } = await params;
+  const notificationId = parseInt(id, 10);
 
     if (!notificationId) {
       return NextResponse.json({ error: 'Notification ID is required.' }, { status: 400 });
@@ -17,7 +23,7 @@ export async function PATCH(
     console.log('Marking notification as read:', notificationId);
 
     // First check if notification exists
-    const existingNotification = await db.query.notifications.findFirst({
+    const existingNotification = await tenantDb.query.notifications.findFirst({
       where: eq(notifications.id, notificationId)
     });
 
@@ -26,7 +32,7 @@ export async function PATCH(
     }
 
     // Update the notification
-    await db.update(notifications)
+    await tenantDb.update(notifications)
       .set({ 
         read: true,
         updated_at: new Date().toISOString(), // Use snake_case DB column

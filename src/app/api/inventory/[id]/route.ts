@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { inventory } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { inventory } from '@/db/schema';
 import { createAuditLog } from '@/lib/audit-logger';
 import { hasPermission } from '@/lib/rbac-helpers';
 import { ResourceType, StandardAction } from '@/lib/rbac/types';
@@ -10,6 +11,9 @@ import { z } from 'zod';
 
 // GET /api/inventory/[id] - Get specific inventory item
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -29,7 +33,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const resolvedParams = await params;
     const itemId = parseInt(resolvedParams.id);
 
-    const item = await db.query.inventory.findFirst({
+    const item = await tenantDb.query.inventory.findFirst({
       where: and(
         eq(inventory.id, itemId),
         eq(inventory.practiceId, userPractice.practiceId.toString())
@@ -66,6 +70,9 @@ const updateInventorySchema = z.object({
 });
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -84,7 +91,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const itemId = parseInt(resolvedParams.id);
 
     // First verify the item exists and belongs to the user's practice
-    const currentItem = await db.query.inventory.findFirst({
+    const currentItem = await tenantDb.query.inventory.findFirst({
       where: and(
         eq(inventory.id, itemId),
         eq(inventory.practiceId, userPractice.practiceId.toString())
@@ -166,6 +173,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
 // DELETE /api/inventory/[id] - Delete inventory item
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -184,7 +194,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const itemId = parseInt(resolvedParams.id);
 
     // First verify the item exists and belongs to the user's practice
-    const currentItem = await db.query.inventory.findFirst({
+    const currentItem = await tenantDb.query.inventory.findFirst({
       where: and(
         eq(inventory.id, itemId),
         eq(inventory.practiceId, userPractice.practiceId.toString())
@@ -196,7 +206,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     // Delete the inventory item
-    await db.delete(inventory).where(eq(inventory.id, itemId));
+    await tenantDb.delete(inventory).where(eq(inventory.id, itemId));
 
     // Log the audit trail
     await createAuditLog({

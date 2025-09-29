@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
-import { db } from '@/db/index';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { dashboardConfigs } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 
@@ -12,6 +13,9 @@ interface RouteParams {
 
 // GET /api/admin/dashboard-configs/[id] - Get specific dashboard configuration
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -23,7 +27,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Invalid config ID' }, { status: 400 });
     }
 
-    const config = await db.query.dashboardConfigs.findFirst({
+    const config = await tenantDb.query.dashboardConfigs.findFirst({
       where: (dashboardConfigs, { eq, and }) => and(
         eq(dashboardConfigs.id, configId),
         eq(dashboardConfigs.userId, userPractice.userId)
@@ -46,6 +50,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // PATCH /api/admin/dashboard-configs/[id] - Update dashboard configuration
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -60,7 +67,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = await request.json();
 
     // Check if config exists and belongs to user
-    const existingConfig = await db.query.dashboardConfigs.findFirst({
+    const existingConfig = await tenantDb.query.dashboardConfigs.findFirst({
       where: (dashboardConfigs, { eq, and }) => and(
         eq(dashboardConfigs.id, configId),
         eq(dashboardConfigs.userId, userPractice.userId)
@@ -107,6 +114,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 // DELETE /api/admin/dashboard-configs/[id] - Delete dashboard configuration
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -119,7 +129,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // Check if config exists and belongs to user
-    const existingConfig = await db.query.dashboardConfigs.findFirst({
+    const existingConfig = await tenantDb.query.dashboardConfigs.findFirst({
       where: (dashboardConfigs, { eq, and }) => and(
         eq(dashboardConfigs.id, configId),
         eq(dashboardConfigs.userId, userPractice.userId)
@@ -131,7 +141,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // Don't allow deleting the only config or a default config if it's the only one
-    const userConfigs = await db.query.dashboardConfigs.findMany({
+    const userConfigs = await tenantDb.query.dashboardConfigs.findMany({
       where: (dashboardConfigs, { eq }) => eq(dashboardConfigs.userId, userPractice.userId)
     });
 

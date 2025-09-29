@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { eq } from 'drizzle-orm';
 import { checklistItems } from '@/db/schema';
-import { getUserPractice } from '@/lib/auth-utils';
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const ctx = await getUserPractice(request);
   if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
-  const [created] = await db.insert(checklistItems).values({
+  const [created] = await tenantDb.insert(checklistItems).values({
     checklistId: Number(body.checklistId),
     title: body.title,
     description: body.description ?? null,
@@ -26,6 +30,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const ctx = await getUserPractice(request);
   if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
@@ -45,7 +52,7 @@ export async function PATCH(request: NextRequest) {
   if ('completedAt' in update && update.completedAt) {
     update.completedAt = new Date(update.completedAt);
   }
-  const [updated] = await db.update(checklistItems).set(update).where(eq(checklistItems.id, id)).returning();
+  const [updated] = await tenantDb.update(checklistItems).set(update).where(eq(checklistItems.id, id)).returning();
   if (!updated) return NextResponse.json({ message: 'Not found' }, { status: 404 });
   return NextResponse.json(updated);
 }

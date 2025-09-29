@@ -1,6 +1,6 @@
 // src/app/api/appointment-requests/route.ts
 import { NextResponse } from 'next/server';
-import { db } from '@/db'; // Your Drizzle DB instance
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { appointments, appointmentStatusEnum, users, pets } from '@/db/schema'; // Import necessary schemas
 import { eq, and, InferInsertModel, sql } from 'drizzle-orm';
 import { z } from 'zod'; // For input validation
@@ -38,6 +38,7 @@ const newAppointmentSchema = z.object({
 
 export async function GET(req: Request) {
   try {
+    const contextualDb = await getCurrentTenantDb();
     const { searchParams } = new URL(req.url);
 
     const queryParams = Object.fromEntries(searchParams);
@@ -73,7 +74,7 @@ export async function GET(req: Request) {
     }
     // If source is 'all' or undefined, no source condition is added.
 
-    const fetchedAppointments = await db.query.appointments.findMany({
+    const fetchedAppointments = await contextualDb.query.appointments.findMany({
       where: and(...conditions),
       orderBy: (appointments, { desc }) => [desc(appointments.createdAt)],
       // You might want to include related data for display on the frontend
@@ -126,6 +127,7 @@ export async function GET(req: Request) {
 // POST endpoint for initial submission of a new appointment request
 export async function POST(req: Request) {
   try {
+    const contextualDb = await getCurrentTenantDb();
     const body = await req.json();
 
     const validationResult = newAppointmentSchema.safeParse(body);
@@ -141,13 +143,13 @@ export async function POST(req: Request) {
     const requestData = validationResult.data;
 
     // --- Create/Find Client (User) ---
-    let client = await db.query.users.findFirst({
+    let client = await contextualDb.query.users.findFirst({
         where: eq(users.email, requestData.clientEmail)
     });
 
     if (!client) {
         // If client doesn't exist, create a new user/client record
-        const [newClient] = await db.insert(users).values({
+        const [newClient] = await contextualDb.insert(users).values({
             email: requestData.clientEmail,
             username: requestData.clientEmail, // Use email as username
             password: 'temp-password', // You'll need to handle password properly
@@ -163,12 +165,12 @@ export async function POST(req: Request) {
     // --- Create/Find Pet ---
     // This logic might need to be more sophisticated (e.g., check for pet owned by client)
     // For simplicity, we'll create a new pet for each new request or find if exists by name/species for this client
-    let pet = await db.query.pets.findFirst({
+    let pet = await contextualDb.query.pets.findFirst({
         where: and(eq(pets.name, requestData.petName), eq(pets.species, requestData.petType), eq(pets.ownerId, client.id))
     });
 
     if (!pet) {
-        const [newPet] = await db.insert(pets).values({
+        const [newPet] = await contextualDb.insert(pets).values({
             name: requestData.petName,
             species: requestData.petType, // Use species instead of type
             breed: requestData.petBreed,
@@ -189,7 +191,7 @@ export async function POST(req: Request) {
     }
 
     // --- Create the Appointment ---
-    const [createdAppointment] = await db.insert(appointments).values({
+    const [createdAppointment] = await contextualDb.insert(appointments).values({
         title: `Appointment for ${requestData.petName} (${requestData.reason})`,
         type: requestData.appointmentType || 'routine-checkup', // Add appointment type with default
         description: requestData.requestNotes || requestData.reason,

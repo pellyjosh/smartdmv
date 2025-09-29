@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { users, roles, userRoles } from '@/db/schema';
 import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
@@ -24,6 +26,9 @@ type RevokeData = z.infer<typeof revokeSchema>;
 
 // GET user assignments for a practice
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = request.nextUrl;
     const practiceId = searchParams.get('practiceId');
@@ -89,6 +94,9 @@ export async function GET(request: NextRequest) {
 
 // POST assign role to user
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     const validatedData: AssignmentData = assignmentSchema.parse(body);
@@ -158,6 +166,9 @@ export async function POST(request: NextRequest) {
 
 // DELETE revoke role from user
 export async function DELETE(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     const validatedData: RevokeData = revokeSchema.parse(body);

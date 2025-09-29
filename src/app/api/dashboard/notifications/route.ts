@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
-import { db } from '@/db/index';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { notifications } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 
 // GET /api/dashboard/notifications - Get recent notifications for dashboard widget
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -32,7 +36,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch notifications for the user
-    const userNotifications = await db.query.notifications.findMany({
+    const userNotifications = await tenantDb.query.notifications.findMany({
       where: and(...whereConditions),
       orderBy: (notifications, { desc }) => [desc(notifications.created_at)],
       limit: limit,
@@ -72,6 +76,9 @@ export async function GET(request: NextRequest) {
 
 // PATCH /api/dashboard/notifications - Mark notifications as read
 export async function PATCH(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -88,7 +95,7 @@ export async function PATCH(request: NextRequest) {
     // Update notifications - use type suppression for Drizzle union type
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
-    await db.update(notifications)
+    await tenantDb.update(notifications)
       .set({ 
         read: markAsRead,
         updated_at: new Date(), // Use proper column name and Date object for PostgreSQL

@@ -1,6 +1,8 @@
 // src/app/api/soap-notes/[id]/lock/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { soapNotes } from "@/db/schemas/soapNoteSchema";
 import { eq } from "drizzle-orm";
 
@@ -14,6 +16,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const resolvedParams = await params;
     const soapNoteId = parseInt(resolvedParams.id);
@@ -26,7 +31,7 @@ export async function POST(
     }
 
     // Check if the SOAP note exists
-    const soapNote = await db.query.soapNotes.findFirst({
+    const soapNote = await tenantDb.query.soapNotes.findFirst({
       where: eq(soapNotes.id, soapNoteId)
     });
 

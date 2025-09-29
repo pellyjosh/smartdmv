@@ -1,12 +1,15 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { pets, appointments } from "@/db/schema";
 import { eq, and, or, inArray } from "drizzle-orm";
 import { withNetworkErrorHandlingAndRetry } from "@/lib/api-middleware";
 import { logView, logCreate } from '@/lib/audit-logger';
-import { getCurrentUser } from '@/lib/auth-utils';
 
 const getHandler = async (request: NextRequest) => {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const url = new URL(request.url);
   const clientId = url.searchParams.get('clientId');
   const practiceId = url.searchParams.get('practiceId');
@@ -23,7 +26,7 @@ const getHandler = async (request: NextRequest) => {
       return NextResponse.json({ error: 'Invalid client ID format. Must be a number.' }, { status: 400 });
     }
     
-    const petsData = await db.query.pets.findMany({
+    const petsData = await tenantDb.query.pets.findMany({
       where: eq(pets.ownerId, clientIdInt),
       with: {
         owner: true
@@ -45,7 +48,7 @@ const getHandler = async (request: NextRequest) => {
     
     if (hasActiveAppointments) {
       // First get all active appointments to find the pet IDs
-      const activeAppointments = await db.query.appointments.findMany({
+      const activeAppointments = await tenantDb.query.appointments.findMany({
         where: or(
           eq(appointments.status, 'scheduled'),
           eq(appointments.status, 'confirmed'),
@@ -56,7 +59,7 @@ const getHandler = async (request: NextRequest) => {
         }
       });
         
-      const petIds = [...new Set(activeAppointments.map(apt => apt.petId).filter(id => id !== null))] as number[]; // Remove duplicates and nulls
+      const petIds = [...new Set(activeAppointments.map((apt: any) => apt.petId).filter((id: any) => id !== null))] as number[]; // Remove duplicates and nulls
       
       if (petIds.length === 0) {
         console.log('No pets found with active appointments for this practice.');
@@ -64,7 +67,7 @@ const getHandler = async (request: NextRequest) => {
       }
       
       // Get pet details for pets with active appointments that belong to this practice
-      petsData = await db.query.pets.findMany({
+      petsData = await tenantDb.query.pets.findMany({
         where: and(
           eq(pets.practiceId, practiceIdInt),
           inArray(pets.id, petIds)
@@ -74,7 +77,7 @@ const getHandler = async (request: NextRequest) => {
         }
       });
     } else {
-      petsData = await db.query.pets.findMany({
+      petsData = await tenantDb.query.pets.findMany({
         where: eq(pets.practiceId, practiceIdInt),
         with: {
           owner: true
@@ -97,7 +100,7 @@ const getHandler = async (request: NextRequest) => {
       if (user && (user as any).practiceId) {
         const practiceIdInt = Number((user as any).practiceId);
         if (!Number.isFinite(practiceIdInt)) return NextResponse.json([], { status: 200 });
-        const petsData = await db.query.pets.findMany({ where: eq(pets.practiceId, practiceIdInt), with: { owner: true } });
+        const petsData = await tenantDb.query.pets.findMany({ where: eq(pets.practiceId, practiceIdInt), with: { owner: true } });
         return NextResponse.json(petsData, { status: 200 });
       }
     } catch (e) {
@@ -113,6 +116,9 @@ export const GET = withNetworkErrorHandlingAndRetry(getHandler);
 
 // Create pet (wrapped with retry-aware error handler)
 const postHandler = async (request: NextRequest) => {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const body = await request.json();
   const {
     name,
@@ -145,7 +151,7 @@ const postHandler = async (request: NextRequest) => {
 
   const dob = dateOfBirth ? new Date(dateOfBirth) : null;
 
-  const [inserted] = await db.insert(pets).values({
+  const [inserted] = await tenantDb.insert(pets).values({
     name,
     species: species ?? null,
     breed: breed ?? null,

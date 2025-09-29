@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { pets } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function GET(request: Request, context: { params: Promise<{ petId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const params = await context.params;
   const { petId } = params;
   const petIdInt = parseInt(petId, 10);
@@ -15,7 +20,7 @@ export async function GET(request: Request, context: { params: Promise<{ petId: 
 
   try {
     // Query the database for the pet with the given ID
-    const petData = await db.query.pets.findFirst({
+    const petData = await tenantDb.query.pets.findFirst({
       where: (pets, { eq }) => eq(pets.id, petIdInt),
       with: {
         owner: true
@@ -35,6 +40,9 @@ export async function GET(request: Request, context: { params: Promise<{ petId: 
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ petId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const params = await context.params;
   const petIdInt = parseInt(params.petId, 10);
   if (!Number.isFinite(petIdInt)) {
@@ -46,7 +54,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ petId
     if (update.dateOfBirth) {
       update.dateOfBirth = new Date(update.dateOfBirth);
     }
-    const [updated] = await db.update(pets).set(update).where(eq(pets.id, petIdInt as any)).returning();
+    const [updated] = await tenantDb.update(pets).set(update).where(eq(pets.id, petIdInt as any)).returning();
     if (!updated) return NextResponse.json({ error: 'Pet not found' }, { status: 404 });
     return NextResponse.json(updated, { status: 200 });
   } catch (error) {
@@ -56,13 +64,16 @@ export async function PATCH(request: Request, context: { params: Promise<{ petId
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ petId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const params = await context.params;
   const petIdInt = parseInt(params.petId, 10);
   if (!Number.isFinite(petIdInt)) {
     return NextResponse.json({ error: 'Invalid pet ID' }, { status: 400 });
   }
   try {
-    const deleted = await db.delete(pets).where(eq(pets.id, petIdInt as any)).returning();
+    const deleted = await tenantDb.delete(pets).where(eq(pets.id, petIdInt as any)).returning();
     if (!deleted || deleted.length === 0) {
       return NextResponse.json({ error: 'Pet not found' }, { status: 404 });
     }

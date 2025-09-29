@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import * as schema from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
 export async function GET(request: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const url = new URL(request.url);
     const petId = url.searchParams.get('petId');
@@ -32,6 +37,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     console.log('Received body:', body);

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { electronicSignatures } from '@/db/schema';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -21,13 +23,16 @@ const createSignatureSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const userIdParam = request.nextUrl.searchParams.get('userId');
   const practiceIdParam = request.nextUrl.searchParams.get('practiceId');
 
   try {
     if (userIdParam) {
       const userId = parseInt(userIdParam, 10);
-      const rows = await db.select().from(electronicSignatures)
+      const rows = await tenantDb.select().from(electronicSignatures)
         .where(eq(electronicSignatures.userId, String(userId)))
         .orderBy(desc(electronicSignatures.createdAt));
       const mapped = rows.map((r: any) => ({
@@ -39,7 +44,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (practiceIdParam) {
-      const rows = await db.select().from(electronicSignatures)
+      const rows = await tenantDb.select().from(electronicSignatures)
         .where(eq(electronicSignatures.practiceId, String(practiceIdParam)))
         .orderBy(desc(electronicSignatures.createdAt));
       const mapped = rows.map((r: any) => ({
@@ -57,6 +62,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     const parsed = createSignatureSchema.parse(body);
@@ -78,7 +86,7 @@ export async function POST(request: NextRequest) {
       verified: false,
     } as any;
 
-    const [inserted] = await db.insert(electronicSignatures).values(insertData).returning();
+    const [inserted] = await tenantDb.insert(electronicSignatures).values(insertData).returning();
     return NextResponse.json(inserted, { status: 201 });
   } catch (error) {
     console.error('Error creating signature:', error);

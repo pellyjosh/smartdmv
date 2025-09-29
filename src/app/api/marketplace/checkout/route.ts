@@ -1,9 +1,13 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { practiceAddons } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth-utils";
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -27,7 +31,7 @@ export async function POST(request: NextRequest) {
     
     for (const item of items) {
       try {
-        const subscription = await (db as any).insert(practiceAddons).values({
+        const subscription = await (tenantDb as any).insert(practiceAddons).values({
           practiceId: user.practiceId,
           addonId: item.addonId,
           subscriptionTier: item.tier,

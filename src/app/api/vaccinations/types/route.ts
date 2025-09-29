@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { vaccineTypes } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { vaccineTypes } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -22,6 +23,9 @@ const createVaccineTypeSchema = z.object({
 
 // GET /api/vaccinations/types - Get vaccine types for practice
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -54,7 +58,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Query vaccine types
-    const result = await db.query.vaccineTypes.findMany({
+    const result = await tenantDb.query.vaccineTypes.findMany({
       where: and(...conditions),
       orderBy: [desc(vaccineTypes.isActive), vaccineTypes.name],
     });
@@ -71,6 +75,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/vaccinations/types - Create new vaccine type
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -81,7 +88,7 @@ export async function POST(request: NextRequest) {
     const validatedData = createVaccineTypeSchema.parse(body);
 
     // Check for duplicate vaccine type names within the practice
-    const existingVaccineType = await db.query.vaccineTypes.findFirst({
+    const existingVaccineType = await tenantDb.query.vaccineTypes.findFirst({
       where: and(
         eq(vaccineTypes.practiceId, parseInt(userPractice.practiceId)),
         eq(vaccineTypes.name, validatedData.name),
@@ -97,7 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create vaccine type
-    const [newVaccineType] = await db.insert(vaccineTypes).values({
+    const [newVaccineType] = await tenantDb.insert(vaccineTypes).values({
       ...validatedData,
       practiceId: parseInt(userPractice.practiceId),
     }).returning();

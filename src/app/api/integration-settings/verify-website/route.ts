@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { integrationSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { getUserPractice } from '@/lib/auth-utils';
 
 // POST /api/integration-settings/verify-website - Verify website ownership
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -56,7 +60,7 @@ export async function POST(request: NextRequest) {
         message = 'Website is accessible and verified successfully';
         
         // Update the integration settings
-        const existingSettings = await db.query.integrationSettings.findFirst({
+        const existingSettings = await tenantDb.query.integrationSettings.findFirst({
           where: eq(integrationSettings.practiceId, parseInt(userPractice.practiceId))
         });
 
@@ -70,7 +74,7 @@ export async function POST(request: NextRequest) {
             })
             .where(eq(integrationSettings.id, existingSettings.id));
         } else {
-          await db.insert(integrationSettings).values({
+          await tenantDb.insert(integrationSettings).values({
             practiceId: parseInt(userPractice.practiceId),
             websiteUrl: url,
             isVerified: verified,

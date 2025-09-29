@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
-import { db } from '@/db/index';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments } from '@/db/schema';
 import { eq, and, gte, desc } from 'drizzle-orm';
 
@@ -20,6 +21,9 @@ function mapAppointmentStatus(dbStatus: string): string {
 
 // GET /api/dashboard/appointments - Get upcoming appointments for dashboard widget
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -40,7 +44,7 @@ export async function GET(request: NextRequest) {
     const endTimeMs = endTime.getTime();
 
     // Fetch upcoming appointments for the practice
-    const upcomingAppointments = await db.query.appointments.findMany({
+    const upcomingAppointments = await tenantDb.query.appointments.findMany({
       where: and(
         eq(appointments.practiceId, userPractice.practiceId),
         gte(appointments.date, startTimeMs) // Appointments from now onwards

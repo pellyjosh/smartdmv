@@ -1,12 +1,15 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { db } from '@/db/index';
+import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { healthPlanNotes } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { getCurrentUser } from '@/lib/auth-utils';
 import { isPracticeAdministrator, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
 import { createAuditLog } from '@/lib/audit-logger';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ planId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -17,7 +20,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     console.log(`[api/health-plans/[planId]/notes] GET called for planId=${planId}`);
 
-    const notes = await db.query.healthPlanNotes.findMany({ 
+    const notes = await tenantDb.query.healthPlanNotes.findMany({ 
       where: eq(healthPlanNotes.healthPlanId, planId),
       orderBy: [desc(healthPlanNotes.createdAt)],
       with: {
@@ -33,6 +36,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ planId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -55,7 +61,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // Insert the new note
-    const insertResult = await db.insert(healthPlanNotes).values({
+    const insertResult = await tenantDb.insert(healthPlanNotes).values({
       healthPlanId: planId,
       note: note.trim(),
       createdById: user.id,

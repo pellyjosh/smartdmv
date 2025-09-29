@@ -1,5 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { boardingStays } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -7,6 +9,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const { id } = await params;
 
   if (!id) {
@@ -21,7 +26,7 @@ export async function POST(
     const { checkInById } = body;
 
     // Check if the stay exists and is scheduled
-    const existingStay = await db.query.boardingStays.findFirst({
+    const existingStay = await tenantDb.query.boardingStays.findFirst({
       where: (boardingStays, { eq }) => eq(boardingStays.id, id)
     });
 
@@ -51,7 +56,7 @@ export async function POST(
       .returning();
 
     // Fetch the complete updated stay data with relations
-    const completeStay = await db.query.boardingStays.findFirst({
+    const completeStay = await tenantDb.query.boardingStays.findFirst({
       where: (boardingStays, { eq }) => eq(boardingStays.id, id),
       with: {
         pet: {

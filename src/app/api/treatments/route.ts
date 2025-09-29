@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/db/index'
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+
 import { treatments } from '@/db/schemas/treatmentsSchema'
 import { z } from 'zod'
 
@@ -30,6 +32,9 @@ const treatmentCreateSchema = z.object({
 const isSqlite = process.env.DB_TYPE === 'sqlite'
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json()
     console.log('Treatment API - Received data:', body)
@@ -39,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // Use Drizzle ORM to insert the treatment
     // @ts-ignore
-    const [newTreatment] = await db.insert(treatments).values({
+    const [newTreatment] = await tenantDb.insert(treatments).values({
       soapNoteId: validatedData.soapNoteId,
       petId: validatedData.petId,
       practitionerId: validatedData.practitionerId,

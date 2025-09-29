@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { permissionCategories } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 // PUT update permission category
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
-    const categoryId = parseInt(params.id);
+    const categoryId = parseInt(resolvedParams.id);
     const body = await request.json();
     
     const updateSchema = z.object({
@@ -23,7 +29,7 @@ export async function PUT(
     const validatedData = updateSchema.parse(body);
 
     // Check if category exists and is not system defined
-    const existingCategory = await db.query.permissionCategories.findFirst({
+    const existingCategory = await tenantDb.query.permissionCategories.findFirst({
       where: eq(permissionCategories.id, categoryId)
     });
 
@@ -43,7 +49,7 @@ export async function PUT(
     if (validatedData.sortOrder !== undefined) updateData.displayOrder = validatedData.sortOrder;
 
     // Update the category
-    const [updatedCategory] = await db.update(permissionCategories)
+    const [updatedCategory] = await tenantDb.update(permissionCategories)
       .set(updateData)
       .where(eq(permissionCategories.id, categoryId))
       .returning();
@@ -69,13 +75,17 @@ export async function PUT(
 // DELETE permission category
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
-    const categoryId = parseInt(params.id);
+    const categoryId = parseInt(resolvedParams.id);
     
     // Check if category exists and is not system defined
-    const existingCategory = await db.query.permissionCategories.findFirst({
+    const existingCategory = await tenantDb.query.permissionCategories.findFirst({
       where: eq(permissionCategories.id, categoryId),
       with: {
         resources: true
@@ -95,7 +105,7 @@ export async function DELETE(
     }
 
     // Delete the category
-    await db.delete(permissionCategories).where(eq(permissionCategories.id, categoryId));
+    await tenantDb.delete(permissionCategories).where(eq(permissionCategories.id, categoryId));
     
     return NextResponse.json({ 
       message: 'Permission category deleted successfully',

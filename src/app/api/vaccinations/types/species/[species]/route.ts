@@ -1,21 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { vaccineTypes } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { vaccineTypes } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 
 // GET /api/vaccinations/types/species/[species] - Get vaccine types for a specific species
 export async function GET(
   request: NextRequest,
-  { params }: { params: { species: string } }
+  { params }: { params: Promise<{ species: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const species = params.species;
+    const species = resolvedParams.species;
 
     // Validate species
     const validSpecies = ['dog', 'cat', 'bird', 'reptile', 'rabbit', 'ferret', 'other'];
@@ -27,7 +32,7 @@ export async function GET(
     }
 
     // Query vaccine types for the species
-    const result = await db.query.vaccineTypes.findMany({
+    const result = await tenantDb.query.vaccineTypes.findMany({
       where: and(
         eq(vaccineTypes.practiceId, parseInt(userPractice.practiceId)),
         eq(vaccineTypes.species, species as any),

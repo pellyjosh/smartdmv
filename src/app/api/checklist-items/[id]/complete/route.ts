@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { eq } from 'drizzle-orm';
 import { checklistItems } from '@/db/schema';
-import { getUserPractice } from '@/lib/auth-utils';
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const ctx = await getUserPractice(request);
     if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -25,7 +29,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     console.log('[COMPLETE DEBUG] About to update with data:', JSON.stringify(updateData, null, 2));
 
-    const [updated] = await db.update(checklistItems).set(updateData as any).where(eq(checklistItems.id, id)).returning();
+    const [updated] = await tenantDb.update(checklistItems).set(updateData as any).where(eq(checklistItems.id, id)).returning();
     if (!updated) return NextResponse.json({ message: 'Not found' }, { status: 404 });
     
     console.log('[COMPLETE DEBUG] Update successful');

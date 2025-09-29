@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments } from '@/db/schema';
 import { cookies } from 'next/headers';
 import { HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     // Get session token from cookies
     const sessionTokenValue = (await cookies()).get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
@@ -17,7 +23,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const appointmentId = parseInt(params.id, 10);
+    const appointmentId = parseInt(resolvedParams.id, 10);
     if (isNaN(appointmentId)) {
       return NextResponse.json({ error: 'Invalid appointment ID' }, { status: 400 });
     }
@@ -27,7 +33,7 @@ export async function PATCH(
     const { notes } = body;
 
     // Get the appointment to validate access
-    const appointment = await db.query.appointments.findFirst({
+    const appointment = await tenantDb.query.appointments.findFirst({
       where: eq(appointments.id, appointmentId),
       with: {
         client: true,

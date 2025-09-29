@@ -4,10 +4,11 @@ import { z } from 'zod';
 // PUT update permission override
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string  }> }
 ) {
+  const resolvedParams = await params;
   try {
-    const overrideId = params.id;
+    const overrideId = resolvedParams.id;
     const body = await request.json();
     
     const updateSchema = z.object({
@@ -38,10 +39,11 @@ export async function PUT(
 // DELETE permission override
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string  }> }
 ) {
+  const resolvedParams = await params;
   try {
-    const overrideId = params.id;
+    const overrideId = resolvedParams.id;
     
     // TODO: Implement override deletion from database
     return NextResponse.json({ 

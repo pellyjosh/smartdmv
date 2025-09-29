@@ -2,6 +2,7 @@
 'use server';
 
 import { db } from '@/db';
+import { getCurrentTenantDb, isCurrentRequestTenant } from '@/lib/tenant-db-resolver';
 import { users as usersTable, administratorAccessiblePractices as adminPracticesTable } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
@@ -11,10 +12,28 @@ import { createAuditLog, SYSTEM_USER_ID } from '@/lib/audit-logger';
 import { isSuperAdmin, isPracticeAdmin, isAdmin, ROLE_NAMES } from '@/lib/rbac/dynamic-roles';
 import { createUserContext } from '@/lib/auth-context';
 
+/**
+ * Get the appropriate database instance based on current request context
+ * STRICT TENANT ISOLATION - NO FALLBACKS ALLOWED
+ */
+async function getContextualDb() {
+  const isTenant = await isCurrentRequestTenant();
+  
+  if (!isTenant) {
+    throw new Error('Tenant context required - no fallback database allowed');
+  }
+  
+  console.log('[AUTH_DB] Using tenant-specific database');
+  return await getCurrentTenantDb();
+}
+
 export async function loginUserAction(emailInput: string, passwordInput: string): Promise<User> {
   try {
     return await retryWithBackoff(async () => {
-      const result = await (db as any).select().from(usersTable).where(eq(usersTable.email, emailInput)).limit(1);
+      // Get the appropriate database for the current tenant
+      const contextualDb = await getContextualDb();
+      
+      const result = await contextualDb.select().from(usersTable).where(eq(usersTable.email, emailInput)).limit(1);
       const dbUser = result[0];
 
       if (!dbUser || !dbUser.password) {
@@ -33,8 +52,15 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
       const isSuperAdminUser = await isSuperAdmin(dbUser.role);
       const isPracticeAdminUser = await isPracticeAdmin(dbUser.role);
 
+      console.log(`[AuthAction loginUserAction] Role checks for ${dbUser.email}:`);
+      console.log(`[AuthAction loginUserAction] - dbUser.role: ${dbUser.role}`);
+      console.log(`[AuthAction loginUserAction] - isAdminUser: ${isAdminUser}`);
+      console.log(`[AuthAction loginUserAction] - isSuperAdminUser: ${isSuperAdminUser}`);
+      console.log(`[AuthAction loginUserAction] - isPracticeAdminUser: ${isPracticeAdminUser}`);
+      console.log(`[AuthAction loginUserAction] - Condition (isAdminUser && !isPracticeAdminUser): ${isAdminUser && !isPracticeAdminUser}`);
+
       if (isAdminUser && !isPracticeAdminUser) {
-        const adminPractices = await (db as any).select({ practiceId: adminPracticesTable.practiceId })
+        const adminPractices = await contextualDb.select({ practiceId: adminPracticesTable.practiceId })
           .from(adminPracticesTable)
           .where(eq(adminPracticesTable.administratorId, dbUser.id));
         
@@ -58,7 +84,6 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
           role: isSuperAdminUser ? ROLE_NAMES.SUPER_ADMIN : ROLE_NAMES.ADMINISTRATOR,
           accessiblePracticeIds,
           currentPracticeId: currentPracticeId!,
-          companyId: 'default-company', // TODO: Get from actual company context
         };
       } else if (isPracticeAdminUser) {
         if (!dbUser.practiceId) {
@@ -70,7 +95,6 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
           name: dbUser.name || undefined,
           role: 'PRACTICE_ADMINISTRATOR',
           practiceId: dbUser.practiceId.toString(),
-          companyId: 'default-company', // TODO: Get from actual company context
         };
       } else if (dbUser.role === 'CLIENT') {
         if (!dbUser.practiceId) {
@@ -82,7 +106,6 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
           name: dbUser.name || undefined,
           role: 'CLIENT',
           practiceId: dbUser.practiceId.toString(),
-          companyId: 'default-company', // TODO: Get from actual company context
         };
       } else if (['VETERINARIAN', 'TECHNICIAN', 'RECEPTIONIST', 'PRACTICE_MANAGER', 'ACCOUNTANT', 'CASHIER', 'OFFICE_MANAGER'].includes(dbUser.role)) {
         // Handle practice-based staff roles
@@ -95,7 +118,30 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
           name: dbUser.name || undefined,
           role: dbUser.role as any, // Cast to the specific role type
           practiceId: dbUser.practiceId.toString(),
-          companyId: 'default-company', // TODO: Get from actual company context
+        };
+      } else if (dbUser.role === 'SUPER_ADMIN') {
+        // Handle SUPER_ADMIN role - they can access all practices
+        const adminPractices = await contextualDb.select({ practiceId: adminPracticesTable.practiceId })
+          .from(adminPracticesTable)
+          .where(eq(adminPracticesTable.administratorId, dbUser.id));
+        
+        const accessiblePracticeIds = adminPractices.map((p: { practiceId: number }) => p.practiceId.toString());
+        let currentPracticeId = dbUser.currentPracticeId?.toString();
+
+        if (!currentPracticeId && accessiblePracticeIds.length > 0) {
+          currentPracticeId = accessiblePracticeIds[0];
+        } else if (accessiblePracticeIds.length === 0) { 
+          console.warn(`[AuthAction loginUserAction] SUPER_ADMIN ${dbUser.email} has no current or accessible practices configured.`);
+          currentPracticeId = 'practice_NONE'; // Fallback
+        }
+
+        userData = {
+          id: dbUser.id.toString(),
+          email: dbUser.email,
+          name: dbUser.name || undefined,
+          role: ROLE_NAMES.SUPER_ADMIN,
+          accessiblePracticeIds,
+          currentPracticeId: currentPracticeId!,
         };
       } else {
         throw new Error(`Unknown user role: ${dbUser.role}.`);
@@ -159,6 +205,9 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
 export async function switchPracticeAction(userId: string, newPracticeId: string): Promise<User> {
   try {
     return await retryWithBackoff(async () => {
+      // Get the appropriate database for the current tenant
+      const contextualDb = await getContextualDb();
+      
       // Convert to proper types for database query
       const userIdInt = parseInt(userId, 10);
       const newPracticeIdInt = parseInt(newPracticeId, 10);
@@ -168,7 +217,7 @@ export async function switchPracticeAction(userId: string, newPracticeId: string
       }
 
       // Fetch user to verify they exist and their current state
-      const userResult = await (db as any).select().from(usersTable).where(eq(usersTable.id, userIdInt)).limit(1);
+      const userResult = await contextualDb.select().from(usersTable).where(eq(usersTable.id, userIdInt)).limit(1);
       const dbUser = userResult[0];
 
       if (!dbUser) {
@@ -176,7 +225,7 @@ export async function switchPracticeAction(userId: string, newPracticeId: string
       }
 
       // Update current practice for the user
-      await (db as any).update(usersTable)
+      await contextualDb.update(usersTable)
         .set({ currentPracticeId: newPracticeIdInt })
         .where(eq(usersTable.id, userIdInt));
 
@@ -185,7 +234,7 @@ export async function switchPracticeAction(userId: string, newPracticeId: string
       const isSuperAdminUser2 = await isSuperAdmin(dbUser.role);
       
       if (isAdminUser2) {
-        const adminPractices = await (db as any).select({ practiceId: adminPracticesTable.practiceId })
+        const adminPractices = await contextualDb.select({ practiceId: adminPracticesTable.practiceId })
           .from(adminPracticesTable)
           .where(eq(adminPracticesTable.administratorId, dbUser.id));
         

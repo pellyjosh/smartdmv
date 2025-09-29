@@ -1,6 +1,6 @@
 // src/lib/notifications/notification-service.ts
-import { db } from '@/db/index';
-import { notifications, users, practices } from '@/db/schema';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+import { notifications, users } from '@/db/schema';
 import { eq, desc, and, isNull, or } from 'drizzle-orm';
 import { notificationTypeEnum } from '@/db/schemas/notificationsSchema';
 
@@ -34,6 +34,9 @@ export class NotificationService {
    */
   static async createNotification(input: CreateNotificationInput): Promise<{ success: boolean; error?: string; notificationId?: string }> {
     try {
+      // Get the tenant-specific database
+      const db = await getCurrentTenantDb();
+      
       console.log('🔔 NotificationService.createNotification called with:', input);
       
       // If userId is provided, create notification directly
@@ -119,6 +122,9 @@ export class NotificationService {
    */
   static async getNotifications(filter: NotificationFilter) {
     try {
+      // Get the tenant-specific database
+      const db = await getCurrentTenantDb();
+      
       const conditions = [];
       
       if (filter.userId) {
@@ -170,6 +176,9 @@ export class NotificationService {
    */
   static async markAsRead(notificationId: string, userId?: string): Promise<{ success: boolean; error?: string }> {
     try {
+      // Get the tenant-specific database
+      const db = await getCurrentTenantDb();
+      
       const conditions = [eq(notifications.id, parseInt(notificationId))];
       if (userId) {
         conditions.push(eq(notifications.userId, parseInt(userId)));
@@ -194,6 +203,9 @@ export class NotificationService {
    */
   static async markAllAsRead(userId: string, practiceId?: string): Promise<{ success: boolean; error?: string }> {
     try {
+      // Get the tenant-specific database
+      const db = await getCurrentTenantDb();
+      
       const conditions = [eq(notifications.userId, parseInt(userId))];
       if (practiceId) {
         conditions.push(eq(notifications.practiceId, parseInt(practiceId)));
@@ -218,6 +230,9 @@ export class NotificationService {
    */
   static async getUnreadCount(userId: string, practiceId?: string): Promise<{ success: boolean; count?: number; error?: string }> {
     try {
+      // Get the tenant-specific database
+      const db = await getCurrentTenantDb();
+      
       const conditions = [
         eq(notifications.userId, parseInt(userId)),
         eq(notifications.read, false)
@@ -242,6 +257,9 @@ export class NotificationService {
    */
   static async deleteNotification(notificationId: string, userId?: string): Promise<{ success: boolean; error?: string }> {
     try {
+      // Get the tenant-specific database
+      const db = await getCurrentTenantDb();
+      
       const conditions = [eq(notifications.id, parseInt(notificationId))];
       if (userId) {
         conditions.push(eq(notifications.userId, parseInt(userId)));
@@ -260,6 +278,9 @@ export class NotificationService {
    */
   private static async resolveRecipients(recipients: string[], practiceId: string): Promise<number[]> {
     try {
+      // Get the tenant-specific database
+      const db = await getCurrentTenantDb();
+      
       const conditions = [];
       
       // Add practice filter

@@ -1,24 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { vaccinations, pets } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { vaccinations, pets } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 
 // GET /api/vaccinations/pet/[petId] - Get vaccinations for a specific pet
 export async function GET(
   request: NextRequest,
-  { params }: { params: { petId: string } }
+  { params }: { params: Promise<{ petId: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const petId = parseInt(params.petId);
+    const petId = parseInt(resolvedParams.petId);
 
     // Verify pet belongs to the practice
-    const pet = await db.query.pets.findFirst({
+    const pet = await tenantDb.query.pets.findFirst({
       where: and(
         eq(pets.id, petId),
         eq(pets.practiceId, parseInt(userPractice.practiceId))
@@ -33,7 +38,7 @@ export async function GET(
     }
 
     // Query vaccinations for the pet
-    const result = await db.query.vaccinations.findMany({
+    const result = await tenantDb.query.vaccinations.findMany({
       where: eq(vaccinations.petId, petId),
       orderBy: desc(vaccinations.administrationDate),
       with: {

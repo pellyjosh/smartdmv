@@ -1,5 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { feedingSchedules } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -7,6 +9,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const { id } = params;
 
   if (!id) {
@@ -24,7 +29,7 @@ export async function GET(
     );
   }
   try {
-    const feedingSchedule = await db.query.feedingSchedules.findFirst({
+    const feedingSchedule = await tenantDb.query.feedingSchedules.findFirst({
       where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, idNum),
       with: {
           stay: {
@@ -56,6 +61,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const { id } = params;
 
   if (!id) {
@@ -88,7 +96,7 @@ export async function PUT(
     } = body;
 
     // Check if the feeding schedule exists
-    const existingSchedule = await db.query.feedingSchedules.findFirst({
+    const existingSchedule = await tenantDb.query.feedingSchedules.findFirst({
       where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, idNum)
     });
 
@@ -114,7 +122,7 @@ export async function PUT(
       .returning();
 
     // Fetch the complete updated feeding schedule data with relations
-    const completeFeedingSchedule = await db.query.feedingSchedules.findFirst({
+    const completeFeedingSchedule = await tenantDb.query.feedingSchedules.findFirst({
       where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, idNum),
       with: {
         stay: {
@@ -139,6 +147,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const { id } = params;
 
   if (!id) {
@@ -159,7 +170,7 @@ export async function DELETE(
 
   try {
     // Check if the feeding schedule exists
-    const existingSchedule = await db.query.feedingSchedules.findFirst({
+    const existingSchedule = await tenantDb.query.feedingSchedules.findFirst({
       where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, idNum)
     });
 

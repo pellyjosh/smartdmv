@@ -1,5 +1,5 @@
 // Utility for creating audit log entries
-import { db } from '@/db';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { auditLogs, type NewAuditLog } from '@/db/schema';
 
 // Standardized fallbacks used across the app for audit logging when no user context is available
@@ -60,6 +60,9 @@ export interface CreateAuditLogParams {
  */
 export async function createAuditLog(params: CreateAuditLogParams): Promise<void> {
   try {
+    // Get the tenant-specific database
+    const db = await getCurrentTenantDb();
+    
     // Normalize action and recordType safely even if caller passed undefined/null
     const normalizedAction = (params.action || 'UNKNOWN').toString().toUpperCase();
     const normalizedRecordType = (params.recordType || 'UNKNOWN').toString().toUpperCase();
@@ -179,6 +182,9 @@ export async function createAuditLogFromRequest(
  */
 export async function createAuditLogsBatch(logs: CreateAuditLogParams[]): Promise<void> {
   try {
+    // Get the tenant-specific database
+    const db = await getCurrentTenantDb();
+    
     const sanitizeForAudit = (input: any): any => {
       if (input === undefined || input === null) return input;
       if (input instanceof Date) return input.toISOString();

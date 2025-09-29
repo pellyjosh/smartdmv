@@ -5,7 +5,7 @@
  * when they are past their scheduled time and haven't been marked as completed.
  */
 
-import { db } from '../db';
+import { getCurrentTenantDb } from '../lib/tenant-db-resolver';
 import { appointments } from '../db/schemas/appointmentsSchema';
 import { eq, and, lt, inArray } from 'drizzle-orm';
 import NotificationService from '../lib/notifications/notification-service';
@@ -19,6 +19,9 @@ export class AppointmentAutomation {
    */
   async processOverdueAppointments(): Promise<void> {
     try {
+      // Get the tenant-specific database
+      const db = await getCurrentTenantDb();
+      
       console.log('🔍 Checking for overdue appointments...');
       
       const currentTime = new Date();
@@ -88,6 +91,9 @@ export class AppointmentAutomation {
    */
   private async sendNoShowNotifications(appointment: any): Promise<void> {
     try {
+      // Get the tenant-specific database
+      const db = await getCurrentTenantDb();
+      
       console.log(`📧 Sending no-show notifications for appointment ${appointment.id}`);
       
       // Get appointment details first

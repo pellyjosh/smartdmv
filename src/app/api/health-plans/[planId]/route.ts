@@ -1,12 +1,15 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { db } from '@/db/index';
+import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { healthPlans, pets } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { getCurrentUser } from '@/lib/auth-utils';
 import { isPracticeAdministrator, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
 import { createAuditLog } from '@/lib/audit-logger';
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ planId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -27,11 +30,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Get the existing health plan for audit logging
-    const existingPlan = await db.query.healthPlans.findFirst({ where: eq(healthPlans.id, id) });
+    const existingPlan = await tenantDb.query.healthPlans.findFirst({ where: eq(healthPlans.id, id) });
     if (!existingPlan) return NextResponse.json({ error: 'Health plan not found' }, { status: 404 });
 
     // Update health plan
-    const updated = await db.update(healthPlans)
+    const updated = await tenantDb.update(healthPlans)
       .set({
         name,
         startDate: startDate ? new Date(startDate) : null,
@@ -122,6 +125,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ planId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -131,7 +137,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (Number.isNaN(id)) return NextResponse.json({ error: 'Invalid health plan id' }, { status: 400 });
     console.log(`[api/health-plans/[planId]] GET called for id=${id}`);
 
-    const healthPlan = await db.query.healthPlans.findFirst({ 
+    const healthPlan = await tenantDb.query.healthPlans.findFirst({ 
       where: eq(healthPlans.id, id),
       with: {
         pet: { columns: { id: true, name: true, species: true, breed: true } },
@@ -151,7 +157,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     let isClientOwner = false;
     if (legacyRole === 'CLIENT') {
       // Get the pet to check ownership
-      const pet = await db.query.pets.findFirst({
+      const pet = await tenantDb.query.pets.findFirst({
         where: eq(pets.id, healthPlan.petId),
         columns: { id: true, ownerId: true }
       });

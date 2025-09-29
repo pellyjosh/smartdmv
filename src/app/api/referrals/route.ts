@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { db } from '@/db';
-import { referrals, ReferralStatus, ReferralPriority, VetSpecialty } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { referrals, ReferralStatus, ReferralPriority, VetSpecialty } from '@/db/schema';
 import { canCreate, canView } from '@/lib/rbac-helpers';
 import { eq, and } from 'drizzle-orm';
 
@@ -79,6 +80,9 @@ const createReferralSchema = z.object({
 
 // POST /api/referrals - Create new referral
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -132,6 +136,9 @@ export async function POST(request: NextRequest) {
 
 // GET /api/referrals - Get all referrals for practice
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -143,7 +150,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const practiceReferrals = await db.query.referrals.findMany({
+    const practiceReferrals = await tenantDb.query.referrals.findMany({
       where: eq(referrals.referringPracticeId, parseInt(userPractice.practiceId.toString(), 10)),
       with: {
         pet: true,

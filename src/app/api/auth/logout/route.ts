@@ -2,12 +2,17 @@
 // src/app/api/auth/logout/route.ts
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { sessions as sessionsTable } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
 
 export async function POST() {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   console.log('[API Logout START] Received request to /api/auth/logout');
   try {
   const sessionTokenValue = (await cookies()).get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
@@ -16,7 +21,7 @@ export async function POST() {
       // Delete session from database
       console.log(`[API Logout] Attempting to delete session ${sessionTokenValue} from DB.`);
       const sessionId = sessionTokenValue; // Session ID is a UUID string
-      const deleteResult = await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionId)).returning({ id: sessionsTable.id });
+      const deleteResult = await tenantDb.delete(sessionsTable).where(eq(sessionsTable.id, sessionId)).returning({ id: sessionsTable.id });
       if (deleteResult.length > 0) {
         console.log(`[API Logout] Session ${sessionTokenValue} deleted successfully from DB.`);
       } else {

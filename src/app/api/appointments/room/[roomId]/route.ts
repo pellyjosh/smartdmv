@@ -1,5 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments, users, pets } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-utils";
@@ -8,6 +10,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { roomId: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -24,7 +29,7 @@ export async function GET(
     console.log('Fetching appointment for room:', roomId, 'user:', user.id);
 
     // Fetch appointment with related data
-    const appointment = await db.query.appointments.findFirst({
+    const appointment = await tenantDb.query.appointments.findFirst({
       where: and(
         eq(appointments.roomId, roomId),
         eq(appointments.clientId, parseInt(user.id))

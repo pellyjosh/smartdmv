@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { inventory } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { inventory } from '@/db/schema';
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -12,6 +13,9 @@ const batchAdjustSchema = z.object({
 
 // POST /api/inventory/batch-adjust - Adjust quantities for multiple items
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {

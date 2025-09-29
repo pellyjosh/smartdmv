@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { practices } from '@/db/schema';
 import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
 import { getUserContextFromRequest } from '@/lib/auth-context';
@@ -8,6 +8,8 @@ import { eq } from 'drizzle-orm';
 // GET /api/practices - Get practices accessible to current user
 export async function GET(request: NextRequest) {
   try {
+    const contextualDb = await getCurrentTenantDb();
+    
     // Try multiple authentication methods
     let userInfo = await getUserPractice(request);
     
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all practices for referral purposes
-    const allPractices = await db.query.practices.findMany({
+    const allPractices = await contextualDb.query.practices.findMany({
       columns: {
         id: true,
         name: true,

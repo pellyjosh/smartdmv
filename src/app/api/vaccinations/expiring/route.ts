@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { vaccinations } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { vaccinations } from '@/db/schema';
 import { eq, and, gte, lte } from 'drizzle-orm';
 
 // GET /api/vaccinations/expiring - Get vaccinations that are expiring or have expired
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -25,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Query vaccinations that are expiring or have expired within the date range
-    const result = await db.query.vaccinations.findMany({
+    const result = await tenantDb.query.vaccinations.findMany({
       where: and(
         eq(vaccinations.practiceId, parseInt(practiceId)),
         gte(vaccinations.expirationDate, new Date(startDate)),

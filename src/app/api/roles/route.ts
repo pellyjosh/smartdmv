@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { users, roles, userRoles } from '@/db/schema';
 import { z } from 'zod';
 import { eq, and, count, isNull, or } from 'drizzle-orm';
@@ -7,6 +8,9 @@ import { createAuditLog } from '@/lib/audit-logger';
 
 // GET roles for a practice
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = request.nextUrl;
     const practiceId = searchParams.get('practiceId');
@@ -17,7 +21,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all roles for the practice (system-defined and custom)
-    const rolesData = await db.select().from(roles).where(
+    const rolesData = await tenantDb.select().from(roles).where(
       or(
         eq(roles.practiceId, parseInt(practiceId)),
         and(eq(roles.isSystemDefined, true), isNull(roles.practiceId))
@@ -26,9 +30,9 @@ export async function GET(request: NextRequest) {
 
     // Get user counts for each role - using both legacy users.role and new user_roles table
     const userCounts = await Promise.all(
-      rolesData.map(async (role) => {
+      rolesData.map(async (role: any) => {
         // Count from legacy users.role field
-        const [legacyResult] = await db
+        const [legacyResult] = await tenantDb
           .select({ count: count() })
           .from(users)
           .where(and(
@@ -37,7 +41,7 @@ export async function GET(request: NextRequest) {
           ));
         
         // Count from new user_roles assignments
-        const [assignedResult] = await db
+        const [assignedResult] = await tenantDb
           .select({ count: count() })
           .from(userRoles)
           .innerJoin(users, eq(users.id, userRoles.userId))
@@ -55,7 +59,7 @@ export async function GET(request: NextRequest) {
     );
 
     // Combine roles with user counts
-    const rolesWithCounts = rolesData.map(role => {
+    const rolesWithCounts = rolesData.map((role: any) => {
       const userCount = userCounts.find(uc => uc.roleId === role.id)?.count || 0;
       return {
         ...role,
@@ -67,7 +71,7 @@ export async function GET(request: NextRequest) {
 
     if (available) {
       // Return simplified format for dropdowns
-      return NextResponse.json(rolesWithCounts.map(role => ({
+      return NextResponse.json(rolesWithCounts.map((role: any) => ({
         id: role.id.toString(),
         name: role.name,
         displayName: role.displayName,
@@ -85,6 +89,9 @@ export async function GET(request: NextRequest) {
 
 // POST create custom role
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     
@@ -105,7 +112,7 @@ export async function POST(request: NextRequest) {
     const validatedData = roleSchema.parse(body);
 
     // Check if role name already exists for this practice
-    const existingRole = await db.select().from(roles).where(
+    const existingRole = await tenantDb.select().from(roles).where(
       and(
         eq(roles.name, validatedData.name as string),
         or(
@@ -120,7 +127,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the role
-    const [newRole] = await db.insert(roles).values({
+    const [newRole] = await tenantDb.insert(roles).values({
       name: validatedData.name as string,
       displayName: validatedData.displayName as string,
       description: validatedData.description as string | undefined,

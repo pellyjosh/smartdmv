@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { healthResources } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 
 export async function GET(request: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
@@ -35,7 +40,7 @@ export async function GET(request: Request) {
     }
 
     // Query the database for health resources
-    const resources = await db.query.healthResources.findMany({
+    const resources = await tenantDb.query.healthResources.findMany({
       where: whereConditions.length > 1 ? and(...whereConditions) : whereConditions[0],
       with: {
         practice: {
@@ -90,6 +95,9 @@ export async function GET(request: Request) {
 
 // POST endpoint to increment view count
 export async function POST(request: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { resourceId } = await request.json();
     
@@ -98,7 +106,7 @@ export async function POST(request: Request) {
     }
 
     // Increment view count
-    const resource = await db.query.healthResources.findFirst({
+    const resource = await tenantDb.query.healthResources.findFirst({
       where: eq(healthResources.id, resourceId),
       columns: { id: true, viewCount: true }
     });

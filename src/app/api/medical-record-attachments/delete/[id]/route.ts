@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unlink } from "fs/promises";
-import { db } from '@/db/index'
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+
 import { medicalRecordAttachments } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 import { existsSync } from "fs";
@@ -11,6 +13,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { id } = await params;
     
@@ -24,7 +29,7 @@ export async function DELETE(
       `, [id]);
     } else {
       // PostgreSQL using Drizzle ORM
-      const result = await db.query.medicalRecordAttachments.findFirst({
+      const result = await tenantDb.query.medicalRecordAttachments.findFirst({
         where: eq(medicalRecordAttachments.id, id)
       });
       attachment = result;
@@ -54,7 +59,7 @@ export async function DELETE(
       `, [id]);
     } else {
       // PostgreSQL using Drizzle ORM
-      await db.delete(medicalRecordAttachments)
+      await tenantDb.delete(medicalRecordAttachments)
         .where(eq(medicalRecordAttachments.id, id));
     }
     

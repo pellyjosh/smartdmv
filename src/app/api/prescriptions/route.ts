@@ -1,6 +1,8 @@
 // src/app/api/prescriptions/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { prescriptions } from "@/db/schemas/prescriptionsSchema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -50,6 +52,9 @@ const prescriptionSchema = z.object({
 
 // GET /api/prescriptions - Fetch prescriptions with filtering options
 export async function GET(request: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = new URL(request.url);
     const soapNoteId = searchParams.get("soapNoteId");
@@ -79,11 +84,11 @@ export async function GET(request: Request) {
     // Query prescriptions
     let result;
     if (conditions.length > 0) {
-      result = await db.query.prescriptions.findMany({
+      result = await tenantDb.query.prescriptions.findMany({
         where: and(...conditions)
       });
     } else {
-      result = await db.query.prescriptions.findMany();
+      result = await tenantDb.query.prescriptions.findMany();
     }
 
     return NextResponse.json(result, { status: 200 });
@@ -98,6 +103,9 @@ export async function GET(request: Request) {
 
 // POST /api/prescriptions - Create a new prescription
 export async function POST(request: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   let validatedData: any = null;
   
   try {
@@ -118,7 +126,7 @@ export async function POST(request: Request) {
     
     // Insert into database
     // @ts-ignore - Drizzle ORM type issue with multi-database support
-    const [newPrescription] = await db.insert(prescriptions).values({
+    const [newPrescription] = await tenantDb.insert(prescriptions).values({
       soapNoteId: validatedData.soapNoteId,
       petId: validatedData.petId,
       practiceId: validatedData.practiceId,

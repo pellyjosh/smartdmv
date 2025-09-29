@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { db } from '@/db';
+import { getCurrentTenantDb, isCurrentRequestTenant } from '@/lib/tenant-db-resolver';
 import { users as usersTable, sessions as sessionsTable, administratorAccessiblePractices as adminPracticesTable, practices as practicesTable } from '@/db/schema';
 import { eq, gt, sql, like } from 'drizzle-orm'; // Import gt for greater than comparison and sql for raw queries
 import { HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME } from '@/config/authConstants';
@@ -9,17 +10,39 @@ import type { User, AdministratorUser, SuperAdminUser, VeterinarianUser, Practic
 import { retryWithBackoff, analyzeError } from '@/lib/network-utils'; 
 import { getUserAssignedRoles } from '@/lib/rbac/dynamic-roles';
 
+/**
+ * Get the appropriate database instance based on current request context
+ */
+async function getContextualDb() {
+  const isTenant = await isCurrentRequestTenant();
+  
+  if (isTenant) {
+    console.log('[AUTH_ME_API] Using tenant-specific database');
+    return await getCurrentTenantDb();
+  }
+}
+
 export async function GET(request: Request) {
   console.log('[API ME START] Received request to /api/auth/me');
-  const sessionTokenValue =  (await cookies()).get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
+  // Check for httpOnly session token in cookies
+  const cookieStore = await cookies();
+  const sessionTokenValue = cookieStore.get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
 
   if (!sessionTokenValue) {
-    console.log('[API ME] No httpOnly session token found. Returning null.');
-    return NextResponse.json(null, { status: 200 }); 
+    if (process.env.DEBUG_AUTH === 'true') {
+      console.log('[API ME] No httpOnly session token found. Returning null.');
+    }
+    return NextResponse.json(null);
   }
-  console.log('[API ME] Found httpOnly session token (value logged as ****** for security)');
+  
+  if (process.env.DEBUG_AUTH === 'true') {
+    console.log('[API ME] Found httpOnly session token (value logged as ****** for security)');
+  }
 
   try {
+    // Get the appropriate database for the current tenant
+    const contextualDb = await getContextualDb();
+    
     // The session token is the session ID (string) stored in cookies and in DB (sessions.id is text)
     const sessionId = sessionTokenValue;
     if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
@@ -32,17 +55,22 @@ export async function GET(request: Request) {
 
     // Wrap database operations with retry logic
     const userData = await retryWithBackoff(async () => {
-      const session = await (db as any).query.sessions.findFirst({
+      const session = await contextualDb.query.sessions.findFirst({
         where: eq(sessionsTable.id, sessionId)
       });
 
       if (!session) {
-        console.log(`[API ME] Session ID from cookie not found in DB: ${sessionTokenValue}. Clearing cookie.`);
+        if (process.env.DEBUG_AUTH === 'true') {
+          console.log(`[API ME] Session ID from cookie not found in DB: ${sessionTokenValue}. Clearing cookie.`);
+        }
         const response = NextResponse.json(null, { status: 200 });
         response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
         return response;
       }
-      console.log('[API ME] Session found in DB for token:', session.id);
+      
+      if (process.env.DEBUG_AUTH === 'true') {
+        console.log('[API ME] Session found in DB for token:', session.id);
+      }
 
       const sessionExpiresAt = typeof session.expiresAt === 'number' 
                                ? session.expiresAt
@@ -51,20 +79,20 @@ export async function GET(request: Request) {
 
       if (sessionExpiresAt < currentTime) {
         console.log(`[API ME] Session expired. ExpiresAt_ms: ${sessionExpiresAt}, CurrentTime_ms: ${currentTime}. Deleting session and clearing cookie.`);
-        await (db as any).delete(sessionsTable).where(eq(sessionsTable.id, sessionId));
+        await (contextualDb as any).delete(sessionsTable).where(eq(sessionsTable.id, sessionId));
         const response = NextResponse.json(null, { status: 200 });
         response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
         return response;
       }
       console.log('[API ME] Session is valid and not expired.');
 
-      const userRecord = await db.query.users.findFirst({
+      const userRecord = await contextualDb.query.users.findFirst({
         where: eq(usersTable.id, session.userId),
       });
 
       if (!userRecord) {
         console.error(`[API ME] User not found for session ID: ${sessionTokenValue}, userId: ${session.userId}. Deleting orphaned session and clearing cookie.`);
-        await (db as any).delete(sessionsTable).where(eq(sessionsTable.id, sessionId));
+        await (contextualDb as any).delete(sessionsTable).where(eq(sessionsTable.id, sessionId));
         const response = NextResponse.json(null, { status: 200 });
         response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
         return response;
@@ -104,7 +132,6 @@ export async function GET(request: Request) {
              role: 'ADMINISTRATOR',
              accessiblePracticeIds: [],
              currentPracticeId: '', // Empty string instead of undefined
-             companyId: 'default',
              error: 'No accessible practices configured'
            } as any; // Type assertion to handle the error property
            return userData;
@@ -121,7 +148,6 @@ export async function GET(request: Request) {
           role: 'ADMINISTRATOR',
           accessiblePracticeIds,
           currentPracticeId: currentPracticeId!, // Should be guaranteed to be set now
-          companyId: 'default', // TODO: Add companyId to users schema for multi-tenancy
           roles: assignedRoles,
         };
       } else if (userRecord.role === 'SUPER_ADMIN') {
@@ -151,7 +177,6 @@ export async function GET(request: Request) {
           role: 'SUPER_ADMIN',
           accessiblePracticeIds,
           currentPracticeId: currentPracticeId!, // Should be guaranteed to be set now
-          companyId: 'default', // TODO: Add companyId to users schema for multi-tenancy
           roles: assignedRoles,
         };
       } else if (userRecord.role === 'PRACTICE_ADMINISTRATOR') {
@@ -165,7 +190,6 @@ export async function GET(request: Request) {
           name: Array.isArray(userRecord.name) ? userRecord.name[0] : userRecord.name || undefined,
           role: 'PRACTICE_ADMINISTRATOR',
           practiceId: userRecord.practiceId!.toString(),
-          companyId: 'default', // TODO: Add companyId to users schema for multi-tenancy
           roles: assignedRoles,
         };
       } else if (userRecord.role === 'CLIENT') {
@@ -176,10 +200,9 @@ export async function GET(request: Request) {
         userData = {
           id: userRecord.id.toString(),
           email: Array.isArray(userRecord.email) ? userRecord.email[0] : userRecord.email,
-          name: Array.isArray(userRecord.name) ? userRecord.name[0] : userRecord.name || undefined,
+          name: Array.isArray(userRecord.name) ? userRecord.name[0] : userRecord.name|| undefined,
           role: 'CLIENT',
           practiceId: userRecord.practiceId!.toString(),
-          companyId: 'default', // TODO: Add companyId to users schema for multi-tenancy
           roles: assignedRoles,
         };
       } else if (userRecord.role === 'VETERINARIAN') {
@@ -193,7 +216,6 @@ export async function GET(request: Request) {
           name: Array.isArray(userRecord.name) ? userRecord.name[0] : userRecord.name || undefined,
           role: 'VETERINARIAN',
           practiceId: userRecord.practiceId!.toString(),
-          companyId: 'default', // TODO: Add companyId to users schema for multi-tenancy
           roles: assignedRoles,
         };
       } else if (userRecord.role === 'PRACTICE_MANAGER') {
@@ -207,7 +229,6 @@ export async function GET(request: Request) {
           name: Array.isArray(userRecord.name) ? userRecord.name[0] : userRecord.name || undefined,
           role: 'PRACTICE_MANAGER',
           practiceId: userRecord.practiceId!.toString(),
-          companyId: 'default', // TODO: Add companyId to users schema for multi-tenancy
           roles: assignedRoles,
         };
       } else {

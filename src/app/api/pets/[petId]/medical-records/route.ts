@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { soapNotes } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function GET(request: Request, context: { params: Promise<{ petId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const params = await context.params;
     const { petId } = params;
@@ -16,7 +21,7 @@ export async function GET(request: Request, context: { params: Promise<{ petId: 
     console.log('Fetching medical records for Pet ID:', petId);
 
     // Query the database for SOAP notes for the given pet
-    const medicalRecords = await db.query.soapNotes.findMany({
+    const medicalRecords = await tenantDb.query.soapNotes.findMany({
       where: (soapNotes, { eq }) => eq(soapNotes.petId, petIdInt),
       with: {
         practitioner: {

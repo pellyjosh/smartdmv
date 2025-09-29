@@ -1,28 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
-import { 
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+import {
   assignRoleToUser, 
   revokeRoleFromUser, 
   getUserAssignedRoles,
   isUserPracticeAdmin,
   isUserSuperAdmin 
 } from '@/lib/rbac/dynamic-roles';
-import { db } from '@/db';
+;
 import { roles } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 // GET /api/user-roles/[userId] - Get user's assigned roles
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { userId } = params;
+    const { userId } = await params;
     const practiceId = userPractice.practiceId ? parseInt(userPractice.practiceId) : undefined;
 
     // Check if current user can view role assignments
@@ -50,15 +54,18 @@ export async function GET(
 // POST /api/user-roles/[userId] - Assign role to user
 export async function POST(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { userId } = params;
+    const { userId } = await params;
     const practiceId = userPractice.practiceId ? parseInt(userPractice.practiceId) : undefined;
 
     // Check if current user can assign roles
@@ -76,7 +83,7 @@ export async function POST(
 
     // If roleName is provided instead of roleId, look up the role
     if (!targetRoleId && roleName) {
-      const role = await db.select().from(roles).where(eq(roles.name, roleName)).limit(1);
+      const role = await tenantDb.select().from(roles).where(eq(roles.name, roleName)).limit(1);
       if (role.length === 0) {
         return NextResponse.json({ error: 'Role not found' }, { status: 404 });
       }
@@ -113,15 +120,18 @@ export async function POST(
 // DELETE /api/user-roles/[userId] - Revoke role from user
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { userId } = params;
+    const { userId } = await params;
     const practiceId = userPractice.practiceId ? parseInt(userPractice.practiceId) : undefined;
 
     // Check if current user can revoke roles
@@ -140,7 +150,7 @@ export async function DELETE(
 
     // If roleName is provided instead of roleId, look up the role
     if (!targetRoleId && roleName) {
-      const role = await db.select().from(roles).where(eq(roles.name, roleName)).limit(1);
+      const role = await tenantDb.select().from(roles).where(eq(roles.name, roleName)).limit(1);
       if (role.length === 0) {
         return NextResponse.json({ error: 'Role not found' }, { status: 404 });
       }

@@ -1,9 +1,14 @@
 // src/app/api/lab-results/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { labResults } from "@/db/schema";
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = new URL(request.url);
     const petId = searchParams.get("petId");
@@ -12,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     if (petId) {
       // Find lab results for a specific pet by joining with lab orders
-      results = await db.query.labResults.findMany({
+      results = await tenantDb.query.labResults.findMany({
         with: {
           order: {
             with: {
@@ -29,7 +34,7 @@ export async function GET(request: NextRequest) {
       // Filter by pet ID from the lab order
       results = results.filter(result => result.order?.petId === parseInt(petId));
     } else {
-      results = await db.query.labResults.findMany({
+      results = await tenantDb.query.labResults.findMany({
         with: {
           order: {
             with: {
@@ -55,11 +60,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     
     // For a simple lab result entry
-    const newLabResult = await db.insert(labResults).values({
+    const newLabResult = await tenantDb.insert(labResults).values({
       labOrderId: body.labOrderId,
       testCatalogId: body.testCatalogId,
       resultDate: new Date(body.resultDate || new Date()),

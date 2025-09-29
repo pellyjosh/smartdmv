@@ -82,6 +82,7 @@ import { useRoles } from "@/hooks/use-roles";
 
 // --- Type Definitions ---
 type AppUserRole =
+  | "SUPER_ADMIN"
   | "ADMINISTRATOR"
   | "PRACTICE_ADMINISTRATOR"
   | "CLIENT"
@@ -148,16 +149,16 @@ const menuGroups: MenuGroup[] = [
     href: "/administrator",
     icon: LayoutDashboard,
     keywords: ["home", "main", "overview", "admin panel"],
-    roles: ["ADMINISTRATOR"],
+    roles: ["SUPER_ADMIN", "ADMINISTRATOR"],
   },
-  {
-    id: "practice-admin-dashboard",
-    title: "Practice Admin Dashboard",
-    href: "/practice-administrator",
-    icon: LayoutDashboard,
-    keywords: ["home", "main", "overview", "practice admin panel"],
-    roles: ["PRACTICE_ADMINISTRATOR", "PRACTICE_ADMIN"],
-  },
+  // {
+  //   id: "practice-admin-dashboard",
+  //   title: "Practice Admin Dashboard",
+  //   href: "/practice-administrator",
+  //   icon: LayoutDashboard,
+  //   keywords: ["home", "main", "overview", "practice admin panel"],
+  //   roles: ["PRACTICE_ADMINISTRATOR", "PRACTICE_ADMIN"],
+  // },
   // {
   //   id: "client-dashboard",
   //   title: "Client Dashboard",
@@ -179,6 +180,7 @@ const menuGroups: MenuGroup[] = [
     title: "Appointments",
     icon: Calendar,
     roles: [
+      "SUPER_ADMIN",
       "ADMINISTRATOR",
       "PRACTICE_ADMIN",
       "PRACTICE_MANAGER",
@@ -192,6 +194,7 @@ const menuGroups: MenuGroup[] = [
         href: "/admin/appointments",
         icon: Calendar,
         roles: [
+          "SUPER_ADMIN",
           "ADMINISTRATOR",
           "PRACTICE_ADMIN",
           "PRACTICE_MANAGER",
@@ -204,14 +207,20 @@ const menuGroups: MenuGroup[] = [
         title: "Appointment Requests",
         href: "/admin/appointment-requests",
         icon: ClipboardCheck,
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "RECEPTIONIST"],
-        marketplaceAddOn: true,
+        roles: [
+          "SUPER_ADMIN",
+          "ADMINISTRATOR",
+          "PRACTICE_ADMIN",
+          "RECEPTIONIST",
+        ],
+        // marketplaceAddOn: true,
       },
       {
         title: "Telemedicine",
         href: "/admin/telemedicine",
         icon: VideoIcon,
         roles: [
+          "SUPER_ADMIN",
           "ADMINISTRATOR",
           "PRACTICE_ADMIN",
           "PRACTICE_MANAGER",
@@ -227,6 +236,7 @@ const menuGroups: MenuGroup[] = [
     title: "Patient Care",
     icon: Users,
     roles: [
+      "SUPER_ADMIN",
       "ADMINISTRATOR",
       "PRACTICE_ADMIN",
       "PRACTICE_MANAGER",
@@ -240,6 +250,7 @@ const menuGroups: MenuGroup[] = [
         href: "/admin/clients",
         icon: Users,
         roles: [
+          "SUPER_ADMIN",
           "ADMINISTRATOR",
           "PRACTICE_ADMIN",
           "PRACTICE_MANAGER",
@@ -576,81 +587,102 @@ const menuGroups: MenuGroup[] = [
     id: "administration",
     title: "Administration",
     icon: Settings,
-    roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
+    roles: [
+      "SUPER_ADMIN",
+      "ADMINISTRATOR",
+      "PRACTICE_ADMIN",
+      "PRACTICE_MANAGER",
+    ],
     items: [
       {
         title: "Marketplace",
         href: "/marketplace",
         icon: ShoppingCart,
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"],
+        roles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN"],
       },
       {
         title: "Website Integration",
         href: "/admin/integration-settings",
         icon: Globe,
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"],
+        roles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN"],
         marketplaceAddOn: true,
       },
       {
         title: "Settings",
         href: "/settings",
         icon: Settings,
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
+        roles: [
+          "SUPER_ADMIN",
+          "ADMINISTRATOR",
+          "PRACTICE_ADMIN",
+          "PRACTICE_MANAGER",
+        ],
       },
       {
         title: "Users & Permissions",
         href: "/admin/users-and-permissions",
         icon: User,
         // Include both legacy and canonical practice admin role names so the link appears for either
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_ADMINISTRATOR"],
+        roles: [
+          "SUPER_ADMIN",
+          "ADMINISTRATOR",
+          "PRACTICE_ADMIN",
+          "PRACTICE_ADMINISTRATOR",
+        ],
       },
       {
         title: "Custom Fields",
         href: "/custom-fields",
         icon: ListFilter,
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"],
+        roles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN"],
       },
       {
         title: "Trash",
         href: "/trash",
         icon: Trash2,
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"],
+        roles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN"],
       },
       {
         title: "Communications",
         href: "/communications-unified",
         icon: Network,
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
+        roles: [
+          "SUPER_ADMIN",
+          "ADMINISTRATOR",
+          "PRACTICE_ADMIN",
+          "PRACTICE_MANAGER",
+        ],
       },
       {
         title: "Practice Admin",
         href: "/practice-admin",
         icon: Building2,
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"],
+        roles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN"],
       },
       {
         title: "Practice Billing",
         href: "/practice-billing",
         icon: Building2,
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"],
+        roles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN"],
       },
       {
         title: "Subscription Plans",
         href: "/subscriptions",
         icon: CircleDollarSign,
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"],
+        roles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN"],
       },
       {
         title: "Payment Gateway",
         href: "/payment-gateway",
         icon: CreditCard,
-        roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"],
+        roles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN"],
       },
       {
         title: "Notifications",
         href: "/notifications",
         icon: Bell,
         roles: [
+          "SUPER_ADMIN",
           "ADMINISTRATOR",
           "PRACTICE_ADMIN",
           "PRACTICE_MANAGER",
@@ -1067,6 +1099,20 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
 
     const userHasAnyRole = (allowedRoles: AppUserRole[] | undefined) => {
       if (!allowedRoles || allowedRoles.length === 0) return false;
+
+      // SUPER_ADMIN has access to everything
+      if (
+        userLegacyRole === "SUPER_ADMIN" ||
+        (Array.isArray(userAssignedRoles) &&
+          userAssignedRoles.some(
+            (r: any) =>
+              (r?.name || "").toString().toUpperCase() === "SUPER_ADMIN" ||
+              (r?.displayName || "").toString().toUpperCase() === "SUPER_ADMIN"
+          ))
+      ) {
+        return true;
+      }
+
       // Check legacy role first
       if (
         userLegacyRole &&

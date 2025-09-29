@@ -1,27 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
-import { db } from '@/db/index';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { dashboardConfigs } from '@/db/schema';
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and, or, isNull } from 'drizzle-orm';
 
 // GET /api/admin/dashboard-configs - Get dashboard configurations for the user
 export async function GET(request: NextRequest) {
   try {
     const userPractice = await getUserPractice(request);
+    console.log('[DASHBOARD_CONFIGS GET] userPractice:', JSON.stringify(userPractice, null, 2));
+    
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get the tenant-specific database
+    const tenantDb = await getCurrentTenantDb();
+
     // Get dashboard configs for the user
-    const configs = await db.query.dashboardConfigs.findMany({
-      where: (dashboardConfigs, { eq, and, or }) => and(
+    const configs = await tenantDb.query.dashboardConfigs.findMany({
+      where: and(
         eq(dashboardConfigs.userId, userPractice.userId),
         or(
           eq(dashboardConfigs.practiceId, userPractice.practiceId),
-          eq(dashboardConfigs.practiceId, null) // Global configs
+          isNull(dashboardConfigs.practiceId) // Global configs
         )
       ),
-      orderBy: (dashboardConfigs, { asc, desc }) => [desc(dashboardConfigs.isDefault), desc(dashboardConfigs.updated_at)]
     });
 
     return NextResponse.json(configs);
@@ -38,9 +42,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const userPractice = await getUserPractice(request);
+    console.log('[DASHBOARD_CONFIGS POST] userPractice:', JSON.stringify(userPractice, null, 2));
+    
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Get the tenant-specific database
+    const tenantDb = await getCurrentTenantDb();
 
     const body = await request.json();
     
@@ -57,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     // If this is being set as default, unset all other defaults for this user/practice
     if (body.isDefault) {
-      await (db as any)
+      await tenantDb
         .update(dashboardConfigs)
         .set({ isDefault: false })
         .where(
@@ -65,14 +74,14 @@ export async function POST(request: NextRequest) {
             eq(dashboardConfigs.userId, userPractice.userId),
             or(
               eq(dashboardConfigs.practiceId, userPractice.practiceId),
-              eq(dashboardConfigs.practiceId, null)
+              isNull(dashboardConfigs.practiceId)
             )
           )
         );
     }
 
     // Insert new config
-    const newConfig = await (db as any)
+    const newConfig = await tenantDb
       .insert(dashboardConfigs)
       .values({
         name: body.name,

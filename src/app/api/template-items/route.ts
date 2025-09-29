@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { and, asc, eq } from 'drizzle-orm';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { and, asc, eq } from 'drizzle-orm';
 import { templateItems, treatmentChecklistTemplates as templates } from '@/db/schema';
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const ctx = await getUserPractice(request);
   if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
   // Verify template belongs to practice
-  const tpl = await db.select().from(templates).where(and(eq(templates.id, Number(body.templateId)), eq(templates.practiceId, Number(ctx.practiceId))));
+  const tpl = await tenantDb.select().from(templates).where(and(eq(templates.id, Number(body.templateId)), eq(templates.practiceId, Number(ctx.practiceId))));
   if (!tpl[0]) return NextResponse.json({ message: 'Template not found' }, { status: 404 });
 
-  const [created] = await db.insert(templateItems).values({
+  const [created] = await tenantDb.insert(templateItems).values({
     templateId: Number(body.templateId),
     title: body.title,
     description: body.description ?? null,
@@ -28,6 +32,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const ctx = await getUserPractice(request);
   if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
@@ -40,7 +47,7 @@ export async function PATCH(request: NextRequest) {
   for (const key of ['title','description','position','isRequired','estimatedDuration','reminderThreshold','assigneeRole']) {
     if (key in body) update[key] = body[key];
   }
-  const [updated] = await db.update(templateItems).set(update).where(eq(templateItems.id, id)).returning();
+  const [updated] = await tenantDb.update(templateItems).set(update).where(eq(templateItems.id, id)).returning();
   if (!updated) return NextResponse.json({ message: 'Not found' }, { status: 404 });
   return NextResponse.json(updated);
 }

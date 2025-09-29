@@ -1,12 +1,15 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { db } from '@/db/index';
+import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { healthPlanMilestones } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { getCurrentUser } from '@/lib/auth-utils';
 import { isPracticeAdministrator, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
 import { createAuditLog } from '@/lib/audit-logger';
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -20,7 +23,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const milestone = await db.query.healthPlanMilestones.findFirst({ where: eq(healthPlanMilestones.id, id) });
+    const milestone = await tenantDb.query.healthPlanMilestones.findFirst({ where: eq(healthPlanMilestones.id, id) });
     if (!milestone) return NextResponse.json({ error: 'Milestone not found' }, { status: 404 });
 
     console.log('Toggle milestone - fetched milestone', {
@@ -32,7 +35,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
     });
 
-    const updated = await db.update(healthPlanMilestones)
+    const updated = await tenantDb.update(healthPlanMilestones)
       .set({ 
         completed: !milestone.completed, 
         completedOn: milestone.completed ? null : new Date(),

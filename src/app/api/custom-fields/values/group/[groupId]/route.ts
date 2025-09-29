@@ -1,6 +1,8 @@
 // /Users/Hubolux/Documents/Project 001/HuboluxJobs/smartdmv_new/src/app/api/custom-fields/values/group/[groupId]/route.ts
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { customFieldValues } from '@/db/schemas/customFieldsSchema';
 import { eq } from 'drizzle-orm';
 
@@ -8,6 +10,9 @@ export async function GET(
   req: Request,
   { params }: { params: { groupId: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { groupId } = await params;
 
@@ -15,7 +20,7 @@ export async function GET(
       return NextResponse.json({ error: 'Group ID is required' }, { status: 400 });
     }
 
-    const values = await db.query.customFieldValues.findMany({
+    const values = await tenantDb.query.customFieldValues.findMany({
       where: eq(customFieldValues.groupId, parseInt(groupId)),
     });
 

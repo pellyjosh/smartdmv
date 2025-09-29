@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { electronicSignatures } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const idStr = request.nextUrl.pathname.split('/').pop();
   const id = idStr ? parseInt(idStr, 10) : NaN;
 
@@ -12,7 +17,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const rows = await db.select().from(electronicSignatures).where(eq(electronicSignatures.id, id));
+    const rows = await tenantDb.select().from(electronicSignatures).where(eq(electronicSignatures.id, id));
     if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const row: any = rows[0];
     const mapped = {
@@ -27,6 +32,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const idStr = request.nextUrl.pathname.split('/').pop();
   const id = idStr ? parseInt(idStr, 10) : NaN;
 
@@ -35,7 +43,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    const [deleted] = await db.delete(electronicSignatures).where(eq(electronicSignatures.id, id)).returning();
+    const [deleted] = await tenantDb.delete(electronicSignatures).where(eq(electronicSignatures.id, id)).returning();
     if (!deleted) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {

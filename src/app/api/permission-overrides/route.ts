@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { users } from '@/db/schema';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
@@ -10,6 +12,9 @@ import { getUserContextFromRequest } from '@/lib/auth-context';
 
 // GET permission overrides for a practice
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = request.nextUrl;
     const practiceId = searchParams.get('practiceId');
@@ -19,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Query database for permission overrides for this practice
-    const results = await db.select().from(permissionOverrides).where(eq(permissionOverrides.practiceId, parseInt(practiceId)));
+    const results = await tenantDb.select().from(permissionOverrides).where(eq(permissionOverrides.practiceId, parseInt(practiceId)));
 
     const overrides = results.map((row: any) => ({
       id: row.id,
@@ -45,6 +50,9 @@ export async function GET(request: NextRequest) {
 
 // POST create permission override
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     
@@ -96,7 +104,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Use returning() to get the DB-generated id
-    const [inserted] = await db.insert(permissionOverrides).values(insertData as any).returning();
+    const [inserted] = await tenantDb.insert(permissionOverrides).values(insertData as any).returning();
     const id = String(inserted.id);
 
     // Create audit log entry (non-blocking)

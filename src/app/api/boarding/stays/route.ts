@@ -1,11 +1,16 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { boardingStays, kennels, pets, users } from "@/db/schema";
 import { eq, and, desc, gte, lte } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { retryWithBackoff, analyzeError } from '@/lib/network-utils';
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const url = new URL(request.url);
   const practiceIdParam = url.searchParams.get('practiceId');
   const status = url.searchParams.get('status');
@@ -57,7 +62,7 @@ export async function GET(request: NextRequest) {
     }
 
     const staysData = await retryWithBackoff(async () => {
-      return await db.query.boardingStays.findMany({
+      return await tenantDb.query.boardingStays.findMany({
         where: whereCondition,
         with: {
           pet: {
@@ -98,6 +103,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     const {
@@ -144,7 +152,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if kennel is available for the requested dates
-    const conflictingStays = await db.query.boardingStays.findMany({
+    const conflictingStays = await tenantDb.query.boardingStays.findMany({
       where: (boardingStays, { eq, and }) => and(
         eq(boardingStays.kennelId, kennelId),
         eq(boardingStays.practiceId, practiceId)
@@ -169,7 +177,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify pet exists and belongs to practice
-    const pet = await db.query.pets.findFirst({
+    const pet = await tenantDb.query.pets.findFirst({
       where: (pets, { eq, and }) => and(
         eq(pets.id, petId),
         eq(pets.practiceId, practiceId) // Both are integers now
@@ -187,7 +195,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify kennel exists and belongs to practice
-    const kennel = await db.query.kennels.findFirst({
+    const kennel = await tenantDb.query.kennels.findFirst({
       where: (kennels, { eq, and }) => and(
         eq(kennels.id, kennelId),
         eq(kennels.practiceId, practiceId), // Use integer since schema expects it
@@ -224,7 +232,7 @@ export async function POST(request: NextRequest) {
     const newStayId = newStayResult[0].id;
 
     // Fetch the complete stay data with relations
-    const completeStay = await db.query.boardingStays.findFirst({
+    const completeStay = await tenantDb.query.boardingStays.findFirst({
       where: (boardingStays, { eq }) => eq(boardingStays.id, newStayId),
       with: {
         pet: {

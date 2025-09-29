@@ -1,10 +1,15 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { users } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -15,7 +20,7 @@ export async function GET(request: NextRequest) {
     console.log('Fetching practitioners for client practice:', user.practiceId);
 
     // Fetch practitioners (veterinarians) from the same practice
-    const practitionersData = await db.query.users.findMany({
+    const practitionersData = await tenantDb.query.users.findMany({
       where: and(
         eq(users.practiceId, Number(user.practiceId)),
         eq(users.role, 'VETERINARIAN')

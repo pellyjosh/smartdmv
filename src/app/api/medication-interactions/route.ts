@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { medicationInteractions, inventory } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { medicationInteractions, inventory } from '@/db/schema';
 import { createAuditLog } from '@/lib/audit-logger';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -15,6 +16,9 @@ const createInteractionSchema = z.object({
 
 // POST /api/medication-interactions - Create a new medication interaction
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -25,7 +29,7 @@ export async function POST(request: NextRequest) {
     const validatedData = createInteractionSchema.parse(body);
 
     // Create the interaction
-    const [newInteraction] = await db.insert(medicationInteractions).values({
+    const [newInteraction] = await tenantDb.insert(medicationInteractions).values({
       medicationAId: validatedData.medicationAId,
       medicationBId: validatedData.medicationBId,
       severity: validatedData.severity,
@@ -58,24 +62,27 @@ export async function POST(request: NextRequest) {
 
 // GET /api/medication-interactions - List all medication interactions for practice
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const interactions = await db.select().from(medicationInteractions)
+    const interactions = await tenantDb.select().from(medicationInteractions)
       .where(eq(medicationInteractions.practiceId, userPractice.practiceId.toString()));
 
     // Get medication names for each interaction
     const interactionsWithNames = await Promise.all(
       interactions.map(async (interaction) => {
-        const medicationA = await db.query.inventory.findFirst({
+        const medicationA = await tenantDb.query.inventory.findFirst({
           where: eq(inventory.id, interaction.medicationAId),
           columns: { id: true, name: true }
         });
         
-        const medicationB = await db.query.inventory.findFirst({
+        const medicationB = await tenantDb.query.inventory.findFirst({
           where: eq(inventory.id, interaction.medicationBId),
           columns: { id: true, name: true }
         });

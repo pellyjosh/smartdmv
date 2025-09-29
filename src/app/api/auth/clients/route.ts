@@ -1,6 +1,8 @@
 // src/app/api/auth/clients/route.ts
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { users, UserRoleEnum } from '@/db/schema'; // Assuming UserRoleEnum is exported from your schema
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
@@ -11,6 +13,9 @@ const getClientsSchema = z.object({
 });
 
 export async function GET(req: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = new URL(req.url);
 
@@ -38,7 +43,7 @@ export async function GET(req: Request) {
     }
 
     // Fetch users with role 'CLIENT' for the given practiceId
-  const clients = await db.query.users.findMany({
+  const clients = await tenantDb.query.users.findMany({
       where: and(
         eq(users.role, UserRoleEnum.CLIENT),
     eq(users.practiceId, practiceIdInt)

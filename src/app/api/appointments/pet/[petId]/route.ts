@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function GET(request: Request, context: { params: Promise<{ petId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const params = await context.params;
   const { petId } = params;
 
@@ -11,7 +16,7 @@ export async function GET(request: Request, context: { params: Promise<{ petId: 
 
   try {
     // Query the database for appointments associated with the pet ID
-    const appointmentsData = await db.query.appointments.findMany({
+    const appointmentsData = await tenantDb.query.appointments.findMany({
       where: (appointments, { eq }) => eq(appointments.petId, petId)
     });
 

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { eq, and } from 'drizzle-orm';
 import { users, UserRoleEnum } from '@/db/schema';
-import { getUserPractice } from '@/lib/auth-utils';
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const ctx = await getUserPractice(request);
     if (!ctx) {
@@ -12,7 +16,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all veterinarians from the practice
-    const vets = await db.select({
+    const vets = await tenantDb.select({
       id: users.id,
       name: users.name,
       email: users.email,

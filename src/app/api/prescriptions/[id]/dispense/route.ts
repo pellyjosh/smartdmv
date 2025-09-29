@@ -1,6 +1,8 @@
 // src/app/api/prescriptions/[id]/dispense/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { prescriptions } from "@/db/schemas/prescriptionsSchema";
 import { inventory } from "@/db/schemas/inventorySchema";
 import { eq } from "drizzle-orm";
@@ -22,6 +24,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const resolvedParams = await params;
     const prescriptionId = parseInt(resolvedParams.id);
@@ -47,7 +52,7 @@ export async function POST(
     const { quantity } = validationResult.data;
 
     // Get the prescription
-    const prescription = await db.query.prescriptions.findFirst({
+    const prescription = await tenantDb.query.prescriptions.findFirst({
       where: eq(prescriptions.id, prescriptionId)
     });
 
@@ -78,7 +83,7 @@ export async function POST(
 
     // If prescription has an inventory item, check and update inventory
     if (prescription.inventoryItemId) {
-      const inventoryItem = await db.query.inventory.findFirst({
+      const inventoryItem = await tenantDb.query.inventory.findFirst({
         where: eq(inventory.id, prescription.inventoryItemId)
       });
 
@@ -92,7 +97,7 @@ export async function POST(
 
         // Update inventory - reduce quantity
         // @ts-ignore
-        await db.update(inventory)
+        await tenantDb.update(inventory)
           .set({ 
             quantity: inventoryItem.quantity - quantity,
             updatedAt: getTimestamp()
@@ -106,7 +111,7 @@ export async function POST(
   const isCompleted = newQuantityDispensed >= Number(prescription.quantityPrescribed);
 
     // @ts-ignore
-    const [updatedPrescription] = await db.update(prescriptions)
+    const [updatedPrescription] = await tenantDb.update(prescriptions)
       .set({ 
   quantityDispensed: String(newQuantityDispensed),
   dateDispensed: getTimestamp(),

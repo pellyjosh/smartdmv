@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { customFieldGroups, customFieldValues } from '@/db/schemas/customFieldsSchema';
 import { practices, integrationApiKeys } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { getUserPractice } from '@/lib/auth-utils';
 
 // GET /api/integration-settings/practice-data - Get practice-specific data for widget configuration (Admin route)
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     // Use admin authentication instead of API key validation
     const userPractice = await getUserPractice(request);
@@ -17,7 +21,7 @@ export async function GET(request: NextRequest) {
     const practiceId = parseInt(userPractice.practiceId);
 
     // Get appointment types from custom fields
-    const appointmentTypesGroup = await db.query.customFieldGroups.findFirst({
+    const appointmentTypesGroup = await tenantDb.query.customFieldGroups.findFirst({
       where: and(
         eq(customFieldGroups.practiceId, practiceId),
         eq(customFieldGroups.key, 'appointment_types')
@@ -34,7 +38,7 @@ export async function GET(request: NextRequest) {
     }> = [];
 
     if (appointmentTypesGroup) {
-      const appointmentTypeValues = await db.query.customFieldValues.findMany({
+      const appointmentTypeValues = await tenantDb.query.customFieldValues.findMany({
         where: eq(customFieldValues.groupId, appointmentTypesGroup.id)
       });
 
@@ -80,7 +84,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get practice information
-    const practice = await db.query.practices.findFirst({
+    const practice = await tenantDb.query.practices.findFirst({
       where: eq(practices.id, practiceId)
     });
 

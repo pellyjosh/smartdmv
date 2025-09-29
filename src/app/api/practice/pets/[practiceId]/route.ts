@@ -2,12 +2,17 @@
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { schema } from '@/db/schema';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ practiceId: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const resolvedParams = await params;
     const { practiceId } = resolvedParams;
@@ -20,7 +25,7 @@ export async function GET(
       );
     }
 
-    const pets = await db.query.pets.findMany({
+    const pets = await tenantDb.query.pets.findMany({
       where: eq(schema.pets.practiceId, practiceId),
     });
 

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { users } from '@/db/schema';
 import { createAuditLogFromRequest, SYSTEM_USER_ID } from '@/lib/audit-logger';
 import { eq } from 'drizzle-orm';
@@ -7,6 +9,9 @@ import bcrypt from 'bcryptjs';
 
 // POST /api/users-with-audit - Create a user with audit logging
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     const { name, email, password, username, role, practiceId, phone, address } = body;
@@ -136,6 +141,9 @@ export async function POST(request: NextRequest) {
 
 // GET /api/users-with-audit - Get users with audit logging
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = new URL(request.url);
     const practiceId = searchParams.get('practiceId');
@@ -154,7 +162,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Fetch users
-    const usersList = await db.select({
+    const usersList = await tenantDb.select({
       id: users.id,
       name: users.name,
       email: users.email,

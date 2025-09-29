@@ -1,7 +1,9 @@
 // src/app/api/appointment-requests/[id]/route.ts
 // (This file handles DELETE for /api/appointment-requests/[id])
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -13,11 +15,14 @@ type Context = {
 
 // DELETE /api/appointment-requests/[id]
 export async function DELETE(req: Request, context: Context) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const params = await context.params;
     const appointmentId = params.id; // ID will be a string (UUID)
 
-    const [deletedAppointment] = await db.delete(appointments).where(eq(appointments.id, appointmentId)).returning();
+    const [deletedAppointment] = await tenantDb.delete(appointments).where(eq(appointments.id, appointmentId)).returning();
 
     if (!deletedAppointment) {
       return NextResponse.json({ error: 'Appointment not found' }, { status: 404 });

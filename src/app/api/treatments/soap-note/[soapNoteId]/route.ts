@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/db/index'
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+
 import { treatments } from '@/db/schema'
 import { eq, desc } from 'drizzle-orm'
 
@@ -9,11 +11,14 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ soapNoteId: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { soapNoteId } = await params
 
     // Use Drizzle ORM query
-    const treatmentList = await db.query.treatments.findMany({
+    const treatmentList = await tenantDb.query.treatments.findMany({
       where: eq(treatments.soapNoteId, parseInt(soapNoteId)),
       orderBy: [desc(treatments.createdAt)]
     });

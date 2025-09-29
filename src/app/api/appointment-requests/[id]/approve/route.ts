@@ -1,6 +1,8 @@
 // src/app/api/appointment-requests/[id]/approve/route.ts
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments, appointmentStatusEnum, users, pets } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { format } from 'date-fns'; // Used for potential logging/return data if needed
@@ -12,6 +14,9 @@ type Context = {
 };
 
 export async function POST(req: Request, context: Context) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const params = await context.params;
     const appointmentIdString = params.id;
@@ -23,7 +28,7 @@ export async function POST(req: Request, context: Context) {
     }
 
     // Find the appointment
-    const appointmentToApprove = await db.query.appointments.findFirst({
+    const appointmentToApprove = await tenantDb.query.appointments.findFirst({
       where: eq(appointments.id, appointmentId),
     });
 
@@ -37,7 +42,7 @@ export async function POST(req: Request, context: Context) {
     }
 
     // Update the appointment status to 'approved'
-    await db.update(appointments)
+    await tenantDb.update(appointments)
       .set({
         status: 'approved',
         updatedAt: new Date(),
@@ -45,7 +50,7 @@ export async function POST(req: Request, context: Context) {
       .where(eq(appointments.id, appointmentId));
     
     // Fetch the updated appointment
-    const updatedAppointment = await db.query.appointments.findFirst({
+    const updatedAppointment = await tenantDb.query.appointments.findFirst({
       where: eq(appointments.id, appointmentId),
     });
 

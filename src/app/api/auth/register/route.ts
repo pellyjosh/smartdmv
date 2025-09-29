@@ -1,6 +1,8 @@
 // src/app/api/auth/register/route.ts
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { users, practices } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -30,6 +32,9 @@ const registerSchema = z.object({
 // Note: this route only handles creation of client users.
 
 export async function POST(req: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   console.log('[API Register START] Received request to /api/auth/register');
   try {
   const body = await req.json();
@@ -58,7 +63,7 @@ export async function POST(req: Request) {
     }
 
     // Check if a user with this email already exists
-    const existingUser = await db.query.users.findFirst({
+    const existingUser = await tenantDb.query.users.findFirst({
       where: eq(users.email, email as string),
     });
 
@@ -68,7 +73,7 @@ export async function POST(req: Request) {
     }
 
     // Check if the provided practiceId exists
-    const practice = await db.query.practices.findFirst({
+    const practice = await tenantDb.query.practices.findFirst({
   where: eq(practices.id, practiceIdInt),
     });
 
@@ -91,7 +96,7 @@ export async function POST(req: Request) {
   practiceId: practiceIdInt as number,
     };
 
-    const [newUser] = await db.insert(users).values(insertData).returning({
+    const [newUser] = await tenantDb.insert(users).values(insertData).returning({
       id: users.id,
       name: users.name,
       email: users.email,

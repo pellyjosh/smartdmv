@@ -1,10 +1,15 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { addons } from "@/db/schema";
 import { isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -13,7 +18,7 @@ export async function GET(request: NextRequest) {
     }
 
     const userRole = Array.isArray(user.role) ? user.role[0] : user.role;
-    const allowedRoles = ['ADMINISTRATOR', 'PRACTICE_ADMIN', 'PRACTICE_ADMINISTRATOR', 'CLIENT'];
+    const allowedRoles = ['ADMINISTRATOR', 'PRACTICE_ADMIN', 'PRACTICE_ADMINISTRATOR', 'CLIENT', 'SUPER_ADMIN'];
     
     if (!allowedRoles.includes(userRole)) {
       return NextResponse.json({ error: 'Unauthorized. Admin or client access required.' }, { status: 401 });
@@ -22,7 +27,7 @@ export async function GET(request: NextRequest) {
     console.log('Fetching marketplace addons');
 
     // Fetch all available addons
-    const addonsData = await db.query.addons.findMany({
+    const addonsData = await tenantDb.query.addons.findMany({
       orderBy: (addons, { asc, desc }) => [desc(addons.isPopular), asc(addons.name)]
     });
 

@@ -1,6 +1,8 @@
 // src/app/api/widget/availability/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments } from '@/db/schemas/appointmentsSchema';
 import { integrationApiKeys } from '@/db/schema';
 import { eq, and, gte, lte, sql } from 'drizzle-orm';
@@ -27,7 +29,7 @@ async function validateApiKey(apiKey: string, practiceId: number): Promise<boole
   try {
     const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
     
-    const keyRecord = await db.query.integrationApiKeys.findFirst({
+    const keyRecord = await tenantDb.query.integrationApiKeys.findFirst({
       where: and(
         eq(integrationApiKeys.practiceId, practiceId),
         eq(integrationApiKeys.keyHash, keyHash),
@@ -43,6 +45,9 @@ async function validateApiKey(apiKey: string, practiceId: number): Promise<boole
 }
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const practiceId = searchParams.get('practiceId');

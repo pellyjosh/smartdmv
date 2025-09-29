@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { practices } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { practices } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 // GET /api/practices/[practiceId] - Get a specific practice
 export async function GET(request: NextRequest, { params }: { params: Promise<{ practiceId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -26,7 +30,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }
     }
 
-    const practice = await db.query.practices.findFirst({
+    const practice = await tenantDb.query.practices.findFirst({
       where: eq(practices.id, parseInt(practiceId, 10)),
     });
 

@@ -1,13 +1,19 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { practiceAddons } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-utils";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { practiceId: string } }
+  { params }: { params: Promise<{ practiceId: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -16,13 +22,13 @@ export async function POST(
     }
 
     const userRole = Array.isArray(user.role) ? user.role[0] : user.role;
-    const allowedRoles = ['ADMINISTRATOR', 'PRACTICE_ADMIN', 'PRACTICE_ADMINISTRATOR'];
+    const allowedRoles = ['ADMINISTRATOR', 'PRACTICE_ADMIN', 'PRACTICE_ADMINISTRATOR', 'SUPER_ADMIN'];
     
     if (!allowedRoles.includes(userRole)) {
       return NextResponse.json({ error: 'Unauthorized. Admin access required to manage subscriptions.' }, { status: 401 });
     }
 
-    const practiceId = parseInt(params.practiceId);
+    const practiceId = parseInt(resolvedParams.practiceId);
     
     if (!practiceId || isNaN(practiceId)) {
       return NextResponse.json({ error: 'Invalid practice ID.' }, { status: 400 });
@@ -52,7 +58,7 @@ export async function POST(
     }
 
     // Find the active subscription
-    const subscription = await db.query.practiceAddons.findFirst({
+    const subscription = await tenantDb.query.practiceAddons.findFirst({
       where: and(
         eq(practiceAddons.practiceId, practiceId),
         eq(practiceAddons.addonId, addonId),
@@ -65,7 +71,7 @@ export async function POST(
     }
 
     // Cancel the subscription by setting isActive to false and updating status
-    await db.update(practiceAddons)
+    await tenantDb.update(practiceAddons)
       .set({
         isActive: false,
         paymentStatus: 'CANCELLED',

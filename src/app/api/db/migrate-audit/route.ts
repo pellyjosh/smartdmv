@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { sql } from 'drizzle-orm';
 
 // POST /api/db/migrate-audit - Create the audit_logs table if it doesn't exist
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     // Check if the audit_logs table exists
-    const tableExistsResult = await db.execute(
+    const tableExistsResult = await tenantDb.execute(
       sql`SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
@@ -24,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the audit_logs table
-    await db.execute(sql`
+    await tenantDb.execute(sql`
       CREATE TABLE "audit_logs" (
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
         "timestamp" timestamp DEFAULT now() NOT NULL,
@@ -46,13 +51,13 @@ export async function POST(request: NextRequest) {
     `);
 
     // Create indexes for better query performance
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)`);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)`);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)`);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_record_type ON audit_logs(record_type)`);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_practice_id ON audit_logs(practice_id)`);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_record_id ON audit_logs(record_id)`);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_compound ON audit_logs(record_type, action, timestamp DESC)`);
+    await tenantDb.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)`);
+    await tenantDb.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)`);
+    await tenantDb.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)`);
+    await tenantDb.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_record_type ON audit_logs(record_type)`);
+    await tenantDb.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_practice_id ON audit_logs(practice_id)`);
+    await tenantDb.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_record_id ON audit_logs(record_id)`);
+    await tenantDb.execute(sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_compound ON audit_logs(record_type, action, timestamp DESC)`);
 
     return NextResponse.json({
       message: 'audit_logs table created successfully with indexes',
@@ -73,8 +78,11 @@ export async function POST(request: NextRequest) {
 
 // GET /api/db/migrate-audit - Check if the audit_logs table exists
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
-    const tableExistsResult = await db.execute(
+    const tableExistsResult = await tenantDb.execute(
       sql`SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
@@ -87,7 +95,7 @@ export async function GET(request: NextRequest) {
     // If table exists, also check the count
     let count = 0;
     if (tableExists) {
-      const countResult = await db.execute(sql`SELECT COUNT(*) as count FROM audit_logs`);
+      const countResult = await tenantDb.execute(sql`SELECT COUNT(*) as count FROM audit_logs`);
       count = Number(countResult.rows[0]?.count || 0);
     }
 

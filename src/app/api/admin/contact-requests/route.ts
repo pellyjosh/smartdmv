@@ -1,21 +1,26 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { contacts, users, pets } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
-    if (!user || (user.role !== "ADMINISTRATOR" && user.role !== "VETERINARIAN")) {
+    if (!user || (user.role !== "ADMINISTRATOR" && user.role !== "SUPER_ADMIN" && user.role !== "VETERINARIAN")) {
       return NextResponse.json({ error: 'Unauthorized. Administrator or veterinarian access required.' }, { status: 401 });
     }
 
     console.log('Fetching contact requests for practice:', user.practiceId);
 
     // Fetch contacts from the new contacts table
-    const contactRequestsData = await db.query.contacts.findMany({
+    const contactRequestsData = await tenantDb.query.contacts.findMany({
       where: eq(contacts.practiceId, parseInt(user.practiceId!)),
       with: {
         sender: {

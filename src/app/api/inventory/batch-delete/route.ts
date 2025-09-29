@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { inventory } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { inventory } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -11,6 +12,9 @@ const batchDeleteSchema = z.object({
 
 // DELETE /api/inventory/batch-delete - Delete multiple inventory items
 export async function DELETE(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {

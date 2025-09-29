@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { labResults, labOrders, labTestCatalog, pets } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { petId: string } }
+  { params }: { params: Promise<{ petId: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
-    const petIdString = params.petId;
+    const petIdString = resolvedParams.petId;
     if (!petIdString) {
       return NextResponse.json({ error: "Pet ID is required" }, { status: 400 });
     }
@@ -19,7 +25,7 @@ export async function GET(
     }
 
         // First check if the pet exists
-    const pet = await db.query.pets.findFirst({
+    const pet = await tenantDb.query.pets.findFirst({
       where: eq(pets.id, petId)
     });
     if (!pet) {
@@ -28,7 +34,7 @@ export async function GET(
 
     // Fetch lab results for the pet by using the correct table structure
     // We need to query through labOrders since that's where petId is stored
-    const labOrdersForPet = await db.query.labOrders.findMany({
+    const labOrdersForPet = await tenantDb.query.labOrders.findMany({
       where: eq(labOrders.petId, petId),
       with: {
         results: {

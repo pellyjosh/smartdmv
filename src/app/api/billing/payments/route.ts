@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { payments, invoices, paymentMethods } from '@/db/schema';
-import { getCurrentUser } from '@/lib/auth-utils';
 import { createAuditLog } from '@/lib/audit-logger';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { z } from 'zod';
 
 // GET /api/billing/payments - Get payment history for current client
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -29,7 +32,7 @@ export async function GET(request: NextRequest) {
       whereConditions.push(eq(payments.status, status as any));
     }
 
-    const userPayments = await db.query.payments.findMany({
+    const userPayments = await tenantDb.query.payments.findMany({
       where: and(...whereConditions),
       with: {
         invoice: {
@@ -69,6 +72,9 @@ const createPaymentSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -94,7 +100,7 @@ export async function POST(request: NextRequest) {
     const { invoiceId, amount, paymentMethod, cardDetails, notes } = validationResult.data;
 
     // Verify the invoice belongs to the current user
-    const invoice = await db.query.invoices.findFirst({
+    const invoice = await tenantDb.query.invoices.findFirst({
       where: and(
         eq(invoices.id, Number(invoiceId)),
         eq(invoices.clientId, user.id)
@@ -117,7 +123,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate payment number
-    const [paymentCountResult] = await db.select({ count: count() }).from(payments).where(eq(payments.practiceId, user.practiceId!));
+    const [paymentCountResult] = await tenantDb.select({ count: count() }).from(payments).where(eq(payments.practiceId, user.practiceId!));
     const paymentNumber = `PAY-${new Date().getFullYear()}-${String((paymentCountResult?.count || 0) + 1).padStart(4, '0')}`;
 
     // Process payment (in a real app, this would integrate with Stripe, PayPal, etc.)
@@ -153,11 +159,11 @@ export async function POST(request: NextRequest) {
       notes: (notes as string) || null,
     };
 
-    const [newPayment] = await db.insert(payments).values(paymentData).returning();
+    const [newPayment] = await tenantDb.insert(payments).values(paymentData).returning();
 
     // Update invoice status to paid if payment amount covers the full invoice
     if (Number(amount) >= parseFloat(invoice.totalAmount)) {
-      await db.update(invoices)
+      await tenantDb.update(invoices)
         .set({ 
           status: 'paid', 
           paidDate: new Date() 

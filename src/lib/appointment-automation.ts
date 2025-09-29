@@ -1,4 +1,4 @@
-import { db } from "@/db/index";
+import { getCurrentTenantDb } from "@/lib/tenant-db-resolver";
 import { appointments, notifications } from "@/db/schema";
 import { eq, and, lt } from "drizzle-orm";
 
@@ -60,6 +60,9 @@ export class AppointmentAutomationService {
    */
   async checkMissedAppointments(): Promise<void> {
     try {
+      // Get the tenant-specific database
+      const db = await getCurrentTenantDb();
+      
       const now = new Date();
       const cutoffTime = new Date(now.getTime() - (30 * 60 * 1000)); // 30 minutes grace period
       
@@ -127,6 +130,9 @@ export class AppointmentAutomationService {
    * Update a specific appointment to no-show status and send notifications
    */
   private async updateAppointmentToNoShow(appointment: any): Promise<void> {
+    // Get the tenant-specific database
+    const db = await getCurrentTenantDb();
+    
     const appointmentDate = new Date(appointment.date);
     
     // Update appointment status
@@ -153,6 +159,9 @@ export class AppointmentAutomationService {
    * Send notifications about no-show appointments
    */
   private async sendNoShowNotifications(appointment: any): Promise<void> {
+    // Get the tenant-specific database
+    const db = await getCurrentTenantDb();
+    
     const appointmentDate = new Date(appointment.date);
     
     // Find all admin and practitioner users in the same practice
@@ -169,7 +178,7 @@ export class AppointmentAutomationService {
       }
     });
 
-    const adminAndPractitionerUsers = practiceUsers.filter(user => 
+    const adminAndPractitionerUsers = practiceUsers.filter((user: any) => 
       user.role === 'ADMIN' || 
       user.role === 'PRACTICE_OWNER' || 
       user.role === 'VETERINARIAN' || 
@@ -212,7 +221,7 @@ export class AppointmentAutomationService {
       console.error('Manual check failed:', error);
       return {
         updated: 0,
-        message: `Manual check failed: ${error.message}`
+        message: `Manual check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
   }
@@ -221,6 +230,9 @@ export class AppointmentAutomationService {
    * Get count of appointments that should be marked as no-show
    */
   private async getMissedAppointmentsCount(): Promise<number> {
+    // Get the tenant-specific database
+    const db = await getCurrentTenantDb();
+    
     const now = new Date();
     const cutoffTime = new Date(now.getTime() - (30 * 60 * 1000)); // 30 minutes grace period
     

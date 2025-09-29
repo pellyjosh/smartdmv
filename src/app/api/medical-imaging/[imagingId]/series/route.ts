@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
-import { db } from "@/db";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function GET(request: Request, context: { params: Promise<{ imagingId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const params = await context.params;
   const { imagingId } = params;
 
@@ -21,6 +26,9 @@ export async function GET(request: Request, context: { params: Promise<{ imaging
 }
 
 export async function POST(request: Request, context: { params: Promise<{ imagingId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const params = await context.params;
   const { imagingId } = params;
 

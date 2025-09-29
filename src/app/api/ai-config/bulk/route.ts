@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { aiConfigs, administratorAccessiblePractices } from '@/db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
@@ -23,6 +25,9 @@ const encrypt = (text: string): string => {
 };
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     const validatedData = bulkAiConfigSchema.parse(body);

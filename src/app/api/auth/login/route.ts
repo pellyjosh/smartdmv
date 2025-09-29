@@ -3,11 +3,28 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/db';
+import { getCurrentTenantDb, isCurrentRequestTenant } from '@/lib/tenant-db-resolver';
 import { sessions as sessionsTable } from '@/db/schema';
 import { cookies } from 'next/headers';
 import { loginUserAction } from '@/actions/authActions';
 import type { User } from '@/context/UserContext';
 import { HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from '@/config/authConstants';
+import { randomUUID } from 'crypto';
+
+/**
+ * Get the appropriate database instance based on current request context
+ */
+async function getContextualDb() {
+  const isTenant = await isCurrentRequestTenant();
+  
+  if (isTenant) {
+    console.log('[AUTH_API] Using tenant-specific database');
+    return await getCurrentTenantDb();
+  } else {
+    console.log('[AUTH_API] Using default database (likely for development/fallback)');
+    return db;
+  }
+}
 
 const SignInSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -30,13 +47,16 @@ export async function POST(request: Request) {
     const userData = await loginUserAction(email, inputPassword);
 
     // If loginUserAction is successful, userData is populated.
+    // Get the appropriate database for session management
+    const contextualDb = await getContextualDb();
+    
     // Session management
-    const sessionTokenValue = crypto.randomUUID(); // This will be used as the session ID
+    const sessionTokenValue = randomUUID(); // This will be used as the session ID
     const sessionExpiresAtDate = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000);
     const isSqlite = process.env.DB_TYPE === 'sqlite';
 
-    // Insert session with the UUID as the ID
-    await (db as any).insert(sessionsTable).values({
+    // Insert session with the UUID as the ID into the tenant-specific database
+    await contextualDb.insert(sessionsTable).values({
       id: sessionTokenValue, // Use the UUID as the session ID
       userId: userData.id,
       expiresAt: isSqlite ? sessionExpiresAtDate.getTime() : sessionExpiresAtDate,
@@ -45,7 +65,7 @@ export async function POST(request: Request) {
     });
 
     const sessionId = sessionTokenValue;
-    console.log('Session created successfully for user:', userData.id, 'with session ID:', sessionId);
+    console.log('[AUTH_API] Session created successfully for user:', userData.id, 'with session ID:', sessionId);
 
     const cookieStore = await cookies();
     cookieStore.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, sessionId.toString(), {

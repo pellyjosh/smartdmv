@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { eq, and, inArray } from 'drizzle-orm';
 import { users, UserRoleEnum } from '@/db/schema';
-import { getUserPractice } from '@/lib/auth-utils';
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const ctx = await getUserPractice(request);
   if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
@@ -20,7 +24,7 @@ export async function GET(request: NextRequest) {
     UserRoleEnum.OFFICE_MANAGER,
   ];
 
-  const rows = await db.select().from(users)
+  const rows = await tenantDb.select().from(users)
     .where(and(eq(users.practiceId, Number(ctx.practiceId)), inArray(users.role as any, staffRoles as any)));
 
   return NextResponse.json(rows.map(u => {

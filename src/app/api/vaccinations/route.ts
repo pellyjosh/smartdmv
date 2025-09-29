@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { vaccinations, vaccineTypes, pets, users } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { vaccinations, vaccineTypes, pets, users } from '@/db/schema';
 import { eq, and, desc, gte, lte } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -29,6 +30,9 @@ type CreateVaccinationData = z.infer<typeof createVaccinationSchema>;
 
 // GET /api/vaccinations - Get vaccinations for practice
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -52,7 +56,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Query vaccinations with related data
-    const result = await db.query.vaccinations.findMany({
+    const result = await tenantDb.query.vaccinations.findMany({
       where: and(...conditions),
       orderBy: desc(vaccinations.administrationDate),
       with: {
@@ -93,6 +97,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/vaccinations - Create new vaccination record
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -109,7 +116,7 @@ export async function POST(request: NextRequest) {
     const validatedData = createVaccinationSchema.parse(body) as CreateVaccinationData;
 
     // Check if pet belongs to the practice
-    const pet = await db.query.pets.findFirst({
+    const pet = await tenantDb.query.pets.findFirst({
       where: and(
         eq(pets.id, Number(validatedData.petId)),
         eq(pets.practiceId, parseInt(userPractice.practiceId.toString()))
@@ -125,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     // Validate vaccine type if provided
     if (validatedData.vaccineTypeId) {
-      const vaccineType = await db.query.vaccineTypes.findFirst({
+      const vaccineType = await tenantDb.query.vaccineTypes.findFirst({
         where: and(
           eq(vaccineTypes.id, Number(validatedData.vaccineTypeId)),
           eq(vaccineTypes.practiceId, parseInt(userPractice.practiceId.toString()))
@@ -161,10 +168,10 @@ export async function POST(request: NextRequest) {
       notes: validatedData.notes ? String(validatedData.notes) : null,
     };
 
-    const [newVaccination] = await db.insert(vaccinations).values(insertData).returning();
+    const [newVaccination] = await tenantDb.insert(vaccinations).values(insertData).returning();
 
     // Fetch the complete vaccination record with relations
-    const completeVaccination = await db.query.vaccinations.findFirst({
+    const completeVaccination = await tenantDb.query.vaccinations.findFirst({
       where: eq(vaccinations.id, newVaccination.id),
       with: {
         pet: {

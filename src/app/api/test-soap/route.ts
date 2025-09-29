@@ -1,12 +1,17 @@
 // src/app/api/test-soap/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { soapNotes } from "@/db/schemas/soapNoteSchema";
 import { pets } from "@/db/schemas/petsSchema";
 import { appointments } from "@/db/schemas/appointmentsSchema";
 import { users } from "@/db/schemas/usersSchema";
 
 export async function POST(request: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const data = await request.json();
     
@@ -21,7 +26,7 @@ export async function POST(request: Request) {
     }
     
     // Check if pet exists
-    const pet = await db.query.pets.findFirst({
+    const pet = await tenantDb.query.pets.findFirst({
       where: (pets, { eq }) => eq(pets.id, data.petId)
     });
     
@@ -33,7 +38,7 @@ export async function POST(request: Request) {
     }
     
     // Check if practitioner exists
-    const practitioner = await db.query.users.findFirst({
+    const practitioner = await tenantDb.query.users.findFirst({
       where: (users, { eq }) => eq(users.id, data.practitionerId)
     });
     
@@ -46,7 +51,7 @@ export async function POST(request: Request) {
     
     // Create test SOAP note
     // @ts-ignore
-    const [newSoapNote] = await db.insert(soapNotes).values({
+    const [newSoapNote] = await tenantDb.insert(soapNotes).values({
       petId: data.petId,
       practitionerId: data.practitionerId,
       appointmentId: data.appointmentId || null,
@@ -77,16 +82,19 @@ export async function POST(request: Request) {
 
 // GET endpoint to check available pets and users
 export async function GET() {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
-    const allPets = await db.query.pets.findMany({
+    const allPets = await tenantDb.query.pets.findMany({
       limit: 5
     });
     
-    const allUsers = await db.query.users.findMany({
+    const allUsers = await tenantDb.query.users.findMany({
       limit: 5
     });
     
-    const allAppointments = await db.query.appointments.findMany({
+    const allAppointments = await tenantDb.query.appointments.findMany({
       limit: 5
     });
     

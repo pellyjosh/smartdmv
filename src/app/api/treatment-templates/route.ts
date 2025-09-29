@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { and, desc, eq } from 'drizzle-orm';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { and, desc, eq } from 'drizzle-orm';
 import { treatmentChecklistTemplates as templates, users } from '@/db/schema';
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const ctx = await getUserPractice(request);
   if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
-  const rows = await db.select({
+  const rows = await tenantDb.select({
     id: templates.id,
     practiceId: templates.practiceId,
     name: templates.name,
@@ -35,6 +39,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const ctx = await getUserPractice(request);
   if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
@@ -48,6 +55,6 @@ export async function POST(request: NextRequest) {
     autoAssignToDiagnosis: body.autoAssignToDiagnosis ?? null,
     createdById: Number(ctx.userId),
   } as any;
-  const [created] = await db.insert(templates).values(insert).returning();
+  const [created] = await tenantDb.insert(templates).values(insert).returning();
   return NextResponse.json(created, { status: 201 });
 }

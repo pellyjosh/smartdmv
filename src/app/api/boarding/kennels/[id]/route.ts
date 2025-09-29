@@ -1,5 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { kennels } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { retryWithBackoff, analyzeError } from '@/lib/network-utils';
@@ -8,6 +10,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const { id: idParam } = await params;
 
   if (!idParam) {
@@ -28,7 +33,7 @@ export async function GET(
 
   try {
     const kennel = await retryWithBackoff(async () => {
-      return await db.query.kennels.findFirst({
+      return await tenantDb.query.kennels.findFirst({
         where: (kennels, { eq }) => eq(kennels.id, id),
         with: {
           boardingStays: {
@@ -82,6 +87,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const { id: idParam } = await params;
 
   if (!idParam) {
@@ -136,7 +144,7 @@ export async function PATCH(
 
     // Fetch the complete updated kennel data with relations
     const completeKennel = await retryWithBackoff(async () => {
-      return await db.query.kennels.findFirst({
+      return await tenantDb.query.kennels.findFirst({
         where: (kennels, { eq }) => eq(kennels.id, id),
         with: {
           boardingStays: {
@@ -183,6 +191,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const { id: idParam } = await params;
 
   if (!idParam) {
@@ -204,7 +215,7 @@ export async function DELETE(
   try {
     // Check if the kennel exists and has any active boarding stays
     const existingKennel = await retryWithBackoff(async () => {
-      return await db.query.kennels.findFirst({
+      return await tenantDb.query.kennels.findFirst({
         where: (kennels, { eq }) => eq(kennels.id, id),
         with: {
           boardingStays: {

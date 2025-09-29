@@ -1,24 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { vaccinations } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { vaccinations } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 
 // GET /api/vaccinations/[id] - Get a specific vaccination record
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const vaccinationId = parseInt(params.id);
+    const vaccinationId = parseInt(resolvedParams.id);
 
     // Query vaccination with related data
-    const vaccination = await db.query.vaccinations.findFirst({
+    const vaccination = await tenantDb.query.vaccinations.findFirst({
       where: and(
         eq(vaccinations.id, vaccinationId),
         eq(vaccinations.practiceId, parseInt(userPractice.practiceId))
@@ -87,19 +92,23 @@ export async function GET(
 // PUT /api/vaccinations/[id] - Update a vaccination record
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const vaccinationId = parseInt(params.id);
+    const vaccinationId = parseInt(resolvedParams.id);
     const body = await request.json();
 
     // Check if vaccination exists and belongs to the practice
-    const existingVaccination = await db.query.vaccinations.findFirst({
+    const existingVaccination = await tenantDb.query.vaccinations.findFirst({
       where: and(
         eq(vaccinations.id, vaccinationId),
         eq(vaccinations.practiceId, parseInt(userPractice.practiceId))
@@ -126,7 +135,7 @@ export async function PUT(
       .returning();
 
     // Fetch the complete updated vaccination record
-    const completeVaccination = await db.query.vaccinations.findFirst({
+    const completeVaccination = await tenantDb.query.vaccinations.findFirst({
       where: eq(vaccinations.id, updatedVaccination.id),
       with: {
         pet: {
@@ -167,18 +176,22 @@ export async function PUT(
 // DELETE /api/vaccinations/[id] - Delete a vaccination record
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const vaccinationId = parseInt(params.id);
+    const vaccinationId = parseInt(resolvedParams.id);
 
     // Check if vaccination exists and belongs to the practice
-    const existingVaccination = await db.query.vaccinations.findFirst({
+    const existingVaccination = await tenantDb.query.vaccinations.findFirst({
       where: and(
         eq(vaccinations.id, vaccinationId),
         eq(vaccinations.practiceId, parseInt(userPractice.practiceId))
@@ -193,7 +206,7 @@ export async function DELETE(
     }
 
     // Delete vaccination record
-    await db.delete(vaccinations).where(eq(vaccinations.id, vaccinationId));
+    await tenantDb.delete(vaccinations).where(eq(vaccinations.id, vaccinationId));
 
     return NextResponse.json({ message: 'Vaccination record deleted successfully' });
   } catch (error) {

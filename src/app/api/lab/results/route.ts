@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
-import { db } from '@/db';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { labResults, labOrders, labTestCatalog, labProviderSettings } from '@/db/schemas/labSchema';
 import { eq, and, desc } from 'drizzle-orm';
 import { z } from 'zod';
@@ -24,6 +25,9 @@ const labResultSchema = z.object({
 
 // GET /api/lab/results - Get all lab results
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -96,6 +100,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/lab/results - Create a new lab result
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -128,6 +135,9 @@ export async function POST(request: NextRequest) {
 
 // PUT /api/lab/results - Update a lab result
 export async function PUT(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {

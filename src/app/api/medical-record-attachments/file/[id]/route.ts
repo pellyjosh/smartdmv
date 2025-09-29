@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
-import { db } from '@/db/index'
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+
 import { medicalRecordAttachments } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 
@@ -12,6 +14,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { id } = await params;
     const attachmentId = parseInt(id, 10);
@@ -33,7 +38,7 @@ export async function GET(
       `, [attachmentId]);
     } else {
       // PostgreSQL using Drizzle ORM
-      const result = await db.query.medicalRecordAttachments.findFirst({
+      const result = await tenantDb.query.medicalRecordAttachments.findFirst({
         where: eq(medicalRecordAttachments.id, attachmentId)
       });
       attachment = result;

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
-import { 
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+import {
   createPermissionOverride,
   getUserPermissionOverrides,
   isUserPracticeAdmin,
   isUserSuperAdmin 
 } from '@/lib/rbac/dynamic-roles';
-import { db } from '@/db';
 import { permissionOverrides } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 
@@ -15,6 +15,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { userId: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -52,6 +55,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { userId: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -128,6 +134,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { userId: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -176,7 +185,7 @@ export async function DELETE(
       );
     }
 
-    await db
+    await tenantDb
       .update(permissionOverrides)
       .set({ 
         status: 'revoked'

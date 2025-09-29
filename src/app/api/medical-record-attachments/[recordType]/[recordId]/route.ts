@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/db/index'
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+
 import { medicalRecordAttachments } from '@/db/schema'
 import { and, eq, desc } from 'drizzle-orm'
 
@@ -9,11 +11,14 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ recordType: string; recordId: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { recordType, recordId } = await params;
     
     // Use Drizzle ORM query
-    const attachments = await db.query.medicalRecordAttachments.findMany({
+    const attachments = await tenantDb.query.medicalRecordAttachments.findMany({
       where: and(
         eq(medicalRecordAttachments.recordType, recordType),
         eq(medicalRecordAttachments.recordId, recordId)

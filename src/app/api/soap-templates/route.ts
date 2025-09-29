@@ -1,6 +1,8 @@
 // src/app/api/soap-templates/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { soapTemplates } from "@/db/schemas/soapNoteTemplateSchema";
 import { z } from "zod";
 import { eq, desc, and, like } from "drizzle-orm";
@@ -75,7 +77,7 @@ const getHandler = async (request: Request) => {
     queryOptions.limit = parseInt(limit);
   }
 
-  const templates = await db.query.soapTemplates.findMany(queryOptions);
+  const templates = await tenantDb.query.soapTemplates.findMany(queryOptions);
   
   // Filter by species if provided (since species is stored as array)
   let filteredTemplates = templates;
@@ -110,7 +112,7 @@ const postHandler = async (request: Request) => {
   
   // Insert into database, disregarding TypeScript errors as per project pattern
   // @ts-ignore
-  const [newTemplate] = await db.insert(soapTemplates).values({
+  const [newTemplate] = await tenantDb.insert(soapTemplates).values({
     name: validatedData.name,
     description: validatedData.description,
     category: validatedData.category,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
-import { db } from '@/db';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { labOrders, labOrderTests, labTestCatalog } from '@/db/schemas/labSchema';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
@@ -30,6 +31,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -44,7 +48,7 @@ export async function GET(
     }
 
     // Get the order with its tests
-    const order = await db.query.labOrders.findFirst({
+    const order = await tenantDb.query.labOrders.findFirst({
       where: and(
         eq(labOrders.id, orderId),
         eq(labOrders.practiceId, userPractice.practiceId)
@@ -56,7 +60,7 @@ export async function GET(
     }
 
     // Get the tests for this order using query API
-    const orderTests = await db.query.labOrderTests.findMany({
+    const orderTests = await tenantDb.query.labOrderTests.findMany({
       where: eq(labOrderTests.labOrderId, orderId),
       with: {
         testCatalog: true,
@@ -88,6 +92,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -105,7 +112,7 @@ export async function PUT(
     const validated = labOrderUpdateSchema.parse(body);
 
     // Check if order exists and belongs to the practice using query API
-    const existingOrder = await db.query.labOrders.findFirst({
+    const existingOrder = await tenantDb.query.labOrders.findFirst({
       where: and(
         eq(labOrders.id, orderId),
         eq(labOrders.practiceId, userPractice.practiceId)
@@ -156,7 +163,7 @@ export async function PUT(
           status: 'ordered' as const,
         }));
 
-        await db.insert(labOrderTests).values(orderTests);
+        await tenantDb.insert(labOrderTests).values(orderTests);
       }
     }
 
@@ -175,6 +182,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -189,7 +199,7 @@ export async function DELETE(
     }
 
     // Check if order exists and belongs to the practice using query API
-    const existingOrder = await db.query.labOrders.findFirst({
+    const existingOrder = await tenantDb.query.labOrders.findFirst({
       where: and(
         eq(labOrders.id, orderId),
         eq(labOrders.practiceId, userPractice.practiceId)

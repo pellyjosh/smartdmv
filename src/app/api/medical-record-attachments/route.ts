@@ -3,13 +3,18 @@ import path from "path";
 import fs from "fs/promises";
 import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
-import { db } from '@/db/index'
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+
 import { medicalRecordAttachments, practices, soapNotes, pets } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 
 const isSqlite = process.env.DB_TYPE === 'sqlite'
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
@@ -48,7 +53,7 @@ export async function POST(request: NextRequest) {
             practiceFolder = String(practiceResult.name).replace(/[^a-zA-Z0-9\s-_]/g, '').replace(/\s+/g, '_');
           }
         } else {
-          const practiceResult = await db.query.practices.findFirst({
+          const practiceResult = await tenantDb.query.practices.findFirst({
             where: eq(practices.id, parseInt(practiceId, 10)),
             columns: {
               name: true,
@@ -83,7 +88,7 @@ export async function POST(request: NextRequest) {
             SELECT petId FROM soap_notes WHERE id = ?
           `, [parseInt(recordId, 10)]);
         } else {
-          const soapNoteResult = await db.query.soapNotes.findFirst({
+          const soapNoteResult = await tenantDb.query.soapNotes.findFirst({
             where: eq(soapNotes.id, parseInt(recordId, 10)),
             columns: {
               petId: true,
@@ -100,7 +105,7 @@ export async function POST(request: NextRequest) {
               SELECT name FROM pets WHERE id = ?
             `, [parseInt(soapNote.petId.toString(), 10)]);
           } else {
-            const petResult = await db.query.pets.findFirst({
+            const petResult = await tenantDb.query.pets.findFirst({
               where: eq(pets.id, parseInt(soapNote.petId.toString(), 10)),
               columns: {
                 name: true,
@@ -172,7 +177,7 @@ export async function POST(request: NextRequest) {
         } else {
           // PostgreSQL implementation using Drizzle ORM
           // @ts-ignore - Drizzle ORM type issue with multi-database support
-          const [createdAttachment] = await db.insert(medicalRecordAttachments).values({
+          const [createdAttachment] = await tenantDb.insert(medicalRecordAttachments).values({
             fileName: file.name,
             fileType: file.type,
             fileSize: file.size,

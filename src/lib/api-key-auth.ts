@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { db } from '@/db';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { integrationApiKeys } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import crypto from 'crypto';
@@ -13,6 +13,9 @@ export interface ApiKeyValidationResult {
 
 export async function validateApiKey(request: NextRequest): Promise<ApiKeyValidationResult> {
   try {
+    // Get the tenant-specific database
+    const db = await getCurrentTenantDb();
+    
     const authHeader = request.headers.get('authorization');
     const practiceIdHeader = request.headers.get('x-practice-id');
     

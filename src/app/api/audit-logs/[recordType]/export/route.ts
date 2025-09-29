@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { auditLogs, type AuditLog } from '@/db/schema';
 import { and, eq, gte, lte, ilike, desc } from 'drizzle-orm';
 
@@ -8,6 +10,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { recordType: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
   const { searchParams } = new URL(request.url);
   const { recordType } = (await params) as { recordType: string };

@@ -1,12 +1,15 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { db } from '@/db/index';
+import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { healthPlanMilestones, healthPlans, pets } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import { getCurrentUser } from '@/lib/auth-utils';
+import { eq, asc } from 'drizzle-orm';
 import { isPracticeAdministrator, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
 import { createAuditLog } from '@/lib/audit-logger';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ planId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -16,20 +19,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (Number.isNaN(planId)) return NextResponse.json({ error: 'Invalid plan id' }, { status: 400 });
 
     // Authorization: owners (client) and staff with access should be able to view
-    const plan = await db.query.healthPlans.findFirst({ where: eq(healthPlans.id, planId) });
+    const plan = await tenantDb.query.healthPlans.findFirst({ where: eq(healthPlans.id, planId) });
     if (!plan) return NextResponse.json({ error: 'Health plan not found' }, { status: 404 });
 
     // If client, ensure they own the pet
     if (user.role === 'CLIENT' && plan.petId) {
-  const pet = await db.query.pets.findFirst({ where: eq(pets.id, plan.petId), columns: { ownerId: true } as any });
+  const pet = await tenantDb.query.pets.findFirst({ where: eq(pets.id, plan.petId), columns: { ownerId: true } as any });
   if (!pet || (pet as any).ownerId !== user.id) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
     }
 
-    const milestones = await db.query.healthPlanMilestones.findMany({
+    const milestones = await tenantDb.query.healthPlanMilestones.findMany({
       where: eq(healthPlanMilestones.healthPlanId, planId),
-      orderBy: (m, { asc }) => [asc(m.dueDate)],
+      orderBy: [asc(healthPlanMilestones.dueDate)],
     });
 
     return NextResponse.json(milestones, { status: 200 });
@@ -39,12 +42,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { planId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ planId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { planId: planIdParam } = await params as { planId: string };
+  const { planId: planIdParam } = await params;
   const planId = Number(planIdParam);
     if (Number.isNaN(planId)) return NextResponse.json({ error: 'Invalid plan id' }, { status: 400 });
 
@@ -60,7 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: { planId:
 
     if (!title) return NextResponse.json({ error: 'Title is required' }, { status: 400 });
 
-    const inserted = await db.insert(healthPlanMilestones).values({
+    const inserted = await tenantDb.insert(healthPlanMilestones).values({
       healthPlanId: planId,
       title,
       description,
@@ -72,7 +78,7 @@ export async function POST(request: NextRequest, { params }: { params: { planId:
     if (!milestone) return NextResponse.json({ error: 'Failed to create milestone' }, { status: 500 });
 
     // Get health plan details for audit logging
-    const plan = await db.query.healthPlans.findFirst({ where: eq(healthPlans.id, planId) });
+    const plan = await tenantDb.query.healthPlans.findFirst({ where: eq(healthPlans.id, planId) });
 
     // Log the milestone creation
     try {

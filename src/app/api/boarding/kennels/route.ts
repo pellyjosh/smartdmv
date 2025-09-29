@@ -1,10 +1,15 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { kennels } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const url = new URL(request.url);
   const practiceId = url.searchParams.get('practiceId');
   const available = url.searchParams.get('available');
@@ -50,7 +55,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const kennelsData = await db.query.kennels.findMany({
+    const kennelsData = await tenantDb.query.kennels.findMany({
       where: whereCondition
     });
 
@@ -78,6 +83,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     const {
@@ -98,7 +106,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if kennel name already exists in practice
-    const existingKennel = await db.query.kennels.findFirst({
+    const existingKennel = await tenantDb.query.kennels.findFirst({
       where: (kennels, { eq, and }) => and(
         eq(kennels.name, name),
         eq(kennels.practiceId, practiceId)

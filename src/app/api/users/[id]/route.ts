@@ -1,6 +1,8 @@
 // src/app/api/users/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { pgPool } from '@/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
@@ -8,6 +10,9 @@ import { z } from 'zod';
 
 // GET a specific user by ID
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const pathname = request.nextUrl.pathname;
   const idStr = pathname.split('/').pop(); // Extract user ID from the URL path
   const userId = idStr ? parseInt(idStr, 10) : NaN;
@@ -17,7 +22,7 @@ export async function GET(request: NextRequest) {
 
   try {
     if (Number.isFinite(userId)) {
-      const userData = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      const userData = await tenantDb.select().from(users).where(eq(users.id, userId)).limit(1);
       if (userData.length === 0) {
         console.log('User not found for ID:', idStr);
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -34,6 +39,9 @@ export async function GET(request: NextRequest) {
 
 // PATCH: Update a user by ID
 export async function PATCH(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const pathname = request.nextUrl.pathname;
   const idStr = pathname.split('/').pop();
   const userId = idStr ? parseInt(idStr, 10) : NaN;
@@ -283,11 +291,17 @@ export async function PATCH(request: NextRequest) {
 
 // PUT: Update a user by ID (alias for PATCH for compatibility)
 export async function PUT(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   return PATCH(request);
 }
 
 // DELETE: Remove a user by ID
 export async function DELETE(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const pathname = request.nextUrl.pathname;
   const idStr = pathname.split('/').pop();
   const userId = idStr ? parseInt(idStr, 10) : NaN;

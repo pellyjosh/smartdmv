@@ -1,6 +1,8 @@
 // src/app/api/appointment-requests/[id]/reject/route.ts
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -16,6 +18,9 @@ const rejectRequestSchema = z.object({
 });
 
 export async function POST(req: Request, context: Context) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const params = await context.params;
     const appointmentIdString = params.id;
@@ -41,7 +46,7 @@ export async function POST(req: Request, context: Context) {
     const { rejectionReason } = validationResult.data;
 
     // Find the appointment
-    const appointmentToReject = await db.query.appointments.findFirst({
+    const appointmentToReject = await tenantDb.query.appointments.findFirst({
       where: eq(appointments.id, appointmentId),
     });
 
@@ -55,7 +60,7 @@ export async function POST(req: Request, context: Context) {
     }
 
     // Update the appointment status to 'rejected' and store the reason in description
-    const [updatedAppointment] = await db.update(appointments)
+    const [updatedAppointment] = await tenantDb.update(appointments)
       .set({
         status: 'rejected',
         description: `REJECTED: ${rejectionReason}`, // Store reason in description

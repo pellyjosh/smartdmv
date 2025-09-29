@@ -1,10 +1,15 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { medicationSchedules } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = new URL(request.url);
     const stayId = searchParams.get('stayId');
@@ -12,7 +17,7 @@ export async function GET(request: NextRequest) {
     let medicationSchedulesList;
 
     if (stayId) {
-      medicationSchedulesList = await db.query.medicationSchedules.findMany({
+      medicationSchedulesList = await tenantDb.query.medicationSchedules.findMany({
         where: (medicationSchedules, { eq }) => eq(medicationSchedules.stayId, stayId),
         with: {
           stay: {
@@ -23,7 +28,7 @@ export async function GET(request: NextRequest) {
         }
       });
     } else {
-      medicationSchedulesList = await db.query.medicationSchedules.findMany({
+      medicationSchedulesList = await tenantDb.query.medicationSchedules.findMany({
         with: {
           stay: {
             with: {
@@ -45,6 +50,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     let { 
@@ -72,7 +80,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if the boarding stay exists
-    const existingStay = await db.query.boardingStays.findFirst({
+    const existingStay = await tenantDb.query.boardingStays.findFirst({
       where: (boardingStays, { eq }) => eq(boardingStays.id, stayIdNum)
     });
 
@@ -102,7 +110,7 @@ export async function POST(request: NextRequest) {
     // Use returned id from the insert to fetch the full record with relations
     const insertedId = Array.isArray(newMedicationSchedule) && newMedicationSchedule[0] ? newMedicationSchedule[0].id : (newMedicationSchedule as any).id;
 
-    const completeMedicationSchedule = await db.query.medicationSchedules.findFirst({
+    const completeMedicationSchedule = await tenantDb.query.medicationSchedules.findFirst({
       where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, insertedId),
       with: {
         stay: {

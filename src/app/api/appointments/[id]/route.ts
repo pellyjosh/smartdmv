@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
-import { db } from '@/db/index';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments, appointmentStatusEnum } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
@@ -27,6 +28,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { id } = await params;
     const appointmentId = parseInt(id);
@@ -124,6 +128,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { id } = await params;
     const appointmentId = parseInt(id);
@@ -177,6 +184,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { id } = await params;
     const appointmentId = parseInt(id);
@@ -194,7 +204,7 @@ export async function GET(
     }
 
     // Get the appointment
-    const appointment = await db.query.appointments.findFirst({
+    const appointment = await tenantDb.query.appointments.findFirst({
       where: and(
         eq(appointments.id, appointmentId),
         eq(appointments.practiceId, parseInt(userPractice.practiceId))

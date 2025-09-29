@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
-import { db } from '@/db';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { labOrders, labOrderTests } from '@/db/schemas/labSchema';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
@@ -132,6 +133,9 @@ type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
 
 // GET - Fetch all lab orders for the practice
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -154,6 +158,9 @@ export async function GET(request: NextRequest) {
 
 // POST - Create a new lab order
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -212,6 +219,9 @@ export async function POST(request: NextRequest) {
 
 // PUT - Update multiple lab orders
 export async function PUT(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
   const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -298,6 +308,9 @@ export async function PUT(request: NextRequest) {
 
 // PATCH - Update a single lab order
 export async function PATCH(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
   const userPractice = await getUserPractice(request);
     if (!userPractice) {

@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { healthResources } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 // GET - Fetch single health resource (admin view)
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const params = await context.params;
     const { id } = params;
@@ -16,7 +21,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
     console.log('Fetching health resource for admin ID:', id);
 
-    const resource = await db.query.healthResources.findFirst({
+    const resource = await tenantDb.query.healthResources.findFirst({
       where: eq(healthResources.id, resourceId),
       with: {
         practice: {
@@ -72,6 +77,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
 // PATCH - Update health resource
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const params = await context.params;
     const { id } = params;
@@ -117,6 +125,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
 // DELETE - Delete health resource
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const params = await context.params;
     const { id } = params;

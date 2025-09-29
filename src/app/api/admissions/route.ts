@@ -1,6 +1,8 @@
 // src/app/api/admissions/routes.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { admissions, pets, users, rooms } from '@/db/schema';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
@@ -10,8 +12,11 @@ export const dynamic = 'force-dynamic';
 
 // Get all admissions
 export async function GET() {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
-    const admissionsData = await db.query.admissions.findMany({
+    const admissionsData = await tenantDb.query.admissions.findMany({
       with: {
         pet: true,
         client: true,
@@ -35,7 +40,7 @@ export async function GET_BY_ID(request: NextRequest, { params }: { params: { id
   }
 
   try {
-    const admissionData = await db.query.admissions.findFirst({
+    const admissionData = await tenantDb.query.admissions.findFirst({
       where: eq(admissions.id, id),
       with: {
         pet: true,
@@ -57,6 +62,9 @@ export async function GET_BY_ID(request: NextRequest, { params }: { params: { id
 
 // Create new admission
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     const createAdmissionSchema = z.object({
@@ -82,7 +90,7 @@ export async function POST(request: NextRequest) {
       }
       const admissionDataToInsert = validatedResult.data; 
 
-    const [newAdmission] = await db.insert(admissions).values({
+    const [newAdmission] = await tenantDb.insert(admissions).values({
       ...admissionDataToInsert,
       admissionDate: new Date().toISOString(), // Set admission date to now
       dischargeDate: new Date().toISOString(), // Placeholder, will be updated on discharge
@@ -105,6 +113,9 @@ export async function POST(request: NextRequest) {
 
 // Update admission
 export async function PATCH(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   // This route handler is typically for a specific admission, e.g., /api/admissions/[id]
   // The original code had `request.query` which is not standard for Next.js App Router.
   // Assuming this PATCH is for a specific admission ID passed in the URL.
@@ -113,6 +124,9 @@ export async function PATCH(request: NextRequest) {
 
 // Delete admission
 export async function DELETE(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   // Similar to PATCH, DELETE usually targets a specific resource.
   // The original code had `request.query` which is not standard for Next.js App Router.
   // Assuming this DELETE is for a specific admission ID passed in the URL.
@@ -135,7 +149,7 @@ export async function POST_DISCHARGE(request: NextRequest, { params }: { params:
     });
     const validatedData = dischargeSchema.parse(body);
 
-    const [updatedAdmission] = await db.update(admissions)
+    const [updatedAdmission] = await tenantDb.update(admissions)
       .set({
         status: 'discharged',
         dischargeDate: new Date(),
@@ -150,7 +164,7 @@ export async function POST_DISCHARGE(request: NextRequest, { params }: { params:
 
     // Optionally, update room availability if a room was assigned
     if (updatedAdmission.roomId) {
-      await db.update(rooms)
+      await tenantDb.update(rooms)
         .set({ isAvailable: 1 }) // Assuming 1 means available
         .where(eq(rooms.id, updatedAdmission.roomId));
     }

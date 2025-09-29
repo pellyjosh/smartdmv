@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { medicationInteractions, inventory } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { medicationInteractions, inventory } from '@/db/schema';
 import { eq, and, or } from 'drizzle-orm';
 
 // GET /api/medication-interactions/by-medication/[id] - Get interactions for a specific medication
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -16,7 +20,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const medicationId = parseInt(resolvedParams.id);
 
     // Get all interactions where this medication is either medicationA or medicationB
-    const interactions = await db.select().from(medicationInteractions)
+    const interactions = await tenantDb.select().from(medicationInteractions)
       .where(and(
         eq(medicationInteractions.practiceId, userPractice.practiceId.toString()),
         or(
@@ -28,12 +32,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Get medication names for each interaction
     const interactionsWithNames = await Promise.all(
       interactions.map(async (interaction) => {
-        const medicationA = await db.query.inventory.findFirst({
+        const medicationA = await tenantDb.query.inventory.findFirst({
           where: eq(inventory.id, interaction.medicationAId),
           columns: { id: true, name: true }
         });
         
-        const medicationB = await db.query.inventory.findFirst({
+        const medicationB = await tenantDb.query.inventory.findFirst({
           where: eq(inventory.id, interaction.medicationBId),
           columns: { id: true, name: true }
         });

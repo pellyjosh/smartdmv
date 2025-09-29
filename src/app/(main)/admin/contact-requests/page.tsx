@@ -129,7 +129,10 @@ export default function ClientContactRequestsPage() {
       return response.json();
     },
     enabled:
-      !!user && (user.role === "ADMINISTRATOR" || user.role === "VETERINARIAN"),
+      !!user &&
+      (user.role === "ADMINISTRATOR" ||
+        user.role === "SUPER_ADMIN" ||
+        user.role === "VETERINARIAN"),
   });
 
   // Mark as read mutation
@@ -299,7 +302,9 @@ export default function ClientContactRequestsPage() {
 
   if (
     !user ||
-    (user.role !== "ADMINISTRATOR" && user.role !== "VETERINARIAN")
+    (user.role !== "ADMINISTRATOR" &&
+      user.role !== "SUPER_ADMIN" &&
+      user.role !== "VETERINARIAN")
   ) {
     return (
       <div className="container mx-auto py-6 px-4 max-w-4xl">

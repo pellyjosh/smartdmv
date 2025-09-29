@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { auditLogs, type AuditLog, type NewAuditLog } from '@/db/schema';
 import { sql } from 'drizzle-orm';
 
 // POST /api/audit-logs/test - Create test audit logs for development
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const sampleAuditLogs = [
       {
@@ -84,7 +89,7 @@ export async function POST(request: NextRequest) {
     const insertedLogs: AuditLog[] = [];
 
     for (const logData of sampleAuditLogs as NewAuditLog[]) {
-      const result = await db.insert(auditLogs).values(logData).returning();
+      const result = await tenantDb.insert(auditLogs).values(logData).returning();
       insertedLogs.push(result[0] as AuditLog);
     }
 
@@ -104,6 +109,9 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/audit-logs/test - Delete test audit logs
 export async function DELETE(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     // Delete all audit logs that have test: true in metadata
     const deletedLogs = await db

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { addons } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -7,8 +9,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { slug: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
-    const { slug } = params;
+    const { slug } = await params;
 
     if (!slug) {
       return NextResponse.json(
@@ -18,13 +23,11 @@ export async function GET(
     }
 
     // Fetch the add-on by slug
-    const addon = await db
-      .select()
-      .from(addons)
-      .where(eq(addons.slug, slug))
-      .limit(1);
+    const addon = await tenantDb.query.addons.findFirst({
+      where: eq(addons.slug, slug)
+    });
 
-    if (!addon || addon.length === 0) {
+    if (!addon) {
       return NextResponse.json(
         { error: 'Add-on not found' },
         { status: 404 }
@@ -33,10 +36,10 @@ export async function GET(
 
     // Parse features JSON if it's a string
     const addonData = {
-      ...addon[0],
-      features: typeof addon[0].features === 'string' 
-        ? JSON.parse(addon[0].features) 
-        : addon[0].features
+      ...addon,
+      features: typeof addon.features === 'string' ? JSON.parse(addon.features || '[]') : addon.features || [],
+      pricingTiers: typeof addon.pricingTiers === 'string' ? JSON.parse(addon.pricingTiers || '{}') : addon.pricingTiers || {},
+      galleryImages: typeof addon.galleryImages === 'string' ? JSON.parse(addon.galleryImages || '[]') : addon.galleryImages || [],
     };
 
     return NextResponse.json(addonData, { status: 200 });

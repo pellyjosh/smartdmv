@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 // POST revoke permission override
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string  }> }
 ) {
+  const resolvedParams = await params;
   try {
-    const overrideId = params.id;
+    const overrideId = resolvedParams.id;
     
     // TODO: Implement override revocation in database
     // This should set the status to 'revoked' rather than deleting

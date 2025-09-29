@@ -135,13 +135,15 @@ export function NotificationProvider({ children, userId, practiceId }: Notificat
     }
   };
 
-  // Initial fetch and periodic polling
+  // Initial fetch and periodic polling (reduced frequency for performance)
   useEffect(() => {
     if (userId) {
       fetchNotifications();
-      
-      // Poll for new notifications every 30 seconds
-      const interval = setInterval(fetchNotifications, 30000);
+
+      // Poll for new notifications every 3 minutes (180 seconds) instead of 30 seconds
+      // This significantly reduces server load and database queries
+      const POLL_INTERVAL = 3 * 60 * 1000; // 3 minutes
+      const interval = setInterval(fetchNotifications, POLL_INTERVAL);
       return () => clearInterval(interval);
     }
   }, [userId, practiceId]);

@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { eq } from 'drizzle-orm';
 import { checklistItems } from '@/db/schema';
-import { getUserPractice } from '@/lib/auth-utils';
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const ctx = await getUserPractice(request);
     if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     const { id: idParam } = await context.params;
     const id = Number(idParam);
 
-    const [item] = await db.select().from(checklistItems).where(eq(checklistItems.id, id));
+    const [item] = await tenantDb.select().from(checklistItems).where(eq(checklistItems.id, id));
     if (!item) return NextResponse.json({ message: 'Not found' }, { status: 404 });
     
     return NextResponse.json(item);
@@ -22,6 +26,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const ctx = await getUserPractice(request);
     if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -90,7 +97,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     console.log('[PATCH ITEM DEBUG] Final update object keys:', Object.keys(update));
 
-    const [updated] = await db.update(checklistItems).set(update as any).where(eq(checklistItems.id, id)).returning();
+    const [updated] = await tenantDb.update(checklistItems).set(update as any).where(eq(checklistItems.id, id)).returning();
     if (!updated) return NextResponse.json({ message: 'Not found' }, { status: 404 });
     
     return NextResponse.json(updated);
@@ -101,13 +108,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const ctx = await getUserPractice(request);
     if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     const { id: idParam } = await context.params;
     const id = Number(idParam);
 
-    await db.delete(checklistItems).where(eq(checklistItems.id, id));
+    await tenantDb.delete(checklistItems).where(eq(checklistItems.id, id));
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error('[ChecklistItem DELETE] Error:', err?.stack || err);

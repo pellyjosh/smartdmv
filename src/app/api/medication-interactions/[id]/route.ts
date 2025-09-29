@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { medicationInteractions, inventory } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { medicationInteractions, inventory } from '@/db/schema';
 import { createAuditLog } from '@/lib/audit-logger';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
@@ -13,6 +14,9 @@ const updateInteractionSchema = z.object({
 
 // GET /api/medication-interactions/[id] - Get specific interaction
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -22,7 +26,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const resolvedParams = await params;
     const interactionId = parseInt(resolvedParams.id);
 
-    const interaction = await db.select().from(medicationInteractions)
+    const interaction = await tenantDb.select().from(medicationInteractions)
       .where(and(
         eq(medicationInteractions.id, interactionId),
         eq(medicationInteractions.practiceId, userPractice.practiceId.toString())
@@ -34,12 +38,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Get medication names
-    const medicationA = await db.query.inventory.findFirst({
+    const medicationA = await tenantDb.query.inventory.findFirst({
       where: eq(inventory.id, interaction[0].medicationAId),
       columns: { id: true, name: true }
     });
     
-    const medicationB = await db.query.inventory.findFirst({
+    const medicationB = await tenantDb.query.inventory.findFirst({
       where: eq(inventory.id, interaction[0].medicationBId),
       columns: { id: true, name: true }
     });
@@ -59,6 +63,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 // PATCH /api/medication-interactions/[id] - Update interaction
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -71,7 +78,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const validatedData = updateInteractionSchema.parse(body);
 
     // Check interaction exists and belongs to practice
-    const existingInteraction = await db.select().from(medicationInteractions)
+    const existingInteraction = await tenantDb.select().from(medicationInteractions)
       .where(and(
         eq(medicationInteractions.id, interactionId),
         eq(medicationInteractions.practiceId, userPractice.practiceId.toString())
@@ -83,7 +90,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     // Update the interaction
-    const [updatedInteraction] = await db.update(medicationInteractions)
+    const [updatedInteraction] = await tenantDb.update(medicationInteractions)
       .set(validatedData)
       .where(eq(medicationInteractions.id, interactionId))
       .returning();
@@ -111,6 +118,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
 // DELETE /api/medication-interactions/[id] - Delete interaction
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -121,7 +131,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const interactionId = parseInt(resolvedParams.id);
 
     // Check interaction exists and belongs to practice
-    const existingInteraction = await db.select().from(medicationInteractions)
+    const existingInteraction = await tenantDb.select().from(medicationInteractions)
       .where(and(
         eq(medicationInteractions.id, interactionId),
         eq(medicationInteractions.practiceId, userPractice.practiceId.toString())
@@ -133,7 +143,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     // Delete the interaction
-    await db.delete(medicationInteractions)
+    await tenantDb.delete(medicationInteractions)
       .where(eq(medicationInteractions.id, interactionId));
 
     // Audit log

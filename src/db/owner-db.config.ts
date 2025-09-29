@@ -1,13 +1,13 @@
 // src/db/owner-db.config.ts
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import * as companySchema from './schemas/companySchema';
+import * as ownerSchema from './owner-schema';
 
-// Owner database connection - uses the same main database as tenant operations
-const ownerConnectionString = process.env.DATABASE_URL;
+// Owner database connection - separate database for owner operations
+const ownerConnectionString = process.env.OWNER_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!ownerConnectionString) {
-  throw new Error('DATABASE_URL environment variable is required');
+  throw new Error('OWNER_DATABASE_URL or DATABASE_URL environment variable is required');
 }
 
 // Normalize connection string for RDS (handle special characters in password)
@@ -36,7 +36,7 @@ if (process.env.NODE_ENV === 'production' || connectionString.includes('sslmode=
 }
 
 const ownerPool = new Pool(poolConfig);
-export const ownerDb = drizzle(ownerPool, { schema: companySchema });
+export const ownerDb = drizzle(ownerPool, { schema: ownerSchema });
 
-// Export the company schema for use in owner operations
-export * from './schemas/companySchema';
+// Export the owner schema for use in owner operations
+export * from './owner-schema';

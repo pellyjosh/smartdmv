@@ -1,12 +1,16 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { db } from '@/db/index';
+import { getCurrentUser, getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { healthPlans, pets, practices, healthPlanMilestones } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
-import { getCurrentUser } from '@/lib/auth-utils';
 import { isPracticeAdministrator, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
 import { createAuditLog } from '@/lib/audit-logger';
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
   const user = await getCurrentUser(request);
   console.log('[api/health-plans] GET called. currentUser:', user ? { id: user.id, role: (user as any).role } : null);
@@ -21,7 +25,7 @@ export async function GET(request: NextRequest) {
   // array populated for the RBAC helpers.
   const legacyRole = (user as any)?.role;
   if (legacyRole === 'ADMINISTRATOR' || legacyRole === 'SUPER_ADMIN' || isAdmin(user as any)) {
-      const plans = await db.query.healthPlans.findMany({
+      const plans = await tenantDb.query.healthPlans.findMany({
         with: {
           pet: { columns: { id: true, name: true } },
           practice: { columns: { id: true, name: true } }
@@ -32,7 +36,7 @@ export async function GET(request: NextRequest) {
       // Attach simple milestone counts so the client can show progress without extra requests
       const plansWithCounts = await Promise.all(plans.map(async (plan) => {
         try {
-          const milestones = await db.query.healthPlanMilestones.findMany({ where: eq(healthPlanMilestones.healthPlanId, plan.id) });
+          const milestones = await tenantDb.query.healthPlanMilestones.findMany({ where: eq(healthPlanMilestones.healthPlanId, plan.id) });
           const total = milestones.length;
           const completed = milestones.filter(m => (m as any).completed).length;
           return { ...plan, milestoneCount: total, milestoneCompletedCount: completed };
@@ -49,7 +53,7 @@ export async function GET(request: NextRequest) {
       const practiceId = practiceIdParam ? Number(practiceIdParam) : (user as any).practiceId;
       if (!practiceId || Number.isNaN(practiceId)) return NextResponse.json({ error: 'Missing or invalid practiceId' }, { status: 400 });
 
-      const plans = await db.query.healthPlans.findMany({
+      const plans = await tenantDb.query.healthPlans.findMany({
         where: eq(healthPlans.practiceId, practiceId),
         with: {
           pet: { columns: { id: true, name: true } },
@@ -70,6 +74,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     console.log('[api/health-plans] POST called. currentUser:', user ? { id: user.id, role: (user as any).role } : null);
@@ -92,14 +99,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate pet belongs to the practice (basic check)
-    const petRecord = await db.query.pets.findFirst({ where: eq(pets.id, Number(petId)) });
+    const petRecord = await tenantDb.query.pets.findFirst({ where: eq(pets.id, Number(petId)) });
     if (!petRecord) return NextResponse.json({ error: 'Pet not found' }, { status: 404 });
     if (Number(petRecord.practiceId) !== Number(practiceId)) {
       return NextResponse.json({ error: 'Pet does not belong to the specified practice' }, { status: 400 });
     }
 
     // Insert health plan
-    const insertResult = await db.insert(healthPlans).values({
+    const insertResult = await tenantDb.insert(healthPlans).values({
       name,
       petId: Number(petId),
       practiceId: Number(practiceId),

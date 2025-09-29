@@ -1,20 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { roles } from '@/db/schema';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { createAuditLog } from '@/lib/audit-logger';
 
 // GET role by ID
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string  }> }) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
-    const roleId = parseInt(params.id);
+    const roleId = parseInt(resolvedParams.id);
     
     if (isNaN(roleId)) {
       return NextResponse.json({ error: 'Invalid role ID' }, { status: 400 });
     }
 
-    const [role] = await db.select().from(roles).where(eq(roles.id, roleId));
+    const [role] = await tenantDb.select().from(roles).where(eq(roles.id, roleId));
     
     if (!role) {
       return NextResponse.json({ error: 'Role not found' }, { status: 404 });
@@ -31,9 +37,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 }
 
 // PUT update role
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string  }> }) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
-    const roleId = parseInt(params.id);
+    const roleId = parseInt(resolvedParams.id);
     
     if (isNaN(roleId)) {
       return NextResponse.json({ error: 'Invalid role ID' }, { status: 400 });
@@ -58,7 +68,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const validatedData = roleSchema.parse(body);
 
     // Get existing role first
-    const [existingRole] = await db.select().from(roles).where(eq(roles.id, roleId));
+    const [existingRole] = await tenantDb.select().from(roles).where(eq(roles.id, roleId));
     
     if (!existingRole) {
       return NextResponse.json({ error: 'Role not found' }, { status: 404 });
@@ -70,7 +80,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 
     // Update the role
-    const [updatedRole] = await db.update(roles)
+    const [updatedRole] = await tenantDb.update(roles)
       .set({
         ...(validatedData.name && { name: validatedData.name }),
         ...(validatedData.displayName && { displayName: validatedData.displayName }),
@@ -109,16 +119,20 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 }
 
 // DELETE role
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string  }> }) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
-    const roleId = parseInt(params.id);
+    const roleId = parseInt(resolvedParams.id);
     
     if (isNaN(roleId)) {
       return NextResponse.json({ error: 'Invalid role ID' }, { status: 400 });
     }
 
     // Get existing role first
-    const [existingRole] = await db.select().from(roles).where(eq(roles.id, roleId));
+    const [existingRole] = await tenantDb.select().from(roles).where(eq(roles.id, roleId));
     
     if (!existingRole) {
       return NextResponse.json({ error: 'Role not found' }, { status: 404 });
@@ -130,7 +144,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     // Delete the role
-    await db.delete(roles).where(eq(roles.id, roleId));
+    await tenantDb.delete(roles).where(eq(roles.id, roleId));
 
     // Log audit event
     await createAuditLog({

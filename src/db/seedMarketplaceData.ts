@@ -1,8 +1,11 @@
-import { db } from './index';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { addons } from './schema';
 
 export async function seedMarketplaceData() {
   console.log('🛍️ Seeding marketplace data...');
+
+  // Get the tenant-specific database
+  const db = await getCurrentTenantDb();
 
   // Marketplace addons data
   const addonsData = [
@@ -90,12 +93,65 @@ export async function seedMarketplaceData() {
         'Profit analysis'
       ]),
       isPopular: false
+    },
+    {
+      name: 'Website Request',
+      slug: 'website-request',
+      description: 'Professional website creation and management service for your veterinary practice.',
+      shortDescription: 'Custom website for your practice',
+      category: 'MARKETING' as const,
+      price: '199.99',
+      icon: 'Globe',
+      features: JSON.stringify([
+        'Custom website design',
+        'Mobile responsive layout',
+        'SEO optimization',
+        'Online appointment booking',
+        'Content management system',
+        'Domain and hosting included'
+      ]),
+      isPopular: true
+    },
+    {
+      name: 'Telemedicine',
+      slug: 'telemedicine',
+      description: 'Virtual consultation platform enabling remote veterinary care and consultations.',
+      shortDescription: 'Virtual veterinary consultations',
+      category: 'TELEMEDICINE' as const,
+      price: '149.99',
+      icon: 'Video',
+      features: JSON.stringify([
+        'Video consultations',
+        'Screen sharing',
+        'Digital prescriptions',
+        'Remote monitoring',
+        'Consultation recording',
+        'Multi-device support'
+      ]),
+      isPopular: true
+    },
+    {
+      name: 'Diseases Reporting',
+      slug: 'diseases-reporting',
+      description: 'Comprehensive disease tracking and reporting system for regulatory compliance and public health monitoring.',
+      shortDescription: 'Disease tracking and reporting',
+      category: 'COMPLIANCE' as const,
+      price: '79.99',
+      icon: 'FileText',
+      features: JSON.stringify([
+        'Disease case tracking',
+        'Regulatory reporting',
+        'Public health alerts',
+        'Outbreak monitoring',
+        'Custom report generation',
+        'Integration with health authorities'
+      ]),
+      isPopular: false
     }
   ];
 
   try {
     // Insert marketplace addons using Drizzle ORM (timestamps will use defaults)
-    // @ts-expect-error - Union type issue with db.insert
     await db.insert(addons).values(addonsData);
     
     console.log(`✅ Seeded ${addonsData.length} marketplace addons`);

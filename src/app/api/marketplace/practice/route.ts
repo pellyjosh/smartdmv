@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { practiceAddons } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-utils";
@@ -9,23 +9,15 @@ export async function GET(request: NextRequest) {
     const user = await getCurrentUser(request);
     
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized. Authentication required.' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userRole = Array.isArray(user.role) ? user.role[0] : user.role;
-    const allowedRoles = ['ADMINISTRATOR', 'PRACTICE_ADMIN', 'PRACTICE_ADMINISTRATOR', 'CLIENT'];
-    
-    if (!allowedRoles.includes(userRole)) {
-      return NextResponse.json({ error: 'Unauthorized. Admin or client access required.' }, { status: 401 });
-    }
+    // Get the tenant-specific database
+    const tenantDb = await getCurrentTenantDb();
 
-    // Get the practice ID based on user role
-    let practiceId;
-    if (userRole === 'ADMINISTRATOR' || userRole === 'SUPER_ADMIN') {
-      practiceId = user.currentPracticeId;
-    } else {
-      practiceId = user.practiceId;
-    }
+    // Get the user's practice ID
+    const practiceId = 'practiceId' in user ? user.practiceId : 
+                       'currentPracticeId' in user ? user.currentPracticeId : null;
 
     if (!practiceId) {
       return NextResponse.json({ error: 'Practice ID not found. Please ensure you are associated with a practice.' }, { status: 400 });
@@ -34,7 +26,7 @@ export async function GET(request: NextRequest) {
     console.log('Fetching practice addons for practice:', practiceId);
 
     // Fetch practice addons (subscriptions)
-    const practiceAddonsData = await db.query.practiceAddons.findMany({
+    const practiceAddonsData = await tenantDb.query.practiceAddons.findMany({
       where: eq(practiceAddons.practiceId, parseInt(practiceId.toString())),
       with: {
         addon: {
@@ -53,13 +45,12 @@ export async function GET(request: NextRequest) {
           }
         }
       },
-      orderBy: (practiceAddons, { desc }) => [desc(practiceAddons.lastActivatedAt)]
     });
 
     console.log(`Found ${practiceAddonsData.length} practice addon subscriptions`);
 
     // Transform the data to parse JSON fields for SQLite
-    const transformedData = practiceAddonsData.map(practiceAddon => ({
+    const transformedData = practiceAddonsData.map((practiceAddon: any) => ({
       ...practiceAddon,
       addon: practiceAddon.addon ? {
         ...practiceAddon.addon,

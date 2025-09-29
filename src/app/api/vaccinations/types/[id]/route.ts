@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { vaccineTypes } from "@/db/schemas/vaccinationsSchema";
 import { eq, and } from "drizzle-orm";
-import { getUserPractice } from "@/lib/auth-utils";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
-    const vaccineTypeId = parseInt(params.id);
+    const vaccineTypeId = parseInt(resolvedParams.id);
 
     if (!userPractice) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -53,11 +58,15 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
-    const vaccineTypeId = parseInt(params.id);
+    const vaccineTypeId = parseInt(resolvedParams.id);
 
     if (!userPractice) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -152,11 +161,15 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string  }> }
 ) {
+  const resolvedParams = await params;
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
-    const vaccineTypeId = parseInt(params.id);
+    const vaccineTypeId = parseInt(resolvedParams.id);
 
     if (!userPractice) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

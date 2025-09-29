@@ -1,4 +1,4 @@
-import { dbTable, text, timestamp, primaryKeyId, boolean, jsonb } from '@/db/db.config';
+import { dbTable, text, timestamp, primaryKeyId, boolean, jsonb, foreignKeyText } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { users } from './usersSchema';
 import { administratorAccessiblePractices } from './usersSchema';
@@ -27,6 +27,7 @@ export const practicesRelations = relations(practices, ({ many }) => ({
 export interface Practice {
   id: string;
   name: string;
+  tenantId: string;
   apiKey?: string | null;
   apiKeyLastReset?: Date | null;
   webhookUrl?: string | null;

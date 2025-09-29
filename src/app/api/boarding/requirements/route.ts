@@ -1,9 +1,14 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { boardingRequirements } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = new URL(request.url);
     const stayIdParam = searchParams.get('stayId');
@@ -15,7 +20,7 @@ export async function GET(request: NextRequest) {
       if (Number.isNaN(stayIdNum)) {
         return NextResponse.json([], { status: 200 });
       }
-      requirementsList = await db.query.boardingRequirements.findMany({
+      requirementsList = await tenantDb.query.boardingRequirements.findMany({
         where: (boardingRequirements, { eq }) => eq(boardingRequirements.stayId, stayIdNum),
         with: {
           stay: {
@@ -26,7 +31,7 @@ export async function GET(request: NextRequest) {
         }
       });
     } else {
-      requirementsList = await db.query.boardingRequirements.findMany({
+      requirementsList = await tenantDb.query.boardingRequirements.findMany({
         with: {
           stay: {
             with: {
@@ -48,6 +53,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     let { 
@@ -71,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if the boarding stay exists
-    const existingStay = await db.query.boardingStays.findFirst({
+    const existingStay = await tenantDb.query.boardingStays.findFirst({
       where: (boardingStays, { eq }) => eq(boardingStays.id, stayIdNum)
     });
 
@@ -99,7 +107,7 @@ export async function POST(request: NextRequest) {
     // Fetch the complete requirement data with relations
     const insertedId = Array.isArray(newRequirement) && newRequirement[0] ? newRequirement[0].id : (newRequirement as any).id;
 
-    const completeRequirement = await db.query.boardingRequirements.findFirst({
+    const completeRequirement = await tenantDb.query.boardingRequirements.findFirst({
       where: (boardingRequirements, { eq }) => eq(boardingRequirements.id, insertedId),
       with: {
         stay: {

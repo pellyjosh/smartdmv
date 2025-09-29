@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { and, eq } from 'drizzle-orm';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { and, eq } from 'drizzle-orm';
 import { assignedChecklists } from '@/db/schema';
 
 // Robust date parsing helper (tolerant - accepts Date, ISO string, timestamp, and common objects)
@@ -55,18 +56,24 @@ const parseDateInput = (input: unknown): Date | null => {
 };
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const ctx = await getUserPractice(request);
   if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   const { id: idParam } = await context.params;
   const id = Number(idParam);
 
-  const rows = await db.select().from(assignedChecklists)
+  const rows = await tenantDb.select().from(assignedChecklists)
     .where(and(eq(assignedChecklists.practiceId, Number(ctx.practiceId)), eq(assignedChecklists.id, id)));
   if (!rows[0]) return NextResponse.json({ message: 'Not found' }, { status: 404 });
   return NextResponse.json(rows[0]);
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const ctx = await getUserPractice(request);
     if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -126,7 +133,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     });
 
     // Final debug: show exact payload types we will pass to the DB
-    console.debug('[PATCH DEBUG] About to call db.update with payload:', Object.entries(update).map(([k, v]) => ({ key: k, value: v, type: typeof v, ctor: v?.constructor?.name })));
+    console.debug('[PATCH DEBUG] About to call tenantDb.update with payload:', Object.entries(update).map(([k, v]) => ({ key: k, value: v, type: typeof v, ctor: v?.constructor?.name })));
 
     // Sanitize payload defensively to avoid passing raw objects/arrays into timestamp columns
     const timestampFields = new Set(['dueDate']);
@@ -158,7 +165,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
 
     // Execute update and return the updated row
-    const [updated] = await db.update(assignedChecklists).set(update)
+    const [updated] = await tenantDb.update(assignedChecklists).set(update)
       .where(and(eq(assignedChecklists.id, id), eq(assignedChecklists.practiceId, Number(ctx.practiceId))))
       .returning();
 
@@ -171,11 +178,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const ctx = await getUserPractice(request);
   if (!ctx) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   const { id: idParam } = await context.params;
   const id = Number(idParam);
 
-  await db.delete(assignedChecklists).where(and(eq(assignedChecklists.id, id), eq(assignedChecklists.practiceId, Number(ctx.practiceId))));
+  await tenantDb.delete(assignedChecklists).where(and(eq(assignedChecklists.id, id), eq(assignedChecklists.practiceId, Number(ctx.practiceId))));
   return NextResponse.json({ success: true });
 }

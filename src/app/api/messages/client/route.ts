@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth-utils';
 import NotificationService from '@/lib/notifications/notification-service';
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { notifications, users } from "@/db/schema";
 import { eq, and, desc, or } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     
@@ -17,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch notifications that represent messages/communications
     // Filter for message-related notification types
-    const messagesData = await db.query.notifications.findMany({
+    const messagesData = await tenantDb.query.notifications.findMany({
       where: and(
         eq(notifications.practiceId, parseInt(user.practiceId!)),
         or(
@@ -78,6 +83,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const user = await getCurrentUser(request);
     if (!user || user.role !== 'CLIENT') {

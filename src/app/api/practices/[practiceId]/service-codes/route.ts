@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
 
 // GET /api/practices/[practiceId]/service-codes - Get service codes for a practice
-export async function GET(request: NextRequest, { params }: { params: { practiceId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ practiceId: string }> }) {
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const practiceId = parseInt(params.practiceId);
+    const { practiceId: practiceIdString } = await params;
+    const practiceId = parseInt(practiceIdString);
     
     // Verify user has access to this practice
     if (practiceId !== parseInt(userPractice.practiceId)) {

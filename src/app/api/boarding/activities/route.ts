@@ -1,9 +1,14 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { boardingActivities } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = new URL(request.url);
     const stayIdParam = searchParams.get('stayId');
@@ -15,7 +20,7 @@ export async function GET(request: NextRequest) {
       if (Number.isNaN(stayIdNum)) {
         return NextResponse.json([], { status: 200 });
       }
-      activitiesList = await db.query.boardingActivities.findMany({
+      activitiesList = await tenantDb.query.boardingActivities.findMany({
         where: (boardingActivities, { eq }) => eq(boardingActivities.stayId, stayIdNum),
         with: {
           stay: {
@@ -27,7 +32,7 @@ export async function GET(request: NextRequest) {
         }
       });
     } else {
-      activitiesList = await db.query.boardingActivities.findMany({
+      activitiesList = await tenantDb.query.boardingActivities.findMany({
         with: {
           stay: {
             with: {
@@ -50,6 +55,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     let { 
@@ -75,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if the boarding stay exists
-    const existingStay = await db.query.boardingStays.findFirst({
+    const existingStay = await tenantDb.query.boardingStays.findFirst({
       where: (boardingStays, { eq }) => eq(boardingStays.id, stayIdNum)
     });
 
@@ -101,7 +109,7 @@ export async function POST(request: NextRequest) {
     // Fetch the complete activity data with relations
     const insertedId = Array.isArray(newActivity) && newActivity[0] ? newActivity[0].id : (newActivity as any).id;
 
-    const completeActivity = await db.query.boardingActivities.findFirst({
+    const completeActivity = await tenantDb.query.boardingActivities.findFirst({
       where: (boardingActivities, { eq }) => eq(boardingActivities.id, insertedId),
       with: {
         stay: {

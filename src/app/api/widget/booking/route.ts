@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { users, pets, appointments, practices, integrationApiKeys } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
@@ -53,7 +55,7 @@ async function validateApiKey(apiKey: string, practiceId: number): Promise<boole
   try {
     const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
     
-    const keyRecord = await db.query.integrationApiKeys.findFirst({
+    const keyRecord = await tenantDb.query.integrationApiKeys.findFirst({
       where: and(
         eq(integrationApiKeys.practiceId, practiceId),
         eq(integrationApiKeys.keyHash, keyHash),
@@ -74,7 +76,7 @@ async function createOrFindClient(clientData: any, practiceId: number) {
     console.log('Creating/finding client:', clientData, practiceId);
     
     // First, try to find existing client by email and practice
-    const existingClient = await db.query.users.findFirst({
+    const existingClient = await tenantDb.query.users.findFirst({
       where: and(
         eq(users.email, clientData.clientEmail),
         eq(users.practiceId, practiceId),
@@ -85,7 +87,7 @@ async function createOrFindClient(clientData: any, practiceId: number) {
     if (existingClient) {
       console.log('Found existing client:', existingClient.id);
       // Update client info if needed
-      await db.update(users)
+      await tenantDb.update(users)
         .set({
           name: clientData.clientName,
           phone: clientData.clientPhone,
@@ -98,7 +100,7 @@ async function createOrFindClient(clientData: any, practiceId: number) {
 
     console.log('Creating new client');
     // Create new client
-    const [newClient] = await db.insert(users).values({
+    const [newClient] = await tenantDb.insert(users).values({
       email: clientData.clientEmail,
       username: clientData.clientEmail, // Use email as username for external clients
       name: clientData.clientName,
@@ -123,7 +125,7 @@ async function createPet(petData: any, clientId: number, practiceId: number) {
     console.log('Creating pet for client:', petData, clientId, practiceId);
     
     // Check if pet already exists for this client
-    const existingPet = await db.query.pets.findFirst({
+    const existingPet = await tenantDb.query.pets.findFirst({
       where: and(
         eq(pets.name, petData.petName),
         eq(pets.ownerId, clientId),
@@ -134,7 +136,7 @@ async function createPet(petData: any, clientId: number, practiceId: number) {
     if (existingPet) {
       console.log('Found existing pet:', existingPet.id);
       // Update pet info if needed
-      await db.update(pets)
+      await tenantDb.update(pets)
         .set({
           species: petData.petType,
           breed: petData.petBreed || null,
@@ -148,7 +150,7 @@ async function createPet(petData: any, clientId: number, practiceId: number) {
 
     console.log('Creating new pet');
     // Create new pet
-    const [newPet] = await db.insert(pets).values({
+    const [newPet] = await tenantDb.insert(pets).values({
       name: petData.petName,
       species: petData.petType,
       breed: petData.petBreed || null,
@@ -184,7 +186,7 @@ async function createAppointment(appointmentData: any, clientId: number, petId: 
     });
 
     // Create appointment with 'external' source
-    const [newAppointment] = await db.insert(appointments).values({
+    const [newAppointment] = await tenantDb.insert(appointments).values({
       title: `${appointmentData.appointmentType} - ${appointmentData.petName}`,
       description: appointmentData.reason,
       date: appointmentDateTime,
@@ -208,6 +210,9 @@ async function createAppointment(appointmentData: any, clientId: number, petId: 
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     
@@ -253,7 +258,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify practice exists
-    const practice = await db.query.practices.findFirst({
+    const practice = await tenantDb.query.practices.findFirst({
       where: eq(practices.id, practiceId)
     });
 
@@ -265,7 +270,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Start transaction to create client, pet, and appointment
-    const result = await db.transaction(async (tx) => {
+    const result = await tenantDb.transaction(async (tx) => {
       // 1. Create or find client
       const client = await createOrFindClient({
         clientName,

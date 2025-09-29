@@ -1,6 +1,8 @@
 // src/app/api/soap-templates/[id]/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { soapTemplates } from "@/db/schemas/soapNoteTemplateSchema";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
@@ -23,6 +25,9 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { id: idString } = await params;
     const id = parseInt(idString);
@@ -34,7 +39,7 @@ export async function GET(
       );
     }
 
-    const template = await db.query.soapTemplates.findFirst({
+    const template = await tenantDb.query.soapTemplates.findFirst({
       where: eq(soapTemplates.id, id)
     });
 
@@ -60,6 +65,9 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { id: idString } = await params;
     const id = parseInt(idString);
@@ -118,6 +126,9 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { id: idString } = await params;
     const id = parseInt(idString);
@@ -130,7 +141,7 @@ export async function DELETE(
     }
 
     // Check if template exists first
-    const existingTemplate = await db.query.soapTemplates.findFirst({
+    const existingTemplate = await tenantDb.query.soapTemplates.findFirst({
       where: eq(soapTemplates.id, id)
     });
 
@@ -143,7 +154,7 @@ export async function DELETE(
 
     // Delete the template, disregarding TypeScript errors as per project pattern
     // @ts-ignore
-    await db.delete(soapTemplates).where(eq(soapTemplates.id, id));
+    await tenantDb.delete(soapTemplates).where(eq(soapTemplates.id, id));
     
     return NextResponse.json({
       message: "SOAP template deleted successfully"

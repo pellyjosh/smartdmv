@@ -1307,13 +1307,14 @@ export default function ClientPortalPage() {
     }
   }, [user, toast]);
 
-  // Set active tab based on URL parameter or default to "pets"
+  // Set active tab based on URL parameter or default to "dashboard"
   useEffect(() => {
     const validTabs = [
       "dashboard",
       "pets",
       "appointments",
       "health-plans",
+      "resources",
       // "messages",
       "notifications",
     ];

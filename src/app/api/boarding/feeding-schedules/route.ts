@@ -1,9 +1,14 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { feedingSchedules } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = new URL(request.url);
     const stayIdParam = searchParams.get('stayId');
@@ -15,7 +20,7 @@ export async function GET(request: NextRequest) {
       if (Number.isNaN(stayIdNum)) {
         return NextResponse.json([], { status: 200 });
       }
-      feedingSchedulesList = await db.query.feedingSchedules.findMany({
+      feedingSchedulesList = await tenantDb.query.feedingSchedules.findMany({
         where: (feedingSchedules, { eq }) => eq(feedingSchedules.stayId, stayIdNum),
         with: {
           stay: {
@@ -26,7 +31,7 @@ export async function GET(request: NextRequest) {
         }
       });
     } else {
-      feedingSchedulesList = await db.query.feedingSchedules.findMany({
+      feedingSchedulesList = await tenantDb.query.feedingSchedules.findMany({
         with: {
           stay: {
             with: {
@@ -48,6 +53,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await request.json();
     let { 
@@ -72,7 +80,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if the boarding stay exists
-    const existingStay = await db.query.boardingStays.findFirst({
+    const existingStay = await tenantDb.query.boardingStays.findFirst({
       where: (boardingStays, { eq }) => eq(boardingStays.id, stayIdNum)
     });
 
@@ -98,7 +106,7 @@ export async function POST(request: NextRequest) {
     // Fetch the complete feeding schedule data with relations
     const insertedId = Array.isArray(newFeedingSchedule) && newFeedingSchedule[0] ? newFeedingSchedule[0].id : (newFeedingSchedule as any).id;
 
-    const completeFeedingSchedule = await db.query.feedingSchedules.findFirst({
+    const completeFeedingSchedule = await tenantDb.query.feedingSchedules.findFirst({
       where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, insertedId),
       with: {
         stay: {

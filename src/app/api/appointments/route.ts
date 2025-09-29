@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/db'; // Your Drizzle DB instance
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+; // Your Drizzle DB instance
 import { appointments, pets, appointmentStatusEnum } from '@/db/schema'; // Import appointments and pets schema
 import { eq, and, gte, lte } from 'drizzle-orm';
 import { z } from 'zod';
@@ -30,6 +32,9 @@ const insertAppointmentSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const body = await req.json();
 
@@ -61,7 +66,7 @@ export async function POST(req: Request) {
 
     // If a petId is provided, attempt to find the pet and its owner (clientId)
     if (petId) {
-      const pet = await db.query.pets.findFirst({
+      const pet = await tenantDb.query.pets.findFirst({
         where: eq(pets.id, petId),
       });
 
@@ -98,7 +103,7 @@ export async function POST(req: Request) {
     console.log('Attempting to insert appointment:', newAppointmentData);
 
     // Insert the new appointment into the database
-    const [createdAppointment] = await (db as any).insert(appointments).values(newAppointmentData).returning();
+    const [createdAppointment] = await tenantDb.insert(appointments).values(newAppointmentData).returning();
 
     if (!createdAppointment) {
       throw new Error('Failed to create appointment in database.');
@@ -147,6 +152,9 @@ export async function POST(req: Request) {
 
 
 export async function GET(req: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     // console.log('[DEBUG API] Starting GET /api/appointments');
     
@@ -181,7 +189,7 @@ export async function GET(req: Request) {
 
       // console.log('[DEBUG API] Date conditions count:', conditions.length);
 
-      const result = await db.query.appointments.findMany({
+      const result = await tenantDb.query.appointments.findMany({
         where: and(...conditions),
         with: {
           pet: true,
@@ -236,7 +244,7 @@ export async function GET(req: Request) {
 
     // console.log('[DEBUG API] About to query database with', conditions.length, 'conditions');
 
-    const result = await db.query.appointments.findMany({
+    const result = await tenantDb.query.appointments.findMany({
       where: and(...conditions),
       with: {
         pet: true,

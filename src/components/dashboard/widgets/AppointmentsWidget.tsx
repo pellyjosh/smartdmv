@@ -18,7 +18,8 @@ interface Appointment {
   status: string;
 }
 
-export const AppointmentsWidget: React.FC<AppointmentsWidgetProps> = ({ widget }) => {
+// Memoize widget to prevent unnecessary re-renders
+export const AppointmentsWidget: React.FC<AppointmentsWidgetProps> = React.memo(({ widget }) => {
   // Fetch appointments from API
   const { data: appointments = [] } = useQuery<Appointment[]>({
     queryKey: ['appointments', 'today'],
@@ -66,4 +67,4 @@ export const AppointmentsWidget: React.FC<AppointmentsWidgetProps> = ({ widget }
       )}
     </div>
   );
-};
+});

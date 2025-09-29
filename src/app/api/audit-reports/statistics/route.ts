@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { auditLogs } from '@/db/schema';
 import { SYSTEM_USER_NAME, SYSTEM_USER_ID } from '@/lib/audit-logger';
 import { and, eq, gte, lte, sql, count } from 'drizzle-orm';
 
 // GET /api/audit-reports/statistics - Generate audit statistics
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const { searchParams } = new URL(request.url);
     

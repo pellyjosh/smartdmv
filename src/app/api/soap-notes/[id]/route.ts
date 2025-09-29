@@ -1,6 +1,8 @@
 // src/app/api/soap-notes/[id]/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { soapNotes } from "@/db/schemas/soapNoteSchema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -73,6 +75,9 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const resolvedParams = await params;
     const soapNoteId = parseInt(resolvedParams.id);
@@ -84,7 +89,7 @@ export async function GET(
       );
     }
 
-  const soapNote = await db.query.soapNotes.findFirst({
+  const soapNote = await tenantDb.query.soapNotes.findFirst({
       where: eq(soapNotes.id, soapNoteId),
       with: {
         appointment: true,
@@ -115,6 +120,9 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const data = await request.json();
     const resolvedParams = await params;
@@ -182,6 +190,9 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const resolvedParams = await params;
     const soapNoteId = parseInt(resolvedParams.id);
@@ -194,7 +205,7 @@ export async function DELETE(
     }
 
     // Check if the SOAP note exists and is not locked
-    const soapNote = await db.query.soapNotes.findFirst({
+    const soapNote = await tenantDb.query.soapNotes.findFirst({
       where: eq(soapNotes.id, soapNoteId)
     });
 

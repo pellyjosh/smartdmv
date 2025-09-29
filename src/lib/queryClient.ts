@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { queryClientDefaultOptions } from "@/lib/query.defaults";
 
 // Keep track of 401 errors to prevent flooding the console and UI with error messages
 const authErrorTimestamps: number[] = [];
@@ -170,16 +171,13 @@ const handleSessionErrors = (error: unknown) => {
 
 export const queryClient = new QueryClient({
   defaultOptions: {
+    ...queryClientDefaultOptions,
     queries: {
+      ...queryClientDefaultOptions.queries,
       queryFn: getQueryFn({ on401: "throw" }),
-      refetchInterval: false,
-      refetchOnWindowFocus: true, // Changed to true to help detect session issues
-      staleTime: 5 * 60 * 1000, // 5 minutes instead of infinity
-      retry: 1, // Retry once
-      // onError: handleSessionErrors,
     },
     mutations: {
-      retry: 1, // Retry once
+      ...queryClientDefaultOptions.mutations,
       onError: handleSessionErrors,
     },
   },

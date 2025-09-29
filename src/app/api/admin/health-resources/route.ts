@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { healthResources } from "@/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 
 // GET - Fetch all health resources (admin view)
 export async function GET(request: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     console.log('Fetching all health resources for admin');
 
     // Query the database for all health resources with practice info
-    const resources = await db.query.healthResources.findMany({
+    const resources = await tenantDb.query.healthResources.findMany({
       with: {
         practice: {
           columns: {
@@ -61,6 +66,9 @@ export async function GET(request: Request) {
 
 // POST - Create new health resource
 export async function POST(request: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const resourceData = await request.json();
     
@@ -81,7 +89,7 @@ export async function POST(request: Request) {
       }
     });
 
-    const [newResource] = await db.insert(healthResources).values(insertData).returning();
+    const [newResource] = await tenantDb.insert(healthResources).values(insertData).returning();
 
     return NextResponse.json(newResource, { status: 201 });
   } catch (error) {

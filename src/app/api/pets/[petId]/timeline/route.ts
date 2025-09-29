@@ -1,5 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
-import { db } from "@/db/index";
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { 
   pets, 
   appointments, 
@@ -13,6 +15,9 @@ import { eq, and, desc } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ petId: string }> }) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   const params = await context.params;
   const { petId } = params;
   const petIdInt = parseInt(petId, 10);
@@ -31,7 +36,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pet
     }
 
     // 1. Verify pet exists and user has access
-    const pet = await db.query.pets.findFirst({
+    const pet = await tenantDb.query.pets.findFirst({
       where: eq(pets.id, petIdInt),
       with: {
         owner: true
@@ -53,7 +58,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pet
 
     try {
       // 2. Collect appointments (regular + telemedicine)
-      const appointmentsData = await db.query.appointments.findMany({
+      const appointmentsData = await tenantDb.query.appointments.findMany({
         where: eq(appointments.petId, petIdInt),
         orderBy: [desc(appointments.date)]
       });
@@ -83,7 +88,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pet
 
     try {
       // 3. Gather SOAP notes
-      const soapNotesData = await db.query.soapNotes.findMany({
+      const soapNotesData = await tenantDb.query.soapNotes.findMany({
         where: eq(soapNotes.petId, petIdInt),
         orderBy: [desc(soapNotes.createdAt)]
       });
@@ -113,7 +118,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pet
       // 4. Collect prescriptions from SOAP notes
       for (const note of soapNotesData) {
         try {
-          const prescriptionsData = await db.query.prescriptions.findMany({
+          const prescriptionsData = await tenantDb.query.prescriptions.findMany({
             where: eq(prescriptions.soapNoteId, note.id),
             orderBy: [desc(prescriptions.createdAt)]
           });
@@ -149,7 +154,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pet
 
     try {
       // 5. Get assigned checklists
-      const assignedChecklistsData = await db.query.assignedChecklists.findMany({
+      const assignedChecklistsData = await tenantDb.query.assignedChecklists.findMany({
         where: eq(assignedChecklists.petId, petIdInt),
         orderBy: [desc(assignedChecklists.createdAt)]
       });
@@ -177,7 +182,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pet
       // 6. Get individual checklist tasks
       for (const checklist of assignedChecklistsData) {
         try {
-          const checklistItemsData = await db.query.checklistItems.findMany({
+          const checklistItemsData = await tenantDb.query.checklistItems.findMany({
             where: eq(checklistItems.checklistId, checklist.id),
             orderBy: [desc(checklistItems.createdAt)]
           });
@@ -213,7 +218,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pet
 
     try {
       // 7. Attempt health plan data
-      const healthPlansData = await db.query.healthPlans.findMany({
+      const healthPlansData = await tenantDb.query.healthPlans.findMany({
         where: eq(healthPlans.petId, petIdInt),
         orderBy: [desc(healthPlans.createdAt)]
       });

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { customFieldGroups } from '@/db/schemas/customFieldsSchema';
 import { eq } from 'drizzle-orm';
 
@@ -7,6 +9,9 @@ export async function GET(
   req: Request,
   { params }: { params: { practiceId: string; categoryId: string } }
 ) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const resolvedParams = await params;
     const { practiceId, categoryId } = resolvedParams;
@@ -18,11 +23,11 @@ export async function GET(
 
     let groups;
     if (categoryId) {
-      groups = await db.query.customFieldGroups.findMany({
+      groups = await tenantDb.query.customFieldGroups.findMany({
         where: eq(customFieldGroups.categoryId, parseInt(categoryId)),
       });
     } else {
-      groups = await db.query.customFieldGroups.findMany({
+      groups = await tenantDb.query.customFieldGroups.findMany({
         where: eq(customFieldGroups.practiceId, practiceId),
       });
     }
@@ -35,6 +40,9 @@ export async function GET(
 }
 
 export async function POST(req: Request) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const data = await req.json();
 
@@ -47,7 +55,7 @@ export async function POST(req: Request) {
     }
 
     // Check for existing group with the same key in the same practice
-    const existingGroup = await db.query.customFieldGroups.findFirst({
+    const existingGroup = await tenantDb.query.customFieldGroups.findFirst({
       where: eq(customFieldGroups.key, data.key),
     });
 
@@ -58,7 +66,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const newGroup = await db.insert(customFieldGroups).values(data).returning();
+    const newGroup = await tenantDb.insert(customFieldGroups).values(data).returning();
 
     return NextResponse.json(newGroup[0], { status: 201 });
   } catch (error) {
@@ -67,5 +75,5 @@ export async function POST(req: Request) {
   }
 }
 
-// Note: Ensure that your database schema and connection are correctly configured in `db.ts`.
+// Note: Ensure that your database schema and connection are correctly configured in `tenantDb.ts`.
 // Also, make sure that data validation and error handling are implemented according to your application's needs.

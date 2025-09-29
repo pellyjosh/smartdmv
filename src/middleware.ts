@@ -13,12 +13,146 @@ const PRACTICE_ADMIN_DASHBOARD = '/practice-administrator';
 const OWNER_DASHBOARD = '/owner';
 
 // Other protected routes (relevant for access control, not initial login redirect)
-const OTHER_CLIENT_PROTECTED_ROUTES = ['/symptom-checker'];
 const ADMIN_PROTECTED_ROUTES = ['/admin'];
-const OWNER_PROTECTED_ROUTES = ['/owner', '/company-management'];
+const OWNER_PROTECTED_ROUTES = ['/company-management'];
+
+// Extract tenant identifier from hostname (without database calls)
+function extractTenantFromHostname(hostname: string): string | null {
+  const cleanHostname = hostname.split(':')[0];
+  
+  // For plain localhost or IP addresses, return null
+  if (cleanHostname === 'localhost' || 
+      cleanHostname.startsWith('127.0.0.1') || 
+      cleanHostname.startsWith('192.168.') ||
+      /^\d+\.\d+\.\d+\.\d+$/.test(cleanHostname)) {
+    return null;
+  }
+  
+  const parts = cleanHostname.split('.');
+  
+  // Handle development subdomains like "smartvet.localhost"
+  if (parts.length >= 2 && parts[parts.length - 1] === 'localhost') {
+    return parts[0]; // Return "smartvet" from "smartvet.localhost"
+  }
+  
+  // If it's a subdomain of your main domain (e.g., tenant.yourdomain.com)
+  if (parts.length >= 3) {
+    return parts[0];
+  }
+  
+  // If it's a custom domain, return the full hostname
+  return cleanHostname;
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const hostname = request.headers.get('host') || '';
+  
+  // Check if this is the owner domain
+  const ownerDomain = process.env.OWNER_DOMAIN || 'localhost:9002';
+  const isOwnerDomain = hostname === ownerDomain;
+  
+  // Handle API routes first
+  if (pathname.startsWith('/api/')) {
+    // Skip middleware for owner API routes
+    if (pathname.startsWith('/api/owner/')) {
+      if (!isOwnerDomain) {
+        console.log(`[Middleware] Owner API attempted on non-owner domain: ${hostname}`);
+        return new Response('Owner API not allowed on this domain', { status: 403 });
+      }
+      return NextResponse.next();
+    }
+    
+    // For tenant API routes, set tenant headers
+    const tenantIdentifier = extractTenantFromHostname(hostname);
+    if (tenantIdentifier && !isOwnerDomain) {
+      // Only log for debugging specific routes
+      if (process.env.NODE_ENV === 'development' && (pathname.includes('/health-plans/') || pathname.includes('/debug'))) {
+        console.log(`[Middleware] Setting tenant header for API route: ${pathname} -> ${tenantIdentifier}`);
+      }
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set('X-Tenant-Identifier', tenantIdentifier);
+      
+      return NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+    }
+    
+    // For non-owner API routes on owner domain, block them
+    if (isOwnerDomain) {
+      console.log(`[Middleware] Non-owner API on owner domain: ${pathname}`);
+      return new Response('Tenant API not allowed on owner domain', { status: 403 });
+    }
+    
+    // Regular API route handling
+    return NextResponse.next();
+  }
+
+  // Skip middleware for owner authentication routes on owner domain
+  if (pathname.startsWith('/owner-auth')) {
+    if (!isOwnerDomain) {
+      console.log(`[Middleware] Owner auth attempted on non-owner domain: ${hostname}`);
+      return new Response('Owner access not allowed on this domain', { status: 403 });
+    }
+    return NextResponse.next();
+  }
+
+  // Handle owner routes - only allow on owner domain
+  if (pathname.startsWith('/owner')) {
+    if (!isOwnerDomain) {
+      console.log(`[Middleware] Owner route attempted on non-owner domain: ${hostname}`);
+      return new Response('Owner access not allowed on this domain', { status: 403 });
+    }
+    
+    const ownerSessionCookie = request.cookies.get('owner_session');
+    if (!ownerSessionCookie) {
+      console.log(`[Middleware] No owner session for ${pathname}, redirecting to owner auth`);
+      return NextResponse.redirect(new URL('/owner-auth', request.url));
+    }
+    // Owner is authenticated, allow access
+    return NextResponse.next();
+  }
+
+  // For tenant routes, validate the subdomain exists in the database
+  const tenantIdentifier = extractTenantFromHostname(hostname);
+  
+  // If we're on the owner domain but not accessing owner routes, redirect to owner auth
+  if (isOwnerDomain && !pathname.startsWith('/api/') && pathname !== '/') {
+    console.log(`[Middleware] Non-owner route on owner domain, redirecting to owner auth`);
+    return NextResponse.redirect(new URL('/owner-auth', request.url));
+  }
+  
+  // If we have a tenant identifier, we need to validate it exists
+  if (tenantIdentifier && !isOwnerDomain) {
+    console.log(`[Middleware] Tenant subdomain detected: ${tenantIdentifier}`);
+    
+    // Add a special header to indicate we need tenant validation
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('X-Tenant-Identifier', tenantIdentifier);
+    requestHeaders.set('X-Requires-Tenant-Validation', 'true');
+    
+    // For now, pass through - the TenantProvider will handle validation
+    // and show appropriate error if tenant doesn't exist
+    const response = NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+    
+    return response;
+  }
+  
+  // If no tenant identifier and not owner domain, this might be an invalid request
+  if (!isOwnerDomain && tenantIdentifier === null) {
+    console.log(`[Middleware] No tenant identifier and not owner domain: ${hostname}`);
+    return new Response('Invalid domain', { status: 404 });
+  }
+  
+  console.log(`[Middleware] Hostname: ${hostname}, TenantIdentifier: ${tenantIdentifier || 'none'}, IsOwnerDomain: ${isOwnerDomain}`);
+
+  // Continue with existing middleware logic
   const httpOnlySessionToken = request.cookies.get(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME)?.value;
   const clientUserSessionCookie = request.cookies.get(SESSION_TOKEN_COOKIE_NAME)?.value;
 
@@ -40,13 +174,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const isServerAuthenticated = !!httpOnlySessionToken;
-  console.log(`[Middleware] Path: ${pathname}, ServerAuth: ${isServerAuthenticated}, ClientCookieValid: ${isClientCookieValid}, UserRole: ${userFromClientCookie?.role}, CompanyId: ${userFromClientCookie?.companyId}`);
-
-  // Extract company context if available
-  let companyId: string | undefined;
-  if (isClientCookieValid && userFromClientCookie && 'companyId' in userFromClientCookie) {
-    companyId = userFromClientCookie.companyId;
-  }
+  console.log(`[Middleware] Path: ${pathname}, TenantIdentifier: ${tenantIdentifier || 'none'}, ServerAuth: ${isServerAuthenticated}, ClientCookieValid: ${isClientCookieValid}, UserRole: ${userFromClientCookie?.role}`);
 
   // 1. Handle /auth or /auth/ redirect to /auth/login
   if (pathname === '/auth' || pathname === '/auth/') {
@@ -87,7 +215,7 @@ export async function middleware(request: NextRequest) {
         const userRole = userFromClientCookie.role;
         console.log(`[Middleware] Authenticated user (${userFromClientCookie.email} - ${userRole}) on root path. Redirecting to their dashboard.`);
         if (userRole === 'OWNER') return NextResponse.redirect(new URL(OWNER_DASHBOARD, request.url));
-        if (userRole === 'ADMINISTRATOR') return NextResponse.redirect(new URL(ADMINISTRATOR_DASHBOARD, request.url));
+        if (userRole === 'ADMINISTRATOR' || userRole === 'SUPER_ADMIN') return NextResponse.redirect(new URL(ADMINISTRATOR_DASHBOARD, request.url));
         if (userRole === 'PRACTICE_ADMINISTRATOR') return NextResponse.redirect(new URL(PRACTICE_ADMIN_DASHBOARD, request.url));
         if (userRole === 'CLIENT') return NextResponse.redirect(new URL(CLIENT_DASHBOARD, request.url));
         // Fallback for unknown role
@@ -105,10 +233,9 @@ export async function middleware(request: NextRequest) {
   const isAdminDashboard = pathname.startsWith(ADMINISTRATOR_DASHBOARD);
   const isPracticeAdminDashboard = pathname.startsWith(PRACTICE_ADMIN_DASHBOARD);
   const isOwnerDashboard = pathname.startsWith(OWNER_DASHBOARD);
-  const isOtherClientRoute = OTHER_CLIENT_PROTECTED_ROUTES.some(route => pathname.startsWith(route));
   const isAdminRoute = ADMIN_PROTECTED_ROUTES.some(route => pathname.startsWith(route));
   const isOwnerRoute = OWNER_PROTECTED_ROUTES.some(route => pathname.startsWith(route));
-  const isExplicitlyProtectedPath = isClientDashboard || isAdminDashboard || isPracticeAdminDashboard || isOwnerDashboard || isOtherClientRoute || isAdminRoute || isOwnerRoute;
+  const isExplicitlyProtectedPath = isClientDashboard || isAdminDashboard || isPracticeAdminDashboard || isOwnerDashboard || isAdminRoute || isOwnerRoute;
 
   if (isExplicitlyProtectedPath) {
     if (!isServerAuthenticated) {
@@ -131,10 +258,12 @@ export async function middleware(request: NextRequest) {
     // Both server session token and client user details are available. Perform role-based access control.
     const userRole = userFromClientCookie.role;
     
-    // Add company context to request headers for tenant isolation
+    // Create response
     const response = NextResponse.next();
-    if (companyId) {
-      response.headers.set('x-company-id', companyId);
+    
+    // Add tenant identifier to response headers for debugging
+    if (tenantIdentifier) {
+      response.headers.set('x-tenant-identifier', tenantIdentifier);
     }
     
     // Role-based access control
@@ -151,14 +280,14 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));
       }
       return response;
-    } else if (userRole === 'ADMINISTRATOR') {
-      if (isClientDashboard || isPracticeAdminDashboard || isOtherClientRoute || isOwnerDashboard || isOwnerRoute) {
-        console.log(`[Middleware] Administrator (${userFromClientCookie.email}) attempting restricted page (${pathname}). Redirecting to ${ACCESS_DENIED_PAGE}.`);
+    } else if (userRole === 'ADMINISTRATOR' || userRole === 'SUPER_ADMIN') {
+      if (isClientDashboard || isPracticeAdminDashboard || isOwnerDashboard || isOwnerRoute) {
+        console.log(`[Middleware] Administrator/SuperAdmin (${userFromClientCookie.email}) attempting restricted page (${pathname}). Redirecting to ${ACCESS_DENIED_PAGE}.`);
         return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));
       }
       return response;
     } else if (userRole === 'PRACTICE_ADMINISTRATOR') {
-      if (isClientDashboard || isAdminDashboard || isOtherClientRoute || isAdminRoute || isOwnerDashboard || isOwnerRoute) {
+      if (isClientDashboard || isAdminDashboard || isAdminRoute || isOwnerDashboard || isOwnerRoute) {
         console.log(`[Middleware] Practice Admin (${userFromClientCookie.email}) attempting restricted page (${pathname}). Redirecting to ${ACCESS_DENIED_PAGE}.`);
         return NextResponse.redirect(new URL(ACCESS_DENIED_PAGE, request.url));
       }
@@ -176,7 +305,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Apply middleware to all paths except API routes, static files, images, etc.
-    '/((?!api|_next/static|_next/image|favicon.ico|manifest.json|robots.txt|assets|images|.*\\.(?:png|jpg|jpeg|gif|svg)$).*)',
+    // Apply middleware to all paths including API routes, but exclude static files, images, etc.
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|robots.txt|assets|images|.*\\.(?:png|jpg|jpeg|gif|svg)$).*)',
   ],
 };

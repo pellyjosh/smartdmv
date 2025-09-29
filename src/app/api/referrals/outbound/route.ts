@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { referrals } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
+import { referrals } from '@/db/schema';
 import { canView } from '@/lib/rbac-helpers';
 import { eq } from 'drizzle-orm';
 
 // GET /api/referrals/outbound - Get outbound referrals
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -20,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get outbound referrals (sent from this practice)
-    const outboundReferrals = await db.query.referrals.findMany({
+    const outboundReferrals = await tenantDb.query.referrals.findMany({
       where: eq(referrals.referringPracticeId, Number(userPractice.practiceId)),
       with: {
         pet: true,

@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
-import { db } from '@/db/index';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { whiteboardItems, pets, users } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { z } from 'zod';
 
 // GET /api/whiteboard - Get all whiteboard items for user's practice
 export async function GET(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -64,6 +68,9 @@ const createWhiteboardItemSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {

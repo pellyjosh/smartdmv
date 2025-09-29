@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
+import { getUserPractice } from '@/lib/auth-utils';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { integrationSettings, integrationApiKeys } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { getUserPractice } from '@/lib/auth-utils';
 import crypto from 'crypto';
 
 // POST /api/integration-settings/generate-api-key - Generate a new API key
 export async function POST(request: NextRequest) {
+  // Get the tenant-specific database
+  const tenantDb = await getCurrentTenantDb();
+
   try {
     const userPractice = await getUserPractice(request);
     if (!userPractice) {
@@ -23,7 +27,7 @@ export async function POST(request: NextRequest) {
     const defaultScopes = ['appointments', 'clients', 'availability'];
 
     // Create new API key record
-    await db.insert(integrationApiKeys).values({
+    await tenantDb.insert(integrationApiKeys).values({
       practiceId: parseInt(userPractice.practiceId),
       keyName: `API Key ${new Date().toLocaleDateString()}`,
       keyHash,
@@ -38,7 +42,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Update the integration settings with the new API key (for backward compatibility)
-    const existingSettings = await db.query.integrationSettings.findFirst({
+    const existingSettings = await tenantDb.query.integrationSettings.findFirst({
       where: eq(integrationSettings.practiceId, parseInt(userPractice.practiceId))
     });
 
@@ -63,7 +67,7 @@ export async function POST(request: NextRequest) {
         .where(eq(integrationSettings.id, existingSettings.id));
     } else {
       // Create new settings if they don't exist
-      await db.insert(integrationSettings).values({
+      await tenantDb.insert(integrationSettings).values({
         practiceId: parseInt(userPractice.practiceId),
         apiSettings: JSON.stringify({
           apiKey: apiKey,
