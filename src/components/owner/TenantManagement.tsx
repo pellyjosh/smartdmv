@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { AlertTriangle, Loader2, Trash2, Plus } from "lucide-react";
+import { buildTenantUrl } from "@/lib/tenant-url";
 
 interface Tenant {
   id: number;
@@ -116,11 +117,14 @@ export function TenantManagement() {
         setShowForm(false);
         await loadTenants();
 
-        // Show test URL
+        // Show tenant URL (dev or prod aware)
+        const tenantUrl = buildTenantUrl(formData.subdomain, {
+          customDomain: formData.customDomain || undefined,
+        });
         toast({
-          title: "Test URL Ready",
-          description: `Visit http://${formData.subdomain}.localhost:9002 to test`,
-          duration: 10000,
+          title: "Tenant URL Ready",
+          description: `Visit ${tenantUrl} to test`,
+          duration: 12000,
         });
       } else {
         toast({
@@ -247,8 +251,16 @@ export function TenantManagement() {
                     required
                   />
                   <p className="text-sm text-muted-foreground mt-1">
-                    Will be accessible at: {formData.subdomain || "subdomain"}
-                    .localhost:9002
+                    {(() => {
+                      const preview = buildTenantUrl(
+                        formData.subdomain || "subdomain-placeholder"
+                      );
+                      return (
+                        <span>
+                          Will be accessible at: {preview || '—'}
+                        </span>
+                      );
+                    })()}
                   </p>
                 </div>
               </div>
@@ -417,12 +429,12 @@ export function TenantManagement() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() =>
-                        window.open(
-                          `http://${tenant.subdomain}.localhost:9002`,
-                          "_blank"
-                        )
-                      }
+                      onClick={() => {
+                        const url = buildTenantUrl(tenant.subdomain, {
+                          customDomain: tenant.customDomain,
+                        });
+                        if (url) window.open(url, "_blank");
+                      }}
                     >
                       Open Tenant Site
                     </Button>
