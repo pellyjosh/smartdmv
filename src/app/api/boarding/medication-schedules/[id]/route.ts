@@ -31,7 +31,7 @@ export async function GET(
 
   try {
     const medicationSchedule = await tenantDb.query.medicationSchedules.findFirst({
-      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, idNum),
+      where: eq(medicationSchedules.id, idNum),
       with: {
         stay: {
           with: {
@@ -96,7 +96,7 @@ export async function PUT(
 
     // Check if the medication schedule exists
     const existingSchedule = await tenantDb.query.medicationSchedules.findFirst({
-      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, idNum)
+      where: eq(medicationSchedules.id, idNum)
     });
 
     if (!existingSchedule) {
@@ -106,7 +106,7 @@ export async function PUT(
       );
     }
 
-    const updatedSchedule = await (db as any).update(medicationSchedules)
+  const updatedSchedule = await tenantDb.update(medicationSchedules)
       .set({
         ...(medicationName && { medicationName }),
         ...(dosage && { dosage }),
@@ -121,7 +121,7 @@ export async function PUT(
 
     // Fetch the complete updated medication schedule data with relations
     const completeMedicationSchedule = await tenantDb.query.medicationSchedules.findFirst({
-      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, idNum),
+      where: eq(medicationSchedules.id, idNum),
       with: {
         stay: {
           with: {
@@ -168,7 +168,7 @@ export async function DELETE(
   try {
     // Check if the medication schedule exists
     const existingSchedule = await tenantDb.query.medicationSchedules.findFirst({
-      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, idNum)
+      where: eq(medicationSchedules.id, idNum)
     });
 
     if (!existingSchedule) {
@@ -178,7 +178,7 @@ export async function DELETE(
       );
     }
 
-    await (db as any).delete(medicationSchedules)
+    await tenantDb.delete(medicationSchedules)
       .where(eq(medicationSchedules.id, idNum));
 
     return NextResponse.json(

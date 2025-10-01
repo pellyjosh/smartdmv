@@ -108,8 +108,8 @@ export async function POST(request: NextRequest) {
       requiresSpecialAuth: validatedData.requiresSpecialAuth,
     };
 
-    // Insert new inventory item
-    const insertedItems = await (db as any).insert(inventory).values(insertData).returning();
+  // Insert new inventory item using tenantDb
+  const insertedItems = await tenantDb.insert(inventory).values(insertData).returning();
     
     const newInventoryItem = insertedItems[0];
 

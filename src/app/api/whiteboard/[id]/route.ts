@@ -52,7 +52,7 @@ export async function PATCH(
     const data = validation.data;
 
     // Check if the whiteboard item exists and belongs to the user's practice
-    const existingItem = await (db as any)
+    const existingItem = await tenantDb
       .select()
       .from(whiteboardItems)
       .where(and(
@@ -69,7 +69,7 @@ export async function PATCH(
     }
 
     // Update the whiteboard item
-    const [updatedItem] = await (db as any)
+    const [updatedItem] = await tenantDb
       .update(whiteboardItems)
       .set({
         ...data,
@@ -113,7 +113,7 @@ export async function DELETE(
     }
 
     // Check if the whiteboard item exists and belongs to the user's practice
-    const existingItem = await (db as any)
+    const existingItem = await tenantDb
       .select()
       .from(whiteboardItems)
       .where(and(
@@ -130,7 +130,7 @@ export async function DELETE(
     }
 
     // Delete the whiteboard item
-    await (db as any)
+    await tenantDb
       .delete(whiteboardItems)
       .where(eq(whiteboardItems.id, itemId));
 
@@ -172,7 +172,7 @@ export async function GET(
     }
 
     // Get the whiteboard item
-    const item = await (db as any)
+    const item = await tenantDb
       .select()
       .from(whiteboardItems)
       .where(and(

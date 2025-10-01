@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-;
 import { referrals, ReferralStatus } from '@/db/schema';
 import { canEdit } from '@/lib/rbac-helpers';
 import { eq } from 'drizzle-orm';
@@ -41,12 +40,11 @@ export async function PATCH(
     }
 
     // Update the referral status
-    const [updatedReferral] = await (db as any)
+    const [updatedReferral] = await tenantDb
       .update(referrals)
       .set({ 
         status,
         updatedAt: new Date(),
-        // If marking as completed, set completed date
         ...(status === ReferralStatus.COMPLETED && { completedDate: new Date().toISOString() })
       })
       .where(eq(referrals.id, referralId))

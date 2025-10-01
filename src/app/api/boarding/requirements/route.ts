@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json([], { status: 200 });
       }
       requirementsList = await tenantDb.query.boardingRequirements.findMany({
-        where: (boardingRequirements, { eq }) => eq(boardingRequirements.stayId, stayIdNum),
+        where: eq(boardingRequirements.stayId, stayIdNum),
         with: {
           stay: {
             with: {
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     // Check if the boarding stay exists
     const existingStay = await tenantDb.query.boardingStays.findFirst({
-      where: (boardingStays, { eq }) => eq(boardingStays.id, stayIdNum)
+      where: eq((tenantDb.schema as any).boardingStays.id, stayIdNum)
     });
 
     if (!existingStay) {
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newRequirement = await (db as any).insert(boardingRequirements)
+    const newRequirement = await tenantDb.insert(boardingRequirements)
       .values({
         stayId: stayIdNum,
         requirementType,
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     const insertedId = Array.isArray(newRequirement) && newRequirement[0] ? newRequirement[0].id : (newRequirement as any).id;
 
     const completeRequirement = await tenantDb.query.boardingRequirements.findFirst({
-      where: (boardingRequirements, { eq }) => eq(boardingRequirements.id, insertedId),
+      where: eq(boardingRequirements.id, insertedId),
       with: {
         stay: {
           with: {

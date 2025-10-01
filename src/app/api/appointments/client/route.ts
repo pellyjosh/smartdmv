@@ -1,7 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-;
 import { appointments } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-utils";
@@ -49,7 +48,7 @@ export async function GET(request: NextRequest) {
     console.log(`Found ${appointmentsData.length} appointments for client ${user.id}`);
 
     // Log raw appointment data with detailed status information
-    appointmentsData.forEach((apt, index) => {
+  appointmentsData.forEach((apt: typeof appointmentsData[number], index: number) => {
       console.log(`🔍 Raw Appointment ${index + 1}:`, {
         id: apt.id,
         title: apt.title,
@@ -62,7 +61,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Transform the data to match the frontend expectations
-    const transformedAppointments = appointmentsData.map((appointment, index) => {
+  const transformedAppointments = appointmentsData.map((appointment: typeof appointmentsData[number], index: number) => {
       const originalStatus = appointment.status;
       const transformedStatus = (() => {
         switch (appointment.status) {
@@ -152,7 +151,7 @@ export async function POST(request: NextRequest) {
     // console.log('Creating appointment for client:', user.id);
 
     // Create appointment with client information
-    const newAppointment = await (db as any).insert(appointments).values({
+    const newAppointment = await tenantDb.insert(appointments).values({
       title: appointmentData.title,
       type: appointmentData.type || null, // Add appointment type
       description: appointmentData.description || null,
@@ -221,7 +220,7 @@ export async function PATCH(request: NextRequest) {
     const data = validation.data;
 
     // Check if the appointment exists and belongs to the client
-    const existingAppointment = await (db as any)
+    const existingAppointment = await tenantDb
       .select()
       .from(appointments)
       .where(and(
@@ -258,7 +257,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Update the appointment
-    const [updatedAppointment] = await (db as any)
+    const [updatedAppointment] = await tenantDb
       .update(appointments)
       .set(updateData)
       .where(and(

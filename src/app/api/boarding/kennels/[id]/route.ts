@@ -2,8 +2,8 @@ import { NextResponse, NextRequest } from "next/server";
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 ;
-import { kennels } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { kennels, boardingStays } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import { retryWithBackoff, analyzeError } from '@/lib/network-utils';
 
 export async function GET(
@@ -34,7 +34,7 @@ export async function GET(
   try {
     const kennel = await retryWithBackoff(async () => {
       return await tenantDb.query.kennels.findFirst({
-        where: (kennels, { eq }) => eq(kennels.id, id),
+        where: eq(kennels.id, id),
         with: {
           boardingStays: {
             with: {
@@ -121,7 +121,7 @@ export async function PATCH(
 
     // Update the kennel
     const updatedKennel = await retryWithBackoff(async () => {
-      return await (db as any).update(kennels)
+      return await tenantDb.update(kennels)
         .set({
           name,
           type,
@@ -145,7 +145,7 @@ export async function PATCH(
     // Fetch the complete updated kennel data with relations
     const completeKennel = await retryWithBackoff(async () => {
       return await tenantDb.query.kennels.findFirst({
-        where: (kennels, { eq }) => eq(kennels.id, id),
+        where: eq(kennels.id, id),
         with: {
           boardingStays: {
             with: {
@@ -216,10 +216,10 @@ export async function DELETE(
     // Check if the kennel exists and has any active boarding stays
     const existingKennel = await retryWithBackoff(async () => {
       return await tenantDb.query.kennels.findFirst({
-        where: (kennels, { eq }) => eq(kennels.id, id),
+        where: eq(kennels.id, id),
         with: {
           boardingStays: {
-            where: (boardingStays, { eq, and }) => and(
+            where: and(
               eq(boardingStays.kennelId, id),
               eq(boardingStays.status, 'checked_in')
             )
@@ -245,7 +245,7 @@ export async function DELETE(
 
     // Soft delete by setting isActive to false instead of hard delete
     await retryWithBackoff(async () => {
-      return await (db as any).update(kennels)
+      return await tenantDb.update(kennels)
         .set({ 
           isActive: false,
           updatedAt: new Date()

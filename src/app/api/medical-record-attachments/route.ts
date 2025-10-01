@@ -5,6 +5,7 @@ import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+import { sql } from 'drizzle-orm';
 
 import { medicalRecordAttachments, practices, soapNotes, pets } from '@/db/schema'
 import { eq } from 'drizzle-orm'
@@ -44,13 +45,12 @@ export async function POST(request: NextRequest) {
     if (practiceId) {
       try {
         if (isSqlite) {
-          const practiceResult = await (db as any).get(`
-            SELECT name FROM practices WHERE id = ?
-          `, [parseInt(practiceId, 10)]);
-          
-          if (practiceResult && practiceResult.name) {
+          const practiceResult: any = await tenantDb.execute(sql.raw(`SELECT name FROM practices WHERE id = ?`), [parseInt(practiceId, 10)]);
+          const row = Array.isArray(practiceResult) ? practiceResult[0] : (practiceResult.rows ? practiceResult.rows[0] : undefined);
+          const practiceResultNormalized = row || practiceResult;
+          if (practiceResultNormalized && (practiceResultNormalized as any).name) {
             // Sanitize practice name for folder usage (remove special characters)
-            practiceFolder = String(practiceResult.name).replace(/[^a-zA-Z0-9\s-_]/g, '').replace(/\s+/g, '_');
+            practiceFolder = String((practiceResultNormalized as any).name).replace(/[^a-zA-Z0-9\s-_]/g, '').replace(/\s+/g, '_');
           }
         } else {
           const practiceResult = await tenantDb.query.practices.findFirst({
@@ -84,9 +84,8 @@ export async function POST(request: NextRequest) {
         // Fetch SOAP note to get pet ID
         let soapNote;
         if (isSqlite) {
-          soapNote = await (db as any).get(`
-            SELECT petId FROM soap_notes WHERE id = ?
-          `, [parseInt(recordId, 10)]);
+          const soapNoteResult: any = await tenantDb.execute(sql.raw(`SELECT petId FROM soap_notes WHERE id = ?`), [parseInt(recordId, 10)]);
+          soapNote = Array.isArray(soapNoteResult) ? soapNoteResult[0] : (soapNoteResult.rows ? soapNoteResult.rows[0] : undefined);
         } else {
           const soapNoteResult = await tenantDb.query.soapNotes.findFirst({
             where: eq(soapNotes.id, parseInt(recordId, 10)),
@@ -101,9 +100,8 @@ export async function POST(request: NextRequest) {
           // Fetch pet name
           let pet;
           if (isSqlite) {
-            pet = await (db as any).get(`
-              SELECT name FROM pets WHERE id = ?
-            `, [parseInt(soapNote.petId.toString(), 10)]);
+            const petResult: any = await tenantDb.execute(sql.raw(`SELECT name FROM pets WHERE id = ?`), [parseInt(soapNote.petId.toString(), 10)]);
+            pet = Array.isArray(petResult) ? petResult[0] : (petResult.rows ? petResult.rows[0] : undefined);
           } else {
             const petResult = await tenantDb.query.pets.findFirst({
               where: eq(pets.id, parseInt(soapNote.petId.toString(), 10)),
@@ -149,12 +147,10 @@ export async function POST(request: NextRequest) {
         const attachmentId = `attachment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
         
         if (isSqlite) {
-          await (db as any).run(`
-            INSERT INTO medical_record_attachments (
+          await tenantDb.execute(sql.raw(`INSERT INTO medical_record_attachments (
               id, file_name, file_type, file_size, file_path, uploaded_by_id,
               pet_id, practice_id, record_type, record_id, description
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `, [
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), [
             attachmentId,
             file.name,
             file.type,
@@ -166,13 +162,9 @@ export async function POST(request: NextRequest) {
             recordType,
             recordId,
             description
-          ])
-          
-          // Get the created attachment
-          const createdAttachment = await (db as any).get(`
-            SELECT * FROM medical_record_attachments WHERE id = ?
-          `, [attachmentId])
-          
+          ]);
+          const createdAttachmentResult: any = await tenantDb.execute(sql.raw(`SELECT * FROM medical_record_attachments WHERE id = ?`), [attachmentId]);
+          const createdAttachment = Array.isArray(createdAttachmentResult) ? createdAttachmentResult[0] : (createdAttachmentResult.rows ? createdAttachmentResult.rows[0] : undefined);
           uploadedFiles.push(createdAttachment);
         } else {
           // PostgreSQL implementation using Drizzle ORM

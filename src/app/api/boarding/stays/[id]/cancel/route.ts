@@ -1,7 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-;
 import { boardingStays } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -12,11 +11,19 @@ export async function POST(
   // Get the tenant-specific database
   const tenantDb = await getCurrentTenantDb();
 
-  const { id } = await params;
+  const { id: idParam } = await params;
 
-  if (!id) {
+  if (!idParam) {
     return NextResponse.json(
       { error: 'Stay ID is required' }, 
+      { status: 400 }
+    );
+  }
+
+  const id = parseInt(idParam, 10);
+  if (isNaN(id)) {
+    return NextResponse.json(
+      { error: 'Invalid Stay ID format' },
       { status: 400 }
     );
   }
@@ -27,7 +34,7 @@ export async function POST(
 
     // Check if the stay exists
     const existingStay = await tenantDb.query.boardingStays.findFirst({
-      where: (boardingStays, { eq }) => eq(boardingStays.id, id)
+      where: eq(boardingStays.id, id)
     });
 
     if (!existingStay) {
@@ -51,8 +58,8 @@ export async function POST(
       );
     }
 
-    // Update the stay to cancelled status
-    const updatedStay = await (db as any).update(boardingStays)
+    // Update the stay to cancelled status using tenantDb
+    await tenantDb.update(boardingStays)
       .set({
         status: 'cancelled',
         // If you have a cancelledById field in your schema, uncomment the line below
@@ -63,7 +70,7 @@ export async function POST(
 
     // Fetch the complete updated stay data with relations
     const completeStay = await tenantDb.query.boardingStays.findFirst({
-      where: (boardingStays, { eq }) => eq(boardingStays.id, id),
+      where: eq(boardingStays.id, id),
       with: {
         pet: {
           with: {

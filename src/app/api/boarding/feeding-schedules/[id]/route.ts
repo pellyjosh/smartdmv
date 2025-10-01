@@ -30,7 +30,7 @@ export async function GET(
   }
   try {
     const feedingSchedule = await tenantDb.query.feedingSchedules.findFirst({
-      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, idNum),
+      where: eq(feedingSchedules.id, idNum),
       with: {
           stay: {
             with: {
@@ -97,7 +97,7 @@ export async function PUT(
 
     // Check if the feeding schedule exists
     const existingSchedule = await tenantDb.query.feedingSchedules.findFirst({
-      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, idNum)
+      where: eq(feedingSchedules.id, idNum)
     });
 
     if (!existingSchedule) {
@@ -107,7 +107,7 @@ export async function PUT(
       );
     }
 
-    const updatedSchedule = await (db as any).update(feedingSchedules)
+  const updatedSchedule = await tenantDb.update(feedingSchedules)
       .set({
         ...(feedType && { feedType }),
         ...(amount !== undefined && { amount }),
@@ -123,7 +123,7 @@ export async function PUT(
 
     // Fetch the complete updated feeding schedule data with relations
     const completeFeedingSchedule = await tenantDb.query.feedingSchedules.findFirst({
-      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, idNum),
+      where: eq(feedingSchedules.id, idNum),
       with: {
         stay: {
           with: {
@@ -171,7 +171,7 @@ export async function DELETE(
   try {
     // Check if the feeding schedule exists
     const existingSchedule = await tenantDb.query.feedingSchedules.findFirst({
-      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, idNum)
+      where: eq(feedingSchedules.id, idNum)
     });
 
     if (!existingSchedule) {
@@ -181,7 +181,7 @@ export async function DELETE(
       );
     }
 
-    await (db as any).delete(feedingSchedules)
+    await tenantDb.delete(feedingSchedules)
   .where(eq(feedingSchedules.id, idNum));
 
     return NextResponse.json(

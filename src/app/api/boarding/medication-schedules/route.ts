@@ -17,8 +17,9 @@ export async function GET(request: NextRequest) {
     let medicationSchedulesList;
 
     if (stayId) {
+      const stayIdNum = typeof stayId === 'string' ? parseInt(stayId, 10) : stayId;
       medicationSchedulesList = await tenantDb.query.medicationSchedules.findMany({
-        where: (medicationSchedules, { eq }) => eq(medicationSchedules.stayId, stayId),
+        where: eq(medicationSchedules.stayId, stayIdNum),
         with: {
           stay: {
             with: {
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
 
     // Check if the boarding stay exists
     const existingStay = await tenantDb.query.boardingStays.findFirst({
-      where: (boardingStays, { eq }) => eq(boardingStays.id, stayIdNum)
+      where: eq((tenantDb.schema as any).boardingStays.id, stayIdNum)
     });
 
     if (!existingStay) {
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert and let the DB generate the integer primary key (id)
-    const newMedicationSchedule = await (db as any).insert(medicationSchedules)
+  const newMedicationSchedule = await tenantDb.insert(medicationSchedules)
       .values({
         stayId: stayIdNum,
         medicationName,
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
     const insertedId = Array.isArray(newMedicationSchedule) && newMedicationSchedule[0] ? newMedicationSchedule[0].id : (newMedicationSchedule as any).id;
 
     const completeMedicationSchedule = await tenantDb.query.medicationSchedules.findFirst({
-      where: (medicationSchedules, { eq }) => eq(medicationSchedules.id, insertedId),
+      where: eq(medicationSchedules.id, insertedId),
       with: {
         stay: {
           with: {

@@ -16,7 +16,7 @@ export async function GET(request: Request, context: { params: Promise<{ petId: 
 
   try {
     // Fetch medical imaging data from database
-    const imagingData = await (db as any).select().from(schema.medicalImaging).where(eq(schema.medicalImaging.petId, petId));
+  const imagingData = await tenantDb.select().from(schema.medicalImaging).where(eq(schema.medicalImaging.petId, petId));
 
     if (imagingData.length === 0) {
       console.log('No medical imaging found for Pet ID:', petId);

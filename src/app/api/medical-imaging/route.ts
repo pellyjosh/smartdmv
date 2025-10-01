@@ -17,16 +17,16 @@ export async function GET(request: Request) {
     // Use type assertion to work around union type issues
     let data;
     if (petId && practiceId) {
-      data = await (db as any).select().from(schema.medicalImaging).where(and(
+      data = await tenantDb.select().from(schema.medicalImaging).where(and(
         eq(schema.medicalImaging.petId, petId),
         eq(schema.medicalImaging.practiceId, practiceId)
       ));
     } else if (petId) {
-      data = await (db as any).select().from(schema.medicalImaging).where(eq(schema.medicalImaging.petId, petId));
+      data = await tenantDb.select().from(schema.medicalImaging).where(eq(schema.medicalImaging.petId, petId));
     } else if (practiceId) {
-      data = await (db as any).select().from(schema.medicalImaging).where(eq(schema.medicalImaging.practiceId, practiceId));
+      data = await tenantDb.select().from(schema.medicalImaging).where(eq(schema.medicalImaging.practiceId, practiceId));
     } else {
-      data = await (db as any).select().from(schema.medicalImaging);
+      data = await tenantDb.select().from(schema.medicalImaging);
     }
 
     return NextResponse.json(data, { status: 200 });
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
     console.log('Prepared data for insert:', newImaging);
 
-    const [createdImaging] = await (db as any).insert(schema.medicalImaging).values(newImaging).returning();
+  const [createdImaging] = await tenantDb.insert(schema.medicalImaging).values(newImaging).returning();
     
     console.log('Created imaging record:', createdImaging);
 

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-;
 import { referrals, ReferralStatus, ReferralPriority, VetSpecialty } from '@/db/schema';
 import { canCreate, canView } from '@/lib/rbac-helpers';
 import { eq, and } from 'drizzle-orm';
@@ -98,7 +97,7 @@ export async function POST(request: NextRequest) {
     const validatedData = createReferralSchema.parse(body);
 
     // Create the referral
-    const [newReferral] = await (db as any).insert(referrals).values({
+    const [newReferral] = await tenantDb.insert(referrals).values({
       petId: validatedData.petId,
       referringPracticeId: parseInt(userPractice.practiceId.toString(), 10),
       referringVetId: validatedData.referringVetId,
@@ -158,7 +157,8 @@ export async function GET(request: NextRequest) {
         specialist: true,
         specialistPractice: true,
       },
-      orderBy: (referrals, { desc }) => [desc(referrals.createdAt)],
+  // Drizzle's dynamic callback typing workaround: annotate params
+  orderBy: (referrals: typeof import('@/db/schema').referrals, helpers: { desc: (c: any) => any }) => [helpers.desc(referrals.createdAt)],
     });
 
     return NextResponse.json(practiceReferrals);

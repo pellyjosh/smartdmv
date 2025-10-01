@@ -1,7 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-;
 import { boardingStays } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { retryWithBackoff, analyzeError } from '@/lib/network-utils';
@@ -34,7 +33,7 @@ export async function GET(
   try {
     const stay = await retryWithBackoff(async () => {
       return await tenantDb.query.boardingStays.findFirst({
-        where: (boardingStays, { eq }) => eq(boardingStays.id, id),
+        where: eq(boardingStays.id, id),
         with: {
           pet: {
             with: {
@@ -129,8 +128,8 @@ export async function PUT(
       dailyRate
     } = body;
 
-    // Update the boarding stay
-    const updatedStay = await (db as any).update(boardingStays)
+    // Update the boarding stay using tenantDb
+    const updatedStay = await tenantDb.update(boardingStays)
       .set({
         checkInDate: checkInDate ? new Date(checkInDate) : undefined,
         plannedCheckOutDate: plannedCheckOutDate ? new Date(plannedCheckOutDate) : undefined,
@@ -155,7 +154,7 @@ export async function PUT(
 
     // Fetch the complete updated stay data with relations
     const completeStay = await tenantDb.query.boardingStays.findFirst({
-      where: (boardingStays, { eq }) => eq(boardingStays.id, id),
+      where: eq(boardingStays.id, id),
       with: {
         pet: {
           with: {
@@ -222,7 +221,7 @@ export async function DELETE(
   try {
     // Check if the stay exists
     const existingStay = await tenantDb.query.boardingStays.findFirst({
-      where: (boardingStays, { eq }) => eq(boardingStays.id, id)
+      where: eq(boardingStays.id, id)
     });
 
     if (!existingStay) {
@@ -232,8 +231,8 @@ export async function DELETE(
       );
     }
 
-    // Delete the boarding stay
-    await (db as any).delete(boardingStays).where(eq(boardingStays.id, id));
+  // Delete the boarding stay using tenantDb
+  await tenantDb.delete(boardingStays).where(eq(boardingStays.id, id));
 
     return NextResponse.json(
       { message: 'Boarding stay deleted successfully' },

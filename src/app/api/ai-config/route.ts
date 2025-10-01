@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserPractice } from '@/lib/auth-utils';
+import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 ;
 import { aiConfigs, administratorAccessiblePractices, users } from '@/db/schema';
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Get configurations for all practices accessible to this administrator
-      const accessiblePractices = await (db as any)
+      const accessiblePractices = await tenantDb
         .select({
           practiceId: administratorAccessiblePractices.practiceId,
         })
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      const configs = await (db as any).select().from(aiConfigs)
+      const configs = await tenantDb.select().from(aiConfigs)
         .where(inArray(aiConfigs.practiceId, practiceIds));
 
       // Return configs without actual API keys for security
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
     if (currentUser.role === 'ADMINISTRATOR' || currentUser.role === 'SUPER_ADMIN') {
       if (currentUser.currentPracticeId == null) {
         // Get first accessible practice for admin
-        const adminPractices = await (db as any).select({ practiceId: administratorAccessiblePractices.practiceId })
+        const adminPractices = await tenantDb.select({ practiceId: administratorAccessiblePractices.practiceId })
           .from(administratorAccessiblePractices)
           .where(eq(administratorAccessiblePractices.administratorId, Number(currentUser.id)))
           .limit(1);
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
       practiceId = currentUser.currentPracticeId as number;
     }
 
-    const config = await (db as any).query.aiConfigs.findFirst({
+    const config = await tenantDb.query.aiConfigs.findFirst({
       where: eq(aiConfigs.practiceId, practiceId),
       with: {
         configuredByUser: {
@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
       // For admins, we'll use their currentPracticeId or the first accessible practice
       if (currentUser.currentPracticeId == null) {
         // Get first accessible practice for admin
-        const adminPractices = await (db as any).select({ practiceId: administratorAccessiblePractices.practiceId })
+        const adminPractices = await tenantDb.select({ practiceId: administratorAccessiblePractices.practiceId })
           .from(administratorAccessiblePractices)
           .where(eq(administratorAccessiblePractices.administratorId, Number(currentUser.id)))
           .limit(1);
@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
     const encryptedApiKey = encrypt(validatedData.geminiApiKey);
 
     // Check if config already exists for this practice
-    const existingConfig = await (db as any).select().from(aiConfigs)
+    const existingConfig = await tenantDb.select().from(aiConfigs)
       .where(eq(aiConfigs.practiceId, practiceId))
       .limit(1);
 
@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
     
     if (existingConfig.length > 0) {
       // Update existing config
-      result = await (db as any).update(aiConfigs)
+      result = await tenantDb.update(aiConfigs)
         .set({
           geminiApiKey: encryptedApiKey,
           isEnabled: validatedData.isEnabled,
@@ -231,7 +231,7 @@ export async function POST(request: NextRequest) {
         .returning();
     } else {
       // Create new config
-      result = await (db as any).insert(aiConfigs).values({
+      result = await tenantDb.insert(aiConfigs).values({
         practiceId: practiceId,
         geminiApiKey: encryptedApiKey,
         isEnabled: validatedData.isEnabled,
@@ -286,7 +286,7 @@ export async function PUT(request: NextRequest) {
     if (currentUser.role === 'ADMINISTRATOR' || currentUser.role === 'SUPER_ADMIN') {
       if (currentUser.currentPracticeId == null) {
         // Get first accessible practice for admin
-        const adminPractices = await (db as any).select({ practiceId: administratorAccessiblePractices.practiceId })
+        const adminPractices = await tenantDb.select({ practiceId: administratorAccessiblePractices.practiceId })
           .from(administratorAccessiblePractices)
           .where(eq(administratorAccessiblePractices.administratorId, Number(currentUser.id)))
           .limit(1);
@@ -324,7 +324,7 @@ export async function PUT(request: NextRequest) {
       updateObject.geminiApiKey = encrypt(validatedData.geminiApiKey);
     }
 
-    const result = await (db as any).update(aiConfigs)
+    const result = await tenantDb.update(aiConfigs)
       .set(updateObject)
       .where(eq(aiConfigs.practiceId, practiceId))
       .returning();
@@ -363,7 +363,8 @@ export async function PUT(request: NextRequest) {
 export async function getDecryptedApiKey(practiceId: string): Promise<string | null> {
   try {
     const practiceIdNum = Number(practiceId);
-    const config = await (db as any).select().from(aiConfigs)
+    const tenantDb = await getCurrentTenantDb();
+    const config = await tenantDb.select().from(aiConfigs)
       .where(and(eq(aiConfigs.practiceId, practiceIdNum), eq(aiConfigs.isEnabled, true)))
       .limit(1);
 

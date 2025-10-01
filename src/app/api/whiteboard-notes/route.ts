@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Date is required' }, { status: 400 });
     }
 
-    const notes = await (db as any)
+  const notes = await tenantDb
       .select({
         id: whiteboardNotes.id,
         note: whiteboardNotes.note,
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = createNoteSchema.parse(body);
 
-    const [newNote] = await (db as any)
+  const [newNote] = await tenantDb
       .insert(whiteboardNotes)
       .values({
         note: validatedData.note,
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       .returning();
 
     // Fetch the complete note with author info
-    const [noteWithAuthor] = await (db as any)
+  const [noteWithAuthor] = await tenantDb
       .select({
         id: whiteboardNotes.id,
         note: whiteboardNotes.note,

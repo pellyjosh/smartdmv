@@ -4,6 +4,7 @@ import { existsSync } from "fs";
 import path from "path";
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+import { sql } from 'drizzle-orm';
 
 import { medicalRecordAttachments } from '@/db/schema'
 import { eq } from 'drizzle-orm'
@@ -33,9 +34,8 @@ export async function GET(
     // Get the attachment record from database
     let attachment;
     if (isSqlite) {
-      attachment = await (db as any).get(`
-        SELECT * FROM medical_record_attachments WHERE id = ?
-      `, [attachmentId]);
+      const attachmentResult: any = await tenantDb.execute(sql.raw(`SELECT * FROM medical_record_attachments WHERE id = ?`), [attachmentId]);
+      attachment = Array.isArray(attachmentResult) ? attachmentResult[0] : (attachmentResult.rows ? attachmentResult.rows[0] : undefined);
     } else {
       // PostgreSQL using Drizzle ORM
       const result = await tenantDb.query.medicalRecordAttachments.findFirst({
@@ -71,7 +71,8 @@ export async function GET(
     // Use RFC 5987 encoding for filenames with non-ASCII characters
     headers.set("Content-Disposition", `${dispositionType}; filename*=UTF-8''${encodedFilename}`);
     
-    return new NextResponse(fileBuffer, { headers });
+  // Wrap buffer in a Uint8Array to satisfy Response body type expectations
+  return new NextResponse(new Uint8Array(fileBuffer), { headers });
 
   } catch (error) {
     console.error("Error serving file:", error);

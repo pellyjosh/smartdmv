@@ -1,7 +1,6 @@
 
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { db } from '@/db';
 import { getCurrentTenantDb, isCurrentRequestTenant } from '@/lib/tenant-db-resolver';
 import { users as usersTable, sessions as sessionsTable, administratorAccessiblePractices as adminPracticesTable, practices as practicesTable } from '@/db/schema';
 import { eq, gt, sql, like } from 'drizzle-orm'; // Import gt for greater than comparison and sql for raw queries
@@ -14,11 +13,18 @@ import { getUserAssignedRoles } from '@/lib/rbac/dynamic-roles';
  * Get the appropriate database instance based on current request context
  */
 async function getContextualDb() {
-  const isTenant = await isCurrentRequestTenant();
-  
-  if (isTenant) {
-    console.log('[AUTH_ME_API] Using tenant-specific database');
+  // Always resolve a tenant DB. If request isn't tagged as tenant yet, attempt resolution anyway.
+  try {
+    const isTenant = await isCurrentRequestTenant();
+    if (isTenant) {
+      console.log('[AUTH_ME_API] Using tenant-specific database');
+    } else {
+      console.log('[AUTH_ME_API] Forcing tenant DB resolution even though request not flagged tenant');
+    }
     return await getCurrentTenantDb();
+  } catch (e) {
+    console.error('[AUTH_ME_API] Failed to resolve tenant DB', e);
+    throw e;
   }
 }
 
@@ -79,7 +85,7 @@ export async function GET(request: Request) {
 
       if (sessionExpiresAt < currentTime) {
         console.log(`[API ME] Session expired. ExpiresAt_ms: ${sessionExpiresAt}, CurrentTime_ms: ${currentTime}. Deleting session and clearing cookie.`);
-        await (contextualDb as any).delete(sessionsTable).where(eq(sessionsTable.id, sessionId));
+  await contextualDb.delete(sessionsTable).where(eq(sessionsTable.id, sessionId));
         const response = NextResponse.json(null, { status: 200 });
         response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
         return response;
@@ -92,7 +98,7 @@ export async function GET(request: Request) {
 
       if (!userRecord) {
         console.error(`[API ME] User not found for session ID: ${sessionTokenValue}, userId: ${session.userId}. Deleting orphaned session and clearing cookie.`);
-        await (contextualDb as any).delete(sessionsTable).where(eq(sessionsTable.id, sessionId));
+  await contextualDb.delete(sessionsTable).where(eq(sessionsTable.id, sessionId));
         const response = NextResponse.json(null, { status: 200 });
         response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
         return response;
@@ -111,7 +117,7 @@ export async function GET(request: Request) {
       }
 
       if (userRecord.role === 'ADMINISTRATOR') {
-        const adminPractices = await (db as any).query.administratorAccessiblePractices.findMany({
+        const adminPractices = await contextualDb.query.administratorAccessiblePractices.findMany({
           where: eq(adminPracticesTable.administratorId, userRecord.id),
           columns: {
             practiceId: true
@@ -152,7 +158,7 @@ export async function GET(request: Request) {
         };
       } else if (userRecord.role === 'SUPER_ADMIN') {
         // SUPER_ADMIN has access to ALL practices in the system
-        const allPractices = await (db as any).query.practices.findMany({
+        const allPractices = await contextualDb.query.practices.findMany({
           columns: {
             id: true
           }

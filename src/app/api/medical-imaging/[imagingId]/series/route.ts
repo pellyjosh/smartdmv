@@ -16,7 +16,7 @@ export async function GET(request: Request, context: { params: Promise<{ imaging
 
   try {
     // Fetch series data from database
-    const seriesData = await (db as any).select().from(schema.imagingSeries).where(eq(schema.imagingSeries.medicalImagingId, imagingId));
+  const seriesData = await tenantDb.select().from(schema.imagingSeries).where(eq(schema.imagingSeries.medicalImagingId, imagingId));
 
     return NextResponse.json(seriesData, { status: 200 });
   } catch (error) {
@@ -64,7 +64,7 @@ export async function POST(request: Request, context: { params: Promise<{ imagin
     await writeFile(filePath, buffer);
 
     // Get current series count for this imaging study
-    const existingSeries = await (db as any).select().from(schema.imagingSeries).where(eq(schema.imagingSeries.medicalImagingId, imagingId));
+  const existingSeries = await tenantDb.select().from(schema.imagingSeries).where(eq(schema.imagingSeries.medicalImagingId, imagingId));
 
     // Create new series object
     const newSeriesData = {
@@ -79,7 +79,7 @@ export async function POST(request: Request, context: { params: Promise<{ imagin
     };
 
     // Save to database
-    const [newSeries] = await (db as any).insert(schema.imagingSeries).values(newSeriesData).returning();
+  const [newSeries] = await tenantDb.insert(schema.imagingSeries).values(newSeriesData).returning();
 
     return NextResponse.json(newSeries, { status: 201 });
   } catch (error) {

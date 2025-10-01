@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-;
 import { appointments, appointmentStatusEnum } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
@@ -60,7 +59,7 @@ export async function PATCH(
     const data = validation.data;
 
     // Check if the appointment exists and belongs to the user's practice
-    const existingAppointment = await (db as any)
+    const existingAppointment = await tenantDb
       .select()
       .from(appointments)
       .where(and(
@@ -107,7 +106,7 @@ export async function PATCH(
       updateData.date = new Date(data.date);
     }
 
-    const [updatedAppointment] = await (db as any)
+    const [updatedAppointment] = await tenantDb
       .update(appointments)
       .set(updateData)
       .where(eq(appointments.id, appointmentId))
@@ -148,7 +147,7 @@ export async function DELETE(
     }
 
     // Check if the appointment exists and belongs to the user's practice
-    const existingAppointment = await (db as any)
+    const existingAppointment = await tenantDb
       .select()
       .from(appointments)
       .where(and(
@@ -165,7 +164,7 @@ export async function DELETE(
     }
 
     // Delete the appointment
-    await (db as any)
+    await tenantDb
       .delete(appointments)
       .where(eq(appointments.id, appointmentId));
 

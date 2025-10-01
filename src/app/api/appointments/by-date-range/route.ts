@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq, and, gte, lte } from 'drizzle-orm';
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-;
 import { appointments, pets } from '@/db/schema';
 
 export async function GET(request: NextRequest) {
@@ -50,7 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch appointments with pet information
-    const appointmentList = await (db as any)
+    const appointmentList = await tenantDb
       .select({
         id: appointments.id,
         title: appointments.title,

@@ -13,7 +13,7 @@ export async function GET(request: Request, context: { params: Promise<{ seriesI
   const { seriesId } = params;
 
   try {
-    const measurements = await (db as any).select().from(schema.imagingMeasurements).where(eq(schema.imagingMeasurements.seriesId, seriesId));
+  const measurements = await tenantDb.select().from(schema.imagingMeasurements).where(eq(schema.imagingMeasurements.seriesId, seriesId));
     return NextResponse.json(measurements, { status: 200 });
   } catch (error) {
     console.error('Error fetching measurements:', error);
@@ -41,7 +41,7 @@ export async function POST(request: Request, context: { params: Promise<{ series
       label: body.label,
     };
 
-    const [newMeasurement] = await (db as any).insert(schema.imagingMeasurements).values(newMeasurementData).returning();
+  const [newMeasurement] = await tenantDb.insert(schema.imagingMeasurements).values(newMeasurementData).returning();
 
     return NextResponse.json(newMeasurement, { status: 201 });
   } catch (error) {

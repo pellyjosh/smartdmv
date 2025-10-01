@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json([], { status: 200 });
       }
       feedingSchedulesList = await tenantDb.query.feedingSchedules.findMany({
-        where: (feedingSchedules, { eq }) => eq(feedingSchedules.stayId, stayIdNum),
+        where: eq(feedingSchedules.stayId, stayIdNum),
         with: {
           stay: {
             with: {
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     // Check if the boarding stay exists
     const existingStay = await tenantDb.query.boardingStays.findFirst({
-      where: (boardingStays, { eq }) => eq(boardingStays.id, stayIdNum)
+      where: eq((tenantDb.schema as any).boardingStays.id, stayIdNum)
     });
 
     if (!existingStay) {
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newFeedingSchedule = await (db as any).insert(feedingSchedules)
+  const newFeedingSchedule = await tenantDb.insert(feedingSchedules)
       .values({
         stayId: stayIdNum,
         feedingType,
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     const insertedId = Array.isArray(newFeedingSchedule) && newFeedingSchedule[0] ? newFeedingSchedule[0].id : (newFeedingSchedule as any).id;
 
     const completeFeedingSchedule = await tenantDb.query.feedingSchedules.findFirst({
-      where: (feedingSchedules, { eq }) => eq(feedingSchedules.id, insertedId),
+      where: eq(feedingSchedules.id, insertedId),
       with: {
         stay: {
           with: {

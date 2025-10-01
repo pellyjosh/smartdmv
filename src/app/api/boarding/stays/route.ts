@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
 
     // Check if kennel is available for the requested dates
     const conflictingStays = await tenantDb.query.boardingStays.findMany({
-      where: (boardingStays, { eq, and }) => and(
+      where: and(
         eq(boardingStays.kennelId, kennelId),
         eq(boardingStays.practiceId, practiceId)
       )
@@ -178,9 +178,9 @@ export async function POST(request: NextRequest) {
 
     // Verify pet exists and belongs to practice
     const pet = await tenantDb.query.pets.findFirst({
-      where: (pets, { eq, and }) => and(
+      where: and(
         eq(pets.id, petId),
-        eq(pets.practiceId, practiceId) // Both are integers now
+        eq(pets.practiceId, practiceId)
       ),
       with: {
         owner: true
@@ -196,9 +196,9 @@ export async function POST(request: NextRequest) {
 
     // Verify kennel exists and belongs to practice
     const kennel = await tenantDb.query.kennels.findFirst({
-      where: (kennels, { eq, and }) => and(
+      where: and(
         eq(kennels.id, kennelId),
-        eq(kennels.practiceId, practiceId), // Use integer since schema expects it
+        eq(kennels.practiceId, practiceId),
         eq(kennels.isActive, true)
       )
     });
@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
 
     // Create the boarding stay - following your exact schema structure
     // Note: Don't set id since it's a serial (auto-incrementing) field
-    const newStayResult = await (db as any).insert(boardingStays).values({
+    const newStayResult = await tenantDb.insert(boardingStays).values({
       petId,
       kennelId,
       checkInDate: checkInDate, // Pass Date object directly
@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch the complete stay data with relations
     const completeStay = await tenantDb.query.boardingStays.findFirst({
-      where: (boardingStays, { eq }) => eq(boardingStays.id, newStayId),
+      where: eq(boardingStays.id, newStayId),
       with: {
         pet: {
           with: {

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-;
-import { administratorAccessiblePractices, users, practices } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { administratorAccessiblePractices, practices } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   // Get the tenant-specific database
@@ -18,7 +17,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all practices accessible to this administrator
-    const accessiblePractices = await (db as any)
+    const adminIdNum = parseInt(administratorId, 10);
+    if (isNaN(adminIdNum)) {
+      return NextResponse.json({ error: 'Invalid Administrator ID' }, { status: 400 });
+    }
+
+    const accessiblePractices = await tenantDb
       .select({
         practiceId: practices.id,
         practiceName: practices.name,
@@ -26,7 +30,7 @@ export async function GET(request: NextRequest) {
       })
       .from(administratorAccessiblePractices)
       .innerJoin(practices, eq(administratorAccessiblePractices.practiceId, practices.id))
-      .where(eq(administratorAccessiblePractices.administratorId, administratorId));
+      .where(eq(administratorAccessiblePractices.administratorId, adminIdNum));
 
     return NextResponse.json({
       practices: accessiblePractices,

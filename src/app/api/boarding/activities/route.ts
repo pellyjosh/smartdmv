@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json([], { status: 200 });
       }
       activitiesList = await tenantDb.query.boardingActivities.findMany({
-        where: (boardingActivities, { eq }) => eq(boardingActivities.stayId, stayIdNum),
+        where: eq(boardingActivities.stayId, stayIdNum),
         with: {
           stay: {
             with: {
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
 
     // Check if the boarding stay exists
     const existingStay = await tenantDb.query.boardingStays.findFirst({
-      where: (boardingStays, { eq }) => eq(boardingStays.id, stayIdNum)
+      where: eq((tenantDb.schema as any).boardingStays.id, stayIdNum)
     });
 
     if (!existingStay) {
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newActivity = await (db as any).insert(boardingActivities)
+  const newActivity = await tenantDb.insert(boardingActivities)
       .values({
         stayId: stayIdNum,
         activityType,
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     const insertedId = Array.isArray(newActivity) && newActivity[0] ? newActivity[0].id : (newActivity as any).id;
 
     const completeActivity = await tenantDb.query.boardingActivities.findFirst({
-      where: (boardingActivities, { eq }) => eq(boardingActivities.id, insertedId),
+      where: eq(boardingActivities.id, insertedId),
       with: {
         stay: {
           with: {

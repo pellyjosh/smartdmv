@@ -107,9 +107,9 @@ export async function POST(request: NextRequest) {
 
     // Check if kennel name already exists in practice
     const existingKennel = await tenantDb.query.kennels.findFirst({
-      where: (kennels, { eq, and }) => and(
-        eq(kennels.name, name),
-        eq(kennels.practiceId, practiceId)
+      where: (k, { and, eq }) => and(
+        eq(k.name, name),
+        eq(k.practiceId, practiceId)
       )
     });
 
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     // const kennelId = randomUUID();
 
     // Create the kennel - using a type assertion to handle the union type
-    const newKennel = await (db as any).insert(kennels).values({
+    const newKennel = await tenantDb.insert(kennels).values({
       // id: kennelId,
       name,
       type,

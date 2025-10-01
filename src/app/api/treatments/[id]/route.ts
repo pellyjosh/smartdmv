@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-
 import { z } from 'zod'
+import { sql } from 'drizzle-orm';
 
 const treatmentUpdateSchema = z.object({
   name: z.string().optional(),
@@ -60,15 +59,12 @@ export async function PATCH(
       
       values.push(id)
       
-      await (db as any).run(`
-        UPDATE treatments SET ${updates.join(', ')}, updatedAt = strftime('%s', 'now') * 1000 
-        WHERE id = ?
-      `, values)
+      // Use tenantDb.execute with parameterized SQL
+      await tenantDb.execute(sql.raw(`UPDATE treatments SET ${updates.join(', ')}, updatedAt = strftime('%s', 'now') * 1000 WHERE id = ?`), values)
       
       // Get updated treatment
-      const updated = await (db as any).get(`
-        SELECT * FROM treatments WHERE id = ?
-      `, [id])
+      const updatedResult: any = await tenantDb.execute(sql.raw(`SELECT * FROM treatments WHERE id = ?`), [id]);
+      const updated = Array.isArray(updatedResult) ? updatedResult[0] : (updatedResult.rows ? updatedResult.rows[0] : undefined);
       
       if (!updated) {
         return NextResponse.json(
@@ -114,9 +110,8 @@ export async function DELETE(
 
     if (isSqlite) {
       // Check if treatment exists first
-      const existing = await (db as any).get(`
-        SELECT id FROM treatments WHERE id = ?
-      `, [id])
+      const existingResult: any = await tenantDb.execute(sql.raw(`SELECT id FROM treatments WHERE id = ?`), [id]);
+      const existing = Array.isArray(existingResult) ? existingResult[0] : (existingResult.rows ? existingResult.rows[0] : undefined);
       
       if (!existing) {
         return NextResponse.json(
@@ -126,9 +121,7 @@ export async function DELETE(
       }
       
       // Delete treatment
-      await (db as any).run(`
-        DELETE FROM treatments WHERE id = ?
-      `, [id])
+      await tenantDb.execute(sql.raw(`DELETE FROM treatments WHERE id = ?`), [id]);
       
       return NextResponse.json({ 
         success: true, 

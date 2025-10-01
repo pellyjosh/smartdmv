@@ -1,8 +1,6 @@
 // src/app/api/soap-notes/[id]/lock/route.ts
 import { NextResponse } from "next/server";
-import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-;
 import { soapNotes } from "@/db/schemas/soapNoteSchema";
 import { eq } from "drizzle-orm";
 
@@ -51,10 +49,10 @@ export async function POST(
 
     // Lock the SOAP note - let Drizzle handle database-specific conversions
     // @ts-ignore
-    const [updatedSoapNote] = await (db as any).update(soapNotes)
+    const [updatedSoapNote] = await tenantDb.update(soapNotes)
       .set({ 
-        locked: true, // Drizzle will convert to appropriate type for each database
-        updatedAt: new Date() // Use Date object for timestamp with mode: 'date'
+        locked: true,
+        updatedAt: new Date()
       })
       .where(eq(soapNotes.id, soapNoteId))
       .returning();

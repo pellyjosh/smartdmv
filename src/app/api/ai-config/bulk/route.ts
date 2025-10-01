@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     // If applyToAll is true, get all accessible practices for this administrator
     if (validatedData.applyToAll) {
-      const accessiblePractices = await (db as any)
+      const accessiblePractices = await tenantDb
         .select({
           practiceId: administratorAccessiblePractices.practiceId,
         })
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       try {
     const practiceIdNum = Number(practiceId);
         // Check if config already exists for this practice
-        const existingConfig = await (db as any).select().from(aiConfigs)
+        const existingConfig = await tenantDb.select().from(aiConfigs)
           .where(eq(aiConfigs.practiceId, practiceIdNum))
           .limit(1);
 
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         
         if (existingConfig.length > 0) {
           // Update existing config
-          result = await (db as any).update(aiConfigs)
+          result = await tenantDb.update(aiConfigs)
             .set({
               geminiApiKey: encryptedApiKey,
               isEnabled: validatedData.isEnabled,
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
             .returning();
         } else {
           // Create new config
-          result = await (db as any).insert(aiConfigs).values({
+          result = await tenantDb.insert(aiConfigs).values({
             practiceId: practiceIdNum,
             geminiApiKey: encryptedApiKey,
             isEnabled: validatedData.isEnabled,

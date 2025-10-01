@@ -13,7 +13,7 @@ export async function GET(request: Request, context: { params: Promise<{ seriesI
   const { seriesId } = params;
 
   try {
-    const annotations = await (db as any).select().from(schema.imagingAnnotations).where(eq(schema.imagingAnnotations.seriesId, seriesId));
+  const annotations = await tenantDb.select().from(schema.imagingAnnotations).where(eq(schema.imagingAnnotations.seriesId, seriesId));
     return NextResponse.json(annotations, { status: 200 });
   } catch (error) {
     console.error('Error fetching annotations:', error);
@@ -40,7 +40,7 @@ export async function POST(request: Request, context: { params: Promise<{ series
       text: body.text,
     };
 
-    const [newAnnotation] = await (db as any).insert(schema.imagingAnnotations).values(newAnnotationData).returning();
+  const [newAnnotation] = await tenantDb.insert(schema.imagingAnnotations).values(newAnnotationData).returning();
 
     return NextResponse.json(newAnnotation, { status: 201 });
   } catch (error) {

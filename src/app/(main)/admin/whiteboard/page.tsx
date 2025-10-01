@@ -1,56 +1,51 @@
-'use client';
+"use client";
 
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
-  CardTitle 
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
-import { 
-  Form, 
-  FormControl, 
-  FormField, 
-  FormItem, 
-  FormLabel, 
-  FormMessage 
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
 } from "@/components/ui/form";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/UserContext";
 import { apiRequest } from "@/lib/queryClient";
-import { 
-  PlusCircle, 
-  Clock, 
-  User, 
+import {
+  PlusCircle,
+  Clock,
+  User,
   AlertTriangle,
   CheckCircle,
   Activity,
   RefreshCw,
   FullscreenIcon,
-  Loader2
+  Loader2,
 } from "lucide-react";
 import {
   getWhiteboardStatusFromAppointment,
@@ -61,10 +56,15 @@ import {
   getStatusColor,
   type AppointmentStatus,
   type WhiteboardStatus,
-  type UrgencyLevel
+  type UrgencyLevel,
 } from "@/lib/appointment-workflow";
 import { WhiteboardItem, WhiteboardNote } from "@/db/schema";
-import { isPracticeAdministrator, isVeterinarian, isAdmin, hasRole } from '@/lib/rbac-helpers';
+import {
+  isPracticeAdministrator,
+  isVeterinarian,
+  isAdmin,
+  hasRole,
+} from "@/lib/rbac-helpers";
 import { whiteboardService, WebSocketStatus } from "@/lib/websocket";
 import WhiteboardItemCard from "@/components/whiteboard/WhiteboardItemCard";
 
@@ -97,8 +97,8 @@ interface Appointment {
 // Form schema for creating whiteboard items
 const whiteboardItemFormSchema = z.object({
   petId: z.coerce.number({ message: "Please select a pet" }),
-  status: z.enum(['triage', 'active', 'completed']).default('triage'),
-  urgency: z.enum(['high', 'medium', 'low', 'none']).optional().default('none'),
+  status: z.enum(["triage", "active", "completed"]).default("triage"),
+  urgency: z.enum(["high", "medium", "low", "none"]).optional().default("none"),
   notes: z.string().optional(),
   appointmentId: z.coerce.number().optional(),
   position: z.number().default(0),
@@ -110,10 +110,10 @@ export default function WhiteboardPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => {
     // Only get current date on client side to avoid hydration mismatch
-    if (typeof window !== 'undefined') {
-      return new Date().toISOString().split('T')[0];
+    if (typeof window !== "undefined") {
+      return new Date().toISOString().split("T")[0];
     }
-    return '';
+    return "";
   });
   const [staffNote, setStaffNote] = useState("");
   const [isClient, setIsClient] = useState(false);
@@ -125,50 +125,72 @@ export default function WhiteboardPage() {
   useEffect(() => {
     setIsClient(true);
     if (!selectedDate) {
-      setSelectedDate(new Date().toISOString().split('T')[0]);
+      setSelectedDate(new Date().toISOString().split("T")[0]);
     }
   }, []);
 
   // Get practice ID from user context
-  const practiceId = (user && (hasRole(user as any, 'CLIENT') || isPracticeAdministrator(user as any) || isVeterinarian(user as any) || hasRole(user as any, 'PRACTICE_MANAGER')))
-    ? (user as any).practiceId
-    : (user && (isAdmin(user as any)))
-    ? (user as any).currentPracticeId
-    : null;
+  const practiceId =
+    user &&
+    (hasRole(user as any, "CLIENT") ||
+      isPracticeAdministrator(user as any) ||
+      isVeterinarian(user as any) ||
+      hasRole(user as any, "PRACTICE_MANAGER"))
+      ? (user as any).practiceId
+      : user && isAdmin(user as any)
+      ? (user as any).currentPracticeId
+      : null;
 
   // Check if user has permission to access whiteboard
-  const hasAccess = !!user && !((user as any).role === 'CLIENT');
+  const hasAccess = !!user && !((user as any).role === "CLIENT");
 
   // Fetch whiteboard items for the selected date
-  const { data: whiteboardItems, isLoading: isWhiteboardLoading, error: whiteboardError } = useQuery<WhiteboardItem[]>({
+  const {
+    data: whiteboardItems,
+    isLoading: isWhiteboardLoading,
+    error: whiteboardError,
+  } = useQuery<WhiteboardItem[]>({
     queryKey: ["/api/whiteboard", selectedDate],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/whiteboard");
-      
       if (!res.ok) {
         throw new Error(`Failed to fetch whiteboard items: ${res.status}`);
       }
-      
-      const allItems = await res.json();
-      
-      // Filter items that are either:
-      // 1. Not linked to appointments (always show)
-      // 2. Linked to appointments on the selected date
-      if (!appointments) return allItems;
-      
+
+      const raw = await res.json();
+      // Normalize each item to ensure pet object is present
+      const normalized = raw.map((item: any) => {
+        const petName = item.pet?.name ?? item.petName;
+        if (!item.pet && petName) {
+          item.pet = {
+            id: item.petId,
+            name: petName,
+            species: item.petSpecies || item.pet?.species || "",
+            breed: item.petBreed || item.pet?.breed || "",
+          };
+        }
+        return item;
+      });
+
+      if (!appointments) return normalized;
+
       const todayAppointmentIds = new Set(
         appointments
-          .filter(apt => new Date(apt.date).toISOString().split('T')[0] === selectedDate)
-          .map(apt => parseInt(apt.id))
+          .filter(
+            (apt) =>
+              new Date(apt.date).toISOString().split("T")[0] === selectedDate
+          )
+          .map((apt) => parseInt(apt.id))
       );
-      
-      return allItems.filter((item: WhiteboardItem) => 
-        !item.appointmentId || todayAppointmentIds.has(item.appointmentId)
+
+      return normalized.filter(
+        (item: any) =>
+          !item.appointmentId || todayAppointmentIds.has(item.appointmentId)
       );
     },
     enabled: !!user && !!hasAccess,
     retry: 3,
-    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
   // Fetch pets
@@ -185,84 +207,106 @@ export default function WhiteboardPage() {
   });
 
   // Fetch appointments for selected date
-  const { data: appointments, isLoading: isAppointmentsLoading, error: appointmentsError } = useQuery<Appointment[]>({
+  const {
+    data: appointments,
+    isLoading: isAppointmentsLoading,
+    error: appointmentsError,
+  } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments", selectedDate, practiceId],
     queryFn: async () => {
       const params = new URLSearchParams({ date: selectedDate });
       if (practiceId) {
-        params.append('practiceId', practiceId.toString());
+        params.append("practiceId", practiceId.toString());
       }
-      const res = await apiRequest("GET", `/api/appointments?${params.toString()}`);
-      
+      const res = await apiRequest(
+        "GET",
+        `/api/appointments?${params.toString()}`
+      );
+
       if (!res.ok) {
         throw new Error(`Failed to fetch appointments: ${res.status}`);
       }
-      
+
       const allAppointments = await res.json();
-      
+
       // Filter appointments for the selected date
       return allAppointments.filter((appointment: Appointment) => {
-        const appointmentDate = new Date(appointment.date).toISOString().split('T')[0];
+        const appointmentDate = new Date(appointment.date)
+          .toISOString()
+          .split("T")[0];
         return appointmentDate === selectedDate;
       });
     },
     enabled: !!user && !!hasAccess && !!practiceId,
     retry: 3,
-    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
   // Fetch staff notes for the selected date
-  const { data: staffNotes, isLoading: isNotesLoading } = useQuery<WhiteboardNote[]>({
+  const { data: staffNotes, isLoading: isNotesLoading } = useQuery<
+    WhiteboardNote[]
+  >({
     queryKey: ["/api/whiteboard-notes", selectedDate],
     queryFn: async () => {
       const params = new URLSearchParams({ date: selectedDate });
-      const res = await apiRequest("GET", `/api/whiteboard-notes?${params.toString()}`);
-      
+      const res = await apiRequest(
+        "GET",
+        `/api/whiteboard-notes?${params.toString()}`
+      );
+
       if (!res.ok) {
         throw new Error(`Failed to fetch staff notes: ${res.status}`);
       }
-      
+
       return res.json();
     },
     enabled: !!user && !!hasAccess,
     retry: 3,
-    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
   // Create unified items that combine whiteboard items and appointments
   const unifiedItems = React.useMemo(() => {
-    const items: (WhiteboardItem & { 
-      isAppointment?: boolean; 
+    const items: (WhiteboardItem & {
+      isAppointment?: boolean;
       originalAppointmentStatus?: AppointmentStatus;
       pet?: Pet;
     })[] = [];
-    
+
     // Add existing whiteboard items
     if (whiteboardItems) {
-      items.push(...whiteboardItems.map(item => ({ 
-        ...item, 
-        isAppointment: false,
-        urgency: (item.urgency || 'none') as UrgencyLevel // Convert null to 'none'
-      })));
+      items.push(
+        ...whiteboardItems.map((item) => ({
+          ...item,
+          isAppointment: false,
+          urgency: (item.urgency || "none") as UrgencyLevel, // Convert null to 'none'
+        }))
+      );
     }
-    
+
     // Add appointments as whiteboard items if they should appear on whiteboard
     if (appointments) {
-      appointments.forEach(appointment => {
+      appointments.forEach((appointment) => {
         const appointmentStatus = appointment.status as AppointmentStatus;
-        
+
         // Use the workflow function to determine if this appointment should appear
         if (shouldAppearOnWhiteboard(appointmentStatus)) {
           // Check if this appointment is already linked to a whiteboard item
-          const alreadyLinked = whiteboardItems?.some(item => item.appointmentId === parseInt(appointment.id));
-          
+          const alreadyLinked = whiteboardItems?.some(
+            (item) => item.appointmentId === parseInt(appointment.id)
+          );
+
           if (!alreadyLinked && appointment.petId) {
             // Map appointment status to whiteboard status using workflow function
-            const whiteboardStatus = getWhiteboardStatusFromAppointment(appointmentStatus);
-            
+            const whiteboardStatus =
+              getWhiteboardStatusFromAppointment(appointmentStatus);
+
             // Get urgency from appointment details
-            const urgency = getAppointmentUrgency(appointment.title, appointment.description);
-            
+            const urgency = getAppointmentUrgency(
+              appointment.title,
+              appointment.description
+            );
+
             items.push({
               id: parseInt(appointment.id) + 10000, // Offset to avoid ID conflicts
               petId: parseInt(appointment.petId),
@@ -272,19 +316,21 @@ export default function WhiteboardPage() {
               appointmentId: parseInt(appointment.id),
               position: 0,
               practiceId: parseInt(appointment.practiceId),
-              assignedToId: appointment.staffId ? parseInt(appointment.staffId) : null,
+              assignedToId: appointment.staffId
+                ? parseInt(appointment.staffId)
+                : null,
               location: null,
               createdAt: new Date(appointment.createdAt),
               updatedAt: new Date(appointment.updatedAt),
               isAppointment: true,
               originalAppointmentStatus: appointmentStatus,
-              pet: appointment.pet
+              pet: appointment.pet,
             });
           }
         }
       });
     }
-    
+
     return items;
   }, [whiteboardItems, appointments]);
 
@@ -300,7 +346,7 @@ export default function WhiteboardPage() {
   });
 
   // Create whiteboard item mutation
-    const createWhiteboardItemMutation = useMutation({
+  const createWhiteboardItemMutation = useMutation({
     mutationFn: async (data: Partial<WhiteboardItem>) => {
       const res = await apiRequest("POST", "/api/whiteboard", {
         ...data,
@@ -310,10 +356,13 @@ export default function WhiteboardPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/whiteboard", selectedDate] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/whiteboard", selectedDate],
+      });
       toast({
         title: "Patient added to whiteboard",
-        description: "The patient has been successfully added to the triage queue.",
+        description:
+          "The patient has been successfully added to the triage queue.",
       });
       setIsDialogOpen(false);
       form.reset();
@@ -321,32 +370,52 @@ export default function WhiteboardPage() {
   });
 
   const updateWhiteboardItemMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<WhiteboardItem> }) => {
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: number;
+      data: Partial<WhiteboardItem>;
+    }) => {
       const res = await apiRequest("PATCH", `/api/whiteboard/${id}`, data);
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/whiteboard", selectedDate] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/whiteboard", selectedDate],
+      });
     },
   });
 
   const updateAppointmentMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<Appointment> }) => {
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: number;
+      data: Partial<Appointment>;
+    }) => {
       const res = await apiRequest("PATCH", `/api/appointments/${id}`, data);
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/appointments", selectedDate, practiceId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/whiteboard", selectedDate] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/appointments", selectedDate, practiceId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/whiteboard", selectedDate],
+      });
     },
   });
 
   // Update whiteboard item mutation
-    const updateItem = async (id: number, updates: Partial<WhiteboardItem>) => {
+  const updateItem = async (id: number, updates: Partial<WhiteboardItem>) => {
     try {
       const res = await apiRequest("PATCH", `/api/whiteboard/${id}`, updates);
       if (res.ok) {
-        queryClient.invalidateQueries({ queryKey: ["/api/whiteboard", selectedDate] });
+        queryClient.invalidateQueries({
+          queryKey: ["/api/whiteboard", selectedDate],
+        });
       }
     } catch (error) {
       console.error("Error updating whiteboard item:", error);
@@ -359,10 +428,13 @@ export default function WhiteboardPage() {
       await apiRequest("DELETE", `/api/whiteboard/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/whiteboard", selectedDate] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/whiteboard", selectedDate],
+      });
       toast({
         title: "Whiteboard item deleted",
-        description: "The item has been successfully removed from the whiteboard.",
+        description:
+          "The item has been successfully removed from the whiteboard.",
       });
     },
     onError: (error: Error) => {
@@ -379,27 +451,29 @@ export default function WhiteboardPage() {
     mutationFn: async (data: { note: string; date: string }) => {
       const res = await apiRequest("POST", "/api/whiteboard-notes", data);
       if (!res.ok) {
-        throw new Error('Failed to create staff note');
+        throw new Error("Failed to create staff note");
       }
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/whiteboard-notes", selectedDate] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/whiteboard-notes", selectedDate],
+      });
       toast({
         title: "Note added",
         description: "Your note has been added to the whiteboard.",
       });
       setStaffNote("");
-      
+
       // Notify other users via WebSocket about the new note
       try {
         whiteboardService.sendWhiteboardUpdate(practiceId, {
           action: "note_added",
-          date: selectedDate
+          date: selectedDate,
         });
-        console.log('Sent WebSocket message about new staff note');
+        console.log("Sent WebSocket message about new staff note");
       } catch (error) {
-        console.error('Error sending WebSocket message for staff note:', error);
+        console.error("Error sending WebSocket message for staff note:", error);
         // Continue execution - WebSocket errors shouldn't block UI operations
       }
     },
@@ -415,72 +489,84 @@ export default function WhiteboardPage() {
   // Submit whiteboard item form
   const onSubmit = (data: WhiteboardItemFormValues) => {
     // Get next position value
-    const nextPosition = unifiedItems && unifiedItems.length > 0
-      ? Math.max(...unifiedItems.map(item => item.position)) + 1
-      : 0;
-    
+    const nextPosition =
+      unifiedItems && unifiedItems.length > 0
+        ? Math.max(...unifiedItems.map((item) => item.position)) + 1
+        : 0;
+
     createWhiteboardItemMutation.mutate({
       petId: data.petId as number,
       status: data.status as "triage" | "active" | "completed",
       urgency: data.urgency as "high" | "medium" | "low" | "none",
       notes: data.notes as string | undefined,
       appointmentId: data.appointmentId as number | undefined,
-      position: nextPosition
+      position: nextPosition,
     });
   };
 
   // Add staff note
   const addStaffNote = () => {
     if (!staffNote.trim()) return;
-    
+
     createStaffNoteMutation.mutate({
       note: staffNote,
-      date: selectedDate
+      date: selectedDate,
     });
   };
 
   // Filter unified items by status
-  const triageItems = unifiedItems?.filter(item => item.status === "triage") || [];
-  const activeItems = unifiedItems?.filter(item => item.status === "active") || [];
-  const completedItems = unifiedItems?.filter(item => item.status === "completed") || [];
+  const triageItems =
+    unifiedItems?.filter((item) => item.status === "triage") || [];
+  const activeItems =
+    unifiedItems?.filter((item) => item.status === "active") || [];
+  const completedItems =
+    unifiedItems?.filter((item) => item.status === "completed") || [];
 
   // Set up WebSocket connection for real-time updates
   useEffect(() => {
     if (!user || !hasAccess) return;
 
     let unregister = () => {};
-    
+
     try {
       // Connect to the whiteboard WebSocket service
       whiteboardService.connect();
-      console.log('Whiteboard: Connected to WebSocket service');
-      
+      console.log("Whiteboard: Connected to WebSocket service");
+
       // Register handler for whiteboard updates
       unregister = whiteboardService.onWhiteboardUpdate((data) => {
         try {
           if (data && data.practiceId === practiceId) {
-            console.log('Whiteboard: Received update from WebSocket');
+            console.log("Whiteboard: Received update from WebSocket");
             // Refresh whiteboard data when updates come in
-            queryClient.invalidateQueries({ queryKey: ["/api/whiteboard", selectedDate] });
-            queryClient.invalidateQueries({ queryKey: ["/api/appointments", selectedDate, practiceId] });
-            queryClient.invalidateQueries({ queryKey: ["/api/whiteboard-notes", selectedDate] });
+            queryClient.invalidateQueries({
+              queryKey: ["/api/whiteboard", selectedDate],
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["/api/appointments", selectedDate, practiceId],
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["/api/whiteboard-notes", selectedDate],
+            });
           }
         } catch (err) {
-          console.error('Error handling whiteboard update:', err);
+          console.error("Error handling whiteboard update:", err);
         }
       });
-      
     } catch (error) {
-      console.log('Whiteboard: WebSocket connection failed, continuing without real-time updates:', error);
+      console.log(
+        "Whiteboard: WebSocket connection failed, continuing without real-time updates:",
+        error
+      );
     }
-    
+
     // Clean up WebSocket connection when component unmounts
     return () => {
       try {
-        console.log('Whiteboard: Cleaning up WebSocket');
+        console.log("Whiteboard: Cleaning up WebSocket");
         unregister();
       } catch (err) {
-        console.error('Error unregistering whiteboard message handler:', err);
+        console.error("Error unregistering whiteboard message handler:", err);
       }
     };
   }, [user, hasAccess, queryClient, selectedDate, practiceId]);
@@ -497,41 +583,43 @@ export default function WhiteboardPage() {
   const handleDrop = (e: React.DragEvent, targetStatus: WhiteboardStatus) => {
     e.preventDefault();
     const itemId = Number(e.dataTransfer.getData("itemId"));
-    const item = unifiedItems?.find(i => i.id === itemId);
-    
+    const item = unifiedItems?.find((i) => i.id === itemId);
+
     if (item && item.status !== targetStatus) {
       if (item.isAppointment) {
         // 🔄 BIDIRECTIONAL: For appointment items, update BOTH appointment status AND whiteboard
         const newAppointmentStatus = getAppointmentStatusFromWhiteboard(
-          targetStatus, 
+          targetStatus,
           item.originalAppointmentStatus
         );
-        
-        const realAppointmentId = item.appointmentId || (item.id - 10000);
-        
+
+        const realAppointmentId = item.appointmentId || item.id - 10000;
+
         // Update the appointment status (this will auto-sync to whiteboard via server)
         updateAppointmentMutation.mutate({
           id: realAppointmentId,
-          data: { status: newAppointmentStatus }
+          data: { status: newAppointmentStatus },
         });
-        
+
         toast({
           title: "Appointment & Whiteboard Updated",
-          description: `Appointment moved to ${targetStatus} stage (${getStatusLabel(newAppointmentStatus)})`,
+          description: `Appointment moved to ${targetStatus} stage (${getStatusLabel(
+            newAppointmentStatus
+          )})`,
         });
       } else {
         // For manual whiteboard items (not linked to appointments), just update whiteboard
         updateWhiteboardItemMutation.mutate({
           id: itemId,
-          data: { status: targetStatus }
+          data: { status: targetStatus },
         });
-        
+
         toast({
           title: "Whiteboard Updated",
           description: `Patient moved to ${targetStatus} stage`,
         });
       }
-      
+
       // Notify other users via WebSocket about the change
       try {
         whiteboardService.sendWhiteboardUpdate(practiceId, {
@@ -540,11 +628,16 @@ export default function WhiteboardPage() {
           newStatus: targetStatus,
           isAppointment: item.isAppointment || false,
           appointmentId: item.appointmentId,
-          newAppointmentStatus: item.isAppointment ? getAppointmentStatusFromWhiteboard(targetStatus, item.originalAppointmentStatus) : null
+          newAppointmentStatus: item.isAppointment
+            ? getAppointmentStatusFromWhiteboard(
+                targetStatus,
+                item.originalAppointmentStatus
+              )
+            : null,
         });
-        console.log('Sent WebSocket message about status change');
+        console.log("Sent WebSocket message about status change");
       } catch (error) {
-        console.error('Error sending WebSocket message:', error);
+        console.error("Error sending WebSocket message:", error);
         // Continue execution - WebSocket errors shouldn't block UI operations
       }
     }
@@ -584,7 +677,8 @@ export default function WhiteboardPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-slate-500">
-                  Only practice staff and administrators can access the digital whiteboard.
+                  Only practice staff and administrators can access the digital
+                  whiteboard.
                 </p>
               </CardContent>
             </Card>
@@ -597,22 +691,28 @@ export default function WhiteboardPage() {
   return (
     <div className="h-full">
       <div className="flex-1 flex flex-col">
-        
         {/* Header with Date Selector */}
         <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Digital Whiteboard</h1>
-              <p className="text-sm text-slate-500">Manage patient flow and appointments</p>
+              <h1 className="text-2xl font-bold text-slate-900">
+                Digital Whiteboard
+              </h1>
+              <p className="text-sm text-slate-500">
+                Manage patient flow and appointments
+              </p>
               {(whiteboardError || appointmentsError) && (
                 <p className="text-xs text-red-500 mt-1">
-                  ⚠️ Database connectivity issues detected. Some data may not be current.
+                  ⚠️ Database connectivity issues detected. Some data may not be
+                  current.
                 </p>
               )}
             </div>
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
-                <label className="text-sm font-medium text-slate-700">Date:</label>
+                <label className="text-sm font-medium text-slate-700">
+                  Date:
+                </label>
                 <Input
                   type="date"
                   value={selectedDate}
@@ -623,19 +723,21 @@ export default function WhiteboardPage() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                onClick={() =>
+                  setSelectedDate(new Date().toISOString().split("T")[0])
+                }
               >
                 Today
               </Button>
             </div>
           </div>
         </div>
-        
+
         <main className="flex-1 overflow-y-auto pb-16 md:pb-0 p-4 md:p-6">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Triage Board */}
-            <div 
-              className="bg-white p-4 rounded-lg shadow-sm border border-slate-200" 
+            <div
+              className="bg-white p-4 rounded-lg shadow-sm border border-slate-200"
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, "triage")}
             >
@@ -652,9 +754,12 @@ export default function WhiteboardPage() {
                     <DialogHeader>
                       <DialogTitle>Add Patient to Whiteboard</DialogTitle>
                     </DialogHeader>
-                    
+
                     <Form {...form}>
-                      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+                      <form
+                        onSubmit={form.handleSubmit(onSubmit)}
+                        className="space-y-4 pt-4"
+                      >
                         <FormField
                           control={form.control}
                           name="petId"
@@ -662,7 +767,9 @@ export default function WhiteboardPage() {
                             <FormItem>
                               <FormLabel>Patient</FormLabel>
                               <Select
-                                onValueChange={(value) => field.onChange(Number(value))}
+                                onValueChange={(value) =>
+                                  field.onChange(Number(value))
+                                }
                                 defaultValue={field.value?.toString()}
                               >
                                 <FormControl>
@@ -672,15 +779,22 @@ export default function WhiteboardPage() {
                                 </FormControl>
                                 <SelectContent>
                                   {isPetsLoading ? (
-                                    <SelectItem value="loading" disabled>Loading patients...</SelectItem>
+                                    <SelectItem value="loading" disabled>
+                                      Loading patients...
+                                    </SelectItem>
                                   ) : pets && pets.length > 0 ? (
                                     pets.map((pet) => (
-                                      <SelectItem key={pet.id} value={pet.id.toString()}>
+                                      <SelectItem
+                                        key={pet.id}
+                                        value={pet.id.toString()}
+                                      >
                                         {pet.name} ({pet.species})
                                       </SelectItem>
                                     ))
                                   ) : (
-                                    <SelectItem value="none" disabled>No patients available</SelectItem>
+                                    <SelectItem value="none" disabled>
+                                      No patients available
+                                    </SelectItem>
                                   )}
                                 </SelectContent>
                               </Select>
@@ -688,7 +802,7 @@ export default function WhiteboardPage() {
                             </FormItem>
                           )}
                         />
-                        
+
                         <FormField
                           control={form.control}
                           name="urgency"
@@ -714,15 +828,25 @@ export default function WhiteboardPage() {
                             </FormItem>
                           )}
                         />
-                        
+
                         <FormField
                           control={form.control}
                           name="appointmentId"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Link to Appointment (Optional)</FormLabel>
+                              <FormLabel>
+                                Link to Appointment (Optional)
+                              </FormLabel>
                               <Select
-                                onValueChange={(value) => field.onChange(value === "no-appointment" ? undefined : value ? Number(value) : undefined)}
+                                onValueChange={(value) =>
+                                  field.onChange(
+                                    value === "no-appointment"
+                                      ? undefined
+                                      : value
+                                      ? Number(value)
+                                      : undefined
+                                  )
+                                }
                                 defaultValue={field.value?.toString()}
                               >
                                 <FormControl>
@@ -732,29 +856,54 @@ export default function WhiteboardPage() {
                                 </FormControl>
                                 <SelectContent>
                                   {isAppointmentsLoading ? (
-                                    <SelectItem value="loading" disabled>Loading appointments...</SelectItem>
-                                  ) : appointments && appointments.length > 0 ? (
+                                    <SelectItem value="loading" disabled>
+                                      Loading appointments...
+                                    </SelectItem>
+                                  ) : appointments &&
+                                    appointments.length > 0 ? (
                                     [
-                                      <SelectItem key="none" value="no-appointment">No appointment</SelectItem>,
+                                      <SelectItem
+                                        key="none"
+                                        value="no-appointment"
+                                      >
+                                        No appointment
+                                      </SelectItem>,
                                       ...appointments
-                                        .filter(apt => {
+                                        .filter((apt) => {
                                           // Only show approved appointments for the selected date
-                                          const aptDate = new Date(apt.date).toISOString().split('T')[0];
-                                          return apt.status === 'approved' && aptDate === selectedDate;
+                                          const aptDate = new Date(apt.date)
+                                            .toISOString()
+                                            .split("T")[0];
+                                          return (
+                                            apt.status === "approved" &&
+                                            aptDate === selectedDate
+                                          );
                                         })
                                         .map((appointment) => (
-                                          <SelectItem key={appointment.id} value={appointment.id.toString()}>
-                                            {new Date(appointment.date).toLocaleTimeString('en-US', { 
-                                              hour: 'numeric', 
-                                              minute: '2-digit',
-                                              hour12: true 
-                                            })} - Pet ID: {appointment.petId}
-                                            {appointment.description && ` (${appointment.description.substring(0, 20)}...)`}
+                                          <SelectItem
+                                            key={appointment.id}
+                                            value={appointment.id.toString()}
+                                          >
+                                            {new Date(
+                                              appointment.date
+                                            ).toLocaleTimeString("en-US", {
+                                              hour: "numeric",
+                                              minute: "2-digit",
+                                              hour12: true,
+                                            })}{" "}
+                                            - Pet ID: {appointment.petId}
+                                            {appointment.description &&
+                                              ` (${appointment.description.substring(
+                                                0,
+                                                20
+                                              )}...)`}
                                           </SelectItem>
-                                        ))
+                                        )),
                                     ]
                                   ) : (
-                                    <SelectItem value="none" disabled>No appointments today</SelectItem>
+                                    <SelectItem value="none" disabled>
+                                      No appointments today
+                                    </SelectItem>
                                   )}
                                 </SelectContent>
                               </Select>
@@ -762,7 +911,7 @@ export default function WhiteboardPage() {
                             </FormItem>
                           )}
                         />
-                        
+
                         <FormField
                           control={form.control}
                           name="notes"
@@ -779,20 +928,22 @@ export default function WhiteboardPage() {
                             </FormItem>
                           )}
                         />
-                        
+
                         <div className="flex justify-end space-x-2 pt-4">
-                          <Button 
-                            type="button" 
+                          <Button
+                            type="button"
                             variant="outline"
                             onClick={() => setIsDialogOpen(false)}
                           >
                             Cancel
                           </Button>
-                          <Button 
+                          <Button
                             type="submit"
                             disabled={createWhiteboardItemMutation.isPending}
                           >
-                            {createWhiteboardItemMutation.isPending ? "Adding..." : "Add to Whiteboard"}
+                            {createWhiteboardItemMutation.isPending
+                              ? "Adding..."
+                              : "Add to Whiteboard"}
                           </Button>
                         </div>
                       </form>
@@ -800,7 +951,7 @@ export default function WhiteboardPage() {
                   </DialogContent>
                 </Dialog>
               </div>
-              
+
               {isWhiteboardLoading ? (
                 <div className="flex items-center justify-center py-10">
                   <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
@@ -811,21 +962,26 @@ export default function WhiteboardPage() {
                     <WhiteboardItemCard
                       key={item.id}
                       item={item}
-                      onDelete={!item.isAppointment ? () => deleteWhiteboardItemMutation.mutate(item.id) : undefined}
+                      onDelete={
+                        !item.isAppointment
+                          ? () => deleteWhiteboardItemMutation.mutate(item.id)
+                          : undefined
+                      }
                     />
                   ))}
                 </div>
               ) : (
                 <div className="text-center py-8 border border-dashed border-slate-200 rounded-md">
-                  <p className="text-sm text-slate-500">No patients in triage</p>
-                  <p className="text-xs text-slate-400 mb-2">
-                    {selectedDate !== new Date().toISOString().split('T')[0] 
-                      ? `Viewing ${selectedDate}` 
-                      : 'Appointments with status "triage" will appear here automatically'
-                    }
+                  <p className="text-sm text-slate-500">
+                    No patients in triage
                   </p>
-                  <Button 
-                    variant="outline" 
+                  <p className="text-xs text-slate-400 mb-2">
+                    {selectedDate !== new Date().toISOString().split("T")[0]
+                      ? `Viewing ${selectedDate}`
+                      : 'Appointments with status "triage" will appear here automatically'}
+                  </p>
+                  <Button
+                    variant="outline"
                     size="sm"
                     className="mt-2"
                     onClick={() => setIsDialogOpen(true)}
@@ -836,20 +992,22 @@ export default function WhiteboardPage() {
                 </div>
               )}
             </div>
-            
+
             {/* Active Patients */}
-            <div 
+            <div
               className="bg-white p-4 rounded-lg shadow-sm border border-slate-200"
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, "active")}
             >
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-slate-900">Active Patients</h2>
+                <h2 className="font-semibold text-slate-900">
+                  Active Patients
+                </h2>
                 <Button size="icon" variant="ghost">
                   <RefreshCw className="h-4 w-4" />
                 </Button>
               </div>
-              
+
               {isWhiteboardLoading ? (
                 <div className="flex items-center justify-center py-10">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -860,7 +1018,11 @@ export default function WhiteboardPage() {
                     <WhiteboardItemCard
                       key={item.id}
                       item={item}
-                      onDelete={!item.isAppointment ? () => deleteWhiteboardItemMutation.mutate(item.id) : undefined}
+                      onDelete={
+                        !item.isAppointment
+                          ? () => deleteWhiteboardItemMutation.mutate(item.id)
+                          : undefined
+                      }
                     />
                   ))}
                 </div>
@@ -868,17 +1030,16 @@ export default function WhiteboardPage() {
                 <div className="text-center py-8 border border-dashed border-slate-200 rounded-md">
                   <p className="text-sm text-slate-500">No active patients</p>
                   <p className="text-xs text-slate-400 mt-1">
-                    {selectedDate !== new Date().toISOString().split('T')[0] 
-                      ? `Viewing ${selectedDate}` 
-                      : 'Drag patients here from triage or set appointment status to "active"'
-                    }
+                    {selectedDate !== new Date().toISOString().split("T")[0]
+                      ? `Viewing ${selectedDate}`
+                      : 'Drag patients here from triage or set appointment status to "active"'}
                   </p>
                 </div>
               )}
             </div>
-            
+
             {/* Completed */}
-            <div 
+            <div
               className="bg-white p-4 rounded-lg shadow-sm border border-slate-200"
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, "completed")}
@@ -889,7 +1050,7 @@ export default function WhiteboardPage() {
                   <RefreshCw className="h-4 w-4" />
                 </Button>
               </div>
-              
+
               {isWhiteboardLoading ? (
                 <div className="flex items-center justify-center py-10">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -900,23 +1061,28 @@ export default function WhiteboardPage() {
                     <WhiteboardItemCard
                       key={item.id}
                       item={item}
-                      onDelete={!item.isAppointment ? () => deleteWhiteboardItemMutation.mutate(item.id) : undefined}
+                      onDelete={
+                        !item.isAppointment
+                          ? () => deleteWhiteboardItemMutation.mutate(item.id)
+                          : undefined
+                      }
                     />
                   ))}
                 </div>
               ) : (
                 <div className="text-center py-8 border border-dashed border-slate-200 rounded-md">
-                  <p className="text-sm text-slate-500">No completed patients</p>
+                  <p className="text-sm text-slate-500">
+                    No completed patients
+                  </p>
                   <p className="text-xs text-slate-400 mt-1">
-                    {selectedDate !== new Date().toISOString().split('T')[0] 
-                      ? `Viewing ${selectedDate}` 
-                      : 'Drag patients here when finished or set appointment status to "completed"'
-                    }
+                    {selectedDate !== new Date().toISOString().split("T")[0]
+                      ? `Viewing ${selectedDate}`
+                      : 'Drag patients here when finished or set appointment status to "completed"'}
                   </p>
                 </div>
               )}
             </div>
-            
+
             {/* Staff Notes and Info */}
             <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
               <div className="flex items-center justify-between mb-4">
@@ -925,46 +1091,62 @@ export default function WhiteboardPage() {
                   <FullscreenIcon className="h-4 w-4" />
                 </Button>
               </div>
-              
+
               <div className="border border-slate-200 rounded-md p-3 bg-slate-50 mb-3 min-h-[100px]">
                 {isNotesLoading ? (
                   <div className="flex items-center justify-center py-4">
                     <Loader2 className="h-4 w-4 animate-spin text-primary-500" />
-                    <span className="text-xs text-slate-500 ml-2">Loading notes...</span>
+                    <span className="text-xs text-slate-500 ml-2">
+                      Loading notes...
+                    </span>
                   </div>
                 ) : staffNotes && staffNotes.length > 0 ? (
                   staffNotes.map((note, index) => (
-                    <div key={note.id || index} className="flex items-start mb-2 last:mb-0">
-                      <span className="text-xs font-medium text-slate-700">{note.author?.name || 'Staff'}:</span>
+                    <div
+                      key={note.id || index}
+                      className="flex items-start mb-2 last:mb-0"
+                    >
+                      <span className="text-xs font-medium text-slate-700">
+                        {note.author?.name || "Staff"}:
+                      </span>
                       <p className="text-xs text-slate-600 ml-1">{note.note}</p>
                     </div>
                   ))
                 ) : (
                   <div className="text-center py-4">
-                    <p className="text-xs text-slate-500">No notes for {selectedDate === new Date().toISOString().split('T')[0] ? 'today' : selectedDate}</p>
-                    <p className="text-xs text-slate-400 mt-1">Add a note below to share with the team</p>
+                    <p className="text-xs text-slate-500">
+                      No notes for{" "}
+                      {selectedDate === new Date().toISOString().split("T")[0]
+                        ? "today"
+                        : selectedDate}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Add a note below to share with the team
+                    </p>
                   </div>
                 )}
               </div>
-              
+
               <div className="flex items-center mt-2">
-                <Input 
-                  type="text" 
-                  placeholder="Add a note..." 
+                <Input
+                  type="text"
+                  placeholder="Add a note..."
                   className="text-xs"
                   value={staffNote}
                   onChange={(e) => setStaffNote(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
+                    if (e.key === "Enter") {
                       addStaffNote();
                     }
                   }}
                 />
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   className="ml-2 text-xs"
                   onClick={addStaffNote}
-                  disabled={!staffNote.trim() || createStaffNoteMutation.isPending}
+                  disabled={
+                    !staffNote.trim() || createStaffNoteMutation.isPending
+                  }
                 >
                   {createStaffNoteMutation.isPending ? (
                     <>
@@ -972,43 +1154,69 @@ export default function WhiteboardPage() {
                       Adding...
                     </>
                   ) : (
-                    'Add'
+                    "Add"
                   )}
                 </Button>
               </div>
-              
+
               <div className="mt-6">
-                <h3 className="text-sm font-medium text-slate-700 mb-2">Clinic Status</h3>
+                <h3 className="text-sm font-medium text-slate-700 mb-2">
+                  Clinic Status
+                </h3>
                 <Tabs defaultValue="summary">
                   <TabsList className="w-full">
-                    <TabsTrigger value="summary" className="flex-1">Summary</TabsTrigger>
-                    <TabsTrigger value="appointments" className="flex-1">Appointments</TabsTrigger>
+                    <TabsTrigger value="summary" className="flex-1">
+                      Summary
+                    </TabsTrigger>
+                    <TabsTrigger value="appointments" className="flex-1">
+                      Appointments
+                    </TabsTrigger>
                   </TabsList>
                   <TabsContent value="summary" className="mt-3">
                     <div className="space-y-2">
                       <div className="flex justify-between text-xs">
                         <span className="text-slate-500">Waiting Room:</span>
-                        <span className="font-medium">{triageItems.length} patients</span>
+                        <span className="font-medium">
+                          {triageItems.length} patients
+                        </span>
                       </div>
                       <div className="flex justify-between text-xs">
                         <span className="text-slate-500">In Treatment:</span>
-                        <span className="font-medium">{activeItems.length} patients</span>
+                        <span className="font-medium">
+                          {activeItems.length} patients
+                        </span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span className="text-slate-500">Completed {selectedDate === new Date().toISOString().split('T')[0] ? 'Today' : 'Selected Date'}:</span>
-                        <span className="font-medium">{completedItems.length} patients</span>
+                        <span className="text-slate-500">
+                          Completed{" "}
+                          {selectedDate ===
+                          new Date().toISOString().split("T")[0]
+                            ? "Today"
+                            : "Selected Date"}
+                          :
+                        </span>
+                        <span className="font-medium">
+                          {completedItems.length} patients
+                        </span>
                       </div>
                       <div className="flex justify-between text-xs">
                         <span className="text-slate-500">High Priority:</span>
                         <span className="font-medium">
-                          {unifiedItems?.filter(item => item.urgency === "high").length || 0} patients
+                          {unifiedItems?.filter(
+                            (item) => item.urgency === "high"
+                          ).length || 0}{" "}
+                          patients
                         </span>
                       </div>
                     </div>
                   </TabsContent>
                   <TabsContent value="appointments" className="mt-3">
                     <div className="mb-2 text-xs text-slate-400">
-                      Showing {selectedDate === new Date().toISOString().split('T')[0] ? "today's" : selectedDate} appointments
+                      Showing{" "}
+                      {selectedDate === new Date().toISOString().split("T")[0]
+                        ? "today's"
+                        : selectedDate}{" "}
+                      appointments
                     </div>
                     {isAppointmentsLoading ? (
                       <div className="flex items-center justify-center py-4">
@@ -1017,14 +1225,19 @@ export default function WhiteboardPage() {
                     ) : appointments && appointments.length > 0 ? (
                       <div className="space-y-2 max-h-48 overflow-y-auto">
                         {appointments.map((appointment) => (
-                          <div key={appointment.id} className="text-xs border border-slate-200 rounded-md p-2">
+                          <div
+                            key={appointment.id}
+                            className="text-xs border border-slate-200 rounded-md p-2"
+                          >
                             <div className="flex justify-between items-start">
                               <div>
                                 <p className="font-medium text-slate-700">
-                                  {new Date(appointment.date).toLocaleTimeString('en-US', { 
-                                    hour: 'numeric', 
-                                    minute: '2-digit',
-                                    hour12: true 
+                                  {new Date(
+                                    appointment.date
+                                  ).toLocaleTimeString("en-US", {
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                    hour12: true,
                                   })}
                                 </p>
                                 <p className="text-slate-600">
@@ -1032,23 +1245,27 @@ export default function WhiteboardPage() {
                                 </p>
                                 {appointment.description && (
                                   <p className="text-slate-500 mt-1 text-xs">
-                                    {appointment.description.length > 30 
-                                      ? `${appointment.description.substring(0, 30)}...`
-                                      : appointment.description
-                                    }
+                                    {appointment.description.length > 30
+                                      ? `${appointment.description.substring(
+                                          0,
+                                          30
+                                        )}...`
+                                      : appointment.description}
                                   </p>
                                 )}
                               </div>
                               <div className="text-right">
-                                <span className={`inline-block px-2 py-1 rounded-full text-xs ${
-                                  appointment.status === 'approved' 
-                                    ? 'bg-green-100 text-green-700' 
-                                    : appointment.status === 'pending'
-                                    ? 'bg-yellow-100 text-yellow-700'
-                                    : appointment.status === 'rejected'
-                                    ? 'bg-red-100 text-red-700'
-                                    : 'bg-gray-100 text-gray-700'
-                                }`}>
+                                <span
+                                  className={`inline-block px-2 py-1 rounded-full text-xs ${
+                                    appointment.status === "approved"
+                                      ? "bg-green-100 text-green-700"
+                                      : appointment.status === "pending"
+                                      ? "bg-yellow-100 text-yellow-700"
+                                      : appointment.status === "rejected"
+                                      ? "bg-red-100 text-red-700"
+                                      : "bg-gray-100 text-gray-700"
+                                  }`}
+                                >
                                   {appointment.status}
                                 </span>
                               </div>
@@ -1058,9 +1275,21 @@ export default function WhiteboardPage() {
                       </div>
                     ) : (
                       <div className="text-xs text-slate-500 text-center py-2">
-                        <p>No appointments scheduled for {selectedDate === new Date().toISOString().split('T')[0] ? 'today' : selectedDate}.</p>
+                        <p>
+                          No appointments scheduled for{" "}
+                          {selectedDate ===
+                          new Date().toISOString().split("T")[0]
+                            ? "today"
+                            : selectedDate}
+                          .
+                        </p>
                         <p className="mt-1">
-                          <Button variant="link" size="sm" className="p-0 h-auto" asChild>
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="p-0 h-auto"
+                            asChild
+                          >
                             <a href="/appointments">Schedule appointments</a>
                           </Button>
                         </p>
@@ -1072,7 +1301,6 @@ export default function WhiteboardPage() {
             </div>
           </div>
         </main>
-        
       </div>
     </div>
   );

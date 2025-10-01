@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-  const orders = await (db as any).query.labOrders.findMany({
+    const orders = await tenantDb.query.labOrders.findMany({
       where: eq(labOrders.practiceId, Number(userPractice.practiceId)),
     });
 
@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
       sampleCollectionDate: sampleDate,
     };
 
-    const [order] = await (db as any)
+    const [order] = await tenantDb
       .insert(labOrders)
       .values(insertData)
       .returning();
@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
         status: 'ordered' as const,
       }));
 
-      await (db as any).insert(labOrderTests).values(orderTests);
+  await tenantDb.insert(labOrderTests).values(orderTests);
     }
 
   return NextResponse.json(order, { status: 201 });
@@ -283,7 +283,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     console.debug('PUT /api/lab/orders - performing update', { id: idNum, updatePayload });
-    const [updatedOrder] = await (db as any)
+    const [updatedOrder] = await tenantDb
       .update(labOrders)
       .set(updatePayload)
       .where(eq(labOrders.id, idNum))
@@ -378,7 +378,7 @@ export async function PATCH(request: NextRequest) {
 
     try {
       console.debug('PATCH /api/lab/orders - applying update', { id: idNum, changesToApply });
-      const [res] = await (db as any)
+      const [res] = await tenantDb
         .update(labOrders)
         .set(changesToApply)
         .where(and(eq(labOrders.id, idNum), eq(labOrders.practiceId, Number(userPractice.practiceId))))
@@ -396,7 +396,7 @@ export async function PATCH(request: NextRequest) {
     // Handle test updates if provided
     if (Array.isArray(validated.tests)) {
       // Remove existing tests
-    await (db as any).delete(labOrderTests).where(eq(labOrderTests.labOrderId, idNum));
+      await tenantDb.delete(labOrderTests).where(eq(labOrderTests.labOrderId, idNum));
         
         // Add new tests
         if (validated.tests.length > 0) {
@@ -406,7 +406,7 @@ export async function PATCH(request: NextRequest) {
             status: 'ordered' as const,
           }));
 
-    await (db as any).insert(labOrderTests).values(orderTests);
+      await tenantDb.insert(labOrderTests).values(orderTests);
         }
       }
 

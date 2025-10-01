@@ -221,7 +221,7 @@ export async function POST(request: Request) {
     
     // Insert into database, disregarding TypeScript errors as per project pattern
     // @ts-ignore
-    const [newSoapNote] = await (db as any).insert(soapNotes).values({
+    const [newSoapNote] = await tenantDb.insert(soapNotes).values({
       appointmentId: validatedData.appointmentId || null,
       petId: validatedData.petId,
       practitionerId: validatedData.practitionerId,
