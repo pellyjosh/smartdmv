@@ -53,6 +53,18 @@ import {
 } from './schemas/medicalImagingSchema';
 import { invoices, invoiceItems, paymentMethods, payments } from './schemas/billingSchema';
 import { auditLogs } from './schemas/auditLogsSchema';
+// Finance / Payroll imports (added)
+import { 
+  expenses,
+  expenseAttachments,
+  expenseAuditLogs,
+  refunds,
+  payPeriods,
+  payRates,
+  workHours,
+  payroll,
+  budgets
+} from './schemas/financeSchema';
 
 // User roles for tenant databases (excludes OWNER which is only in owner DB)
 export enum TenantUserRoleEnum {
@@ -200,12 +212,20 @@ export {
   imagingMeasurements,
   medicalRecordAttachments,
   electronicSignatures,
-  rvcCodes,
-  billingItems,
   invoices,
   paymentMethods,
   payments,
   auditLogs,
+  // Finance tables
+  expenses,
+  expenseAttachments,
+  expenseAuditLogs,
+  refunds,
+  payPeriods,
+  payRates,
+  workHours,
+  payroll,
+  budgets,
 };
 
 // Combined export for tenant schema
@@ -273,10 +293,18 @@ export const tenantSchema = {
   imagingMeasurements,
   medicalRecordAttachments,
   electronicSignatures,
-  rvcCodes,
-  billingItems,
   invoices,
   paymentMethods,
   payments,
   auditLogs,
+  // Finance tables
+  expenses,
+  expenseAttachments,
+  expenseAuditLogs,
+  refunds,
+  payPeriods,
+  payRates,
+  workHours,
+  payroll,
+  budgets,
 };

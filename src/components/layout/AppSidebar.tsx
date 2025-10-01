@@ -527,7 +527,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "Client Billing",
-        href: "/billing",
+        href: "/admin/billing",
         icon: Receipt,
         roles: [
           "ADMINISTRATOR",
@@ -539,7 +539,7 @@ const menuGroups: MenuGroup[] = [
       },
       {
         title: "Accounts Receivable",
-        href: "/accounts-receivable",
+        href: "/admin/accounts-receivable",
         icon: CircleDollarSign,
         roles: [
           "ADMINISTRATOR",
@@ -550,7 +550,7 @@ const menuGroups: MenuGroup[] = [
       },
       {
         title: "Expense Management",
-        href: "/expenses",
+        href: "/admin/expenses",
         icon: CircleDollarSign,
         roles: [
           "ADMINISTRATOR",
@@ -561,7 +561,7 @@ const menuGroups: MenuGroup[] = [
       },
       {
         title: "Refund Management",
-        href: "/refunds",
+        href: "/admin/refunds",
         icon: CircleDollarSign,
         roles: [
           "ADMINISTRATOR",
@@ -572,7 +572,7 @@ const menuGroups: MenuGroup[] = [
       },
       {
         title: "Payroll",
-        href: "/payroll",
+        href: "/admin/payroll",
         icon: DollarSign,
         roles: [
           "ADMINISTRATOR",

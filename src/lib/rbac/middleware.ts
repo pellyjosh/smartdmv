@@ -37,6 +37,12 @@ export const PROTECTED_ROUTES: RouteConfig[] = [
     ]
   },
   {
+    path: '/admin/billing',
+    requiredPermissions: [
+      { resource: ResourceType.BILLING, action: StandardAction.READ }
+    ]
+  },
+  {
     path: '/admin/users-and-permissions',
     requiredPermissions: [
       { resource: ResourceType.USER, action: StandardAction.READ },

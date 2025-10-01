@@ -18,39 +18,53 @@ const OWNER_PROTECTED_ROUTES = ['/company-management'];
 
 // Extract tenant identifier from hostname (without database calls)
 function extractTenantFromHostname(hostname: string): string | null {
-  const cleanHostname = hostname.split(':')[0];
-  
-  // For plain localhost or IP addresses, return null
-  if (cleanHostname === 'localhost' || 
-      cleanHostname.startsWith('127.0.0.1') || 
-      cleanHostname.startsWith('192.168.') ||
-      /^\d+\.\d+\.\d+\.\d+$/.test(cleanHostname)) {
+  const cleanHostname = hostname.split(':')[0].toLowerCase();
+
+  // Ignore localhost / IP patterns
+  if (
+    cleanHostname === 'localhost' ||
+    cleanHostname === '127.0.0.1' ||
+    cleanHostname.startsWith('192.168.') ||
+    /^\d+\.\d+\.\d+\.\d+$/.test(cleanHostname)
+  ) {
     return null;
   }
-  
-  const parts = cleanHostname.split('.');
-  
-  // Handle development subdomains like "smartvet.localhost"
+
+  const ownerDomainEnv = (process.env.OWNER_DOMAIN || '').toLowerCase();
+  const ownerDomainHost = ownerDomainEnv.split(':')[0];
+
+  // Strip www.
+  const normalized = cleanHostname.startsWith('www.') ? cleanHostname.slice(4) : cleanHostname;
+  const parts = normalized.split('.');
+
+  // Dev pattern: <tenant>.localhost
   if (parts.length >= 2 && parts[parts.length - 1] === 'localhost') {
-    return parts[0]; // Return "smartvet" from "smartvet.localhost"
-  }
-  
-  // If it's a subdomain of your main domain (e.g., tenant.yourdomain.com)
-  if (parts.length >= 3) {
     return parts[0];
   }
-  
-  // If it's a custom domain, return the full hostname
-  return cleanHostname;
+
+  // Exact owner domain => no tenant
+  if (normalized === ownerDomainHost) return null;
+
+  // Subdomain of owner domain => first label is tenant
+  if (ownerDomainHost && normalized.endsWith('.' + ownerDomainHost)) {
+    return parts[0];
+  }
+
+  // Otherwise treat as potential custom domain (full host used as key)
+  if (parts.length >= 2) return normalized;
+  return null;
 }
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hostname = request.headers.get('host') || '';
-  
-  // Check if this is the owner domain
-  const ownerDomain = process.env.OWNER_DOMAIN || 'localhost:9002';
-  const isOwnerDomain = hostname === ownerDomain;
+  const rawHost = request.headers.get('host') || '';
+  const hostname = rawHost.toLowerCase();
+  const hostnameNoPort = hostname.split(':')[0];
+
+  // Normalize owner domain (ignore port when comparing)
+  const ownerDomainEnv = (process.env.OWNER_DOMAIN || 'localhost:9002').toLowerCase();
+  const ownerDomainHost = ownerDomainEnv.split(':')[0];
+  const isOwnerDomain = hostnameNoPort === ownerDomainHost;
   
   // Handle API routes first
   if (pathname.startsWith('/api/')) {
