@@ -28,7 +28,7 @@ export async function GET(
       );
     }
 
-    const vaccineType = await db
+    const vaccineType = await tenantDb
       .select()
       .from(vaccineTypes)
       .where(
@@ -101,7 +101,7 @@ export async function PUT(
     }
 
     // Check if vaccine type exists and belongs to practice
-    const existingVaccineType = await db
+    const existingVaccineType = await tenantDb
       .select()
       .from(vaccineTypes)
       .where(
@@ -120,7 +120,7 @@ export async function PUT(
     }
 
     // Update vaccine type
-    const updatedVaccineType = await db
+    const updatedVaccineType = await tenantDb
       .update(vaccineTypes)
       .set({
         name,
@@ -183,7 +183,7 @@ export async function DELETE(
     }
 
     // Check if vaccine type exists and belongs to practice
-    const existingVaccineType = await db
+    const existingVaccineType = await tenantDb
       .select()
       .from(vaccineTypes)
       .where(
@@ -202,7 +202,7 @@ export async function DELETE(
     }
 
     // Soft delete by setting isActive to false
-    const deletedVaccineType = await db
+    const deletedVaccineType = await tenantDb
       .update(vaccineTypes)
       .set({
         isActive: false,

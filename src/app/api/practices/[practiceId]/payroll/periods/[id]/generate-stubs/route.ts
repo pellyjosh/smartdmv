@@ -14,12 +14,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
     const practiceId = Number(resolvedParams.practiceId);
     if (practiceId !== parseInt(userPractice.practiceId)) return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     const periodId = Number(resolvedParams.id);
-    const db = await getCurrentTenantDb();
-    const [period] = await db.select().from(payPeriods).where(and(eq(payPeriods.id, periodId), eq(payPeriods.practiceId, practiceId)));
+  const tenantDb = await getCurrentTenantDb();
+  const [period] = await tenantDb.select().from(payPeriods).where(and(eq(payPeriods.id, periodId), eq(payPeriods.practiceId, practiceId)));
     if (!period) return NextResponse.json({ error: 'Pay period not found' }, { status: 404 });
 
     // Fetch approved hours within range
-    const hoursRows = await db.select({
+    const hoursRows = await tenantDb.select({
       userId: workHours.userId,
       hoursWorked: workHours.hoursWorked,
       payRateId: workHours.payRateId,
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
     const created: any[] = [];
     for (const [, agg] of map) {
       // Fetch latest rate for user before or on period end
-      const rateRows = await db.select().from(payRates)
+      const rateRows = await tenantDb.select().from(payRates)
         .where(and(eq(payRates.userId, agg.userId), eq(payRates.practiceId, practiceId)))
         .orderBy(payRates.effectiveDate);
       // pick latest effective <= period.endDate
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
         else gross = (parseFloat(latest.rate as unknown as string) / 12) * ((period.endDate.getMonth() - period.startDate.getMonth() + 1));
       }
       const net = gross; // no deductions logic yet
-      const [stub] = await db.insert(payroll).values({
+      const [stub] = await tenantDb.insert(payroll).values({
         practiceId,
         employeeId: agg.userId,
         payPeriodId: period.id,

@@ -51,7 +51,7 @@ export async function GET(
     const order = await tenantDb.query.labOrders.findFirst({
       where: and(
         eq(labOrders.id, orderId),
-        eq(labOrders.practiceId, userPractice.practiceId)
+        eq(labOrders.practiceId, parseInt(userPractice.practiceId))
       ),
     });
 
@@ -69,7 +69,7 @@ export async function GET(
 
     const orderWithTests = {
       ...order,
-      tests: orderTests.map(ot => ({
+      tests: orderTests.map((ot: any) => ({
         id: ot.id,
         testCatalogId: ot.testCatalogId,
         status: ot.status,
@@ -115,7 +115,7 @@ export async function PUT(
     const existingOrder = await tenantDb.query.labOrders.findFirst({
       where: and(
         eq(labOrders.id, orderId),
-        eq(labOrders.practiceId, userPractice.practiceId)
+        eq(labOrders.practiceId, parseInt(userPractice.practiceId))
       ),
     });
 
@@ -136,13 +136,13 @@ export async function PUT(
     // Remove tests from update data as they're handled separately
     delete updateData.tests;
 
-    const [updatedOrder] = await db
+    const [updatedOrder] = await tenantDb
       .update(labOrders)
       .set(updateData)
       .where(
         and(
           eq(labOrders.id, orderId),
-          eq(labOrders.practiceId, userPractice.practiceId)
+          eq(labOrders.practiceId, parseInt(userPractice.practiceId))
         )
       )
       .returning();
@@ -150,7 +150,7 @@ export async function PUT(
     // Update tests if provided
     if (validated.tests) {
       // Delete existing tests
-      await db
+      await tenantDb
         .delete(labOrderTests)
         .where(eq(labOrderTests.labOrderId, orderId));
 
@@ -202,7 +202,7 @@ export async function DELETE(
     const existingOrder = await tenantDb.query.labOrders.findFirst({
       where: and(
         eq(labOrders.id, orderId),
-        eq(labOrders.practiceId, userPractice.practiceId)
+        eq(labOrders.practiceId, parseInt(userPractice.practiceId))
       ),
     });
 
@@ -211,12 +211,12 @@ export async function DELETE(
     }
 
     // Delete the order (tests will be cascade deleted)
-    await db
+    await tenantDb
       .delete(labOrders)
       .where(
         and(
           eq(labOrders.id, orderId),
-          eq(labOrders.practiceId, userPractice.practiceId)
+          eq(labOrders.practiceId, parseInt(userPractice.practiceId))
         )
       );
 

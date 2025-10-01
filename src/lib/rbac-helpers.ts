@@ -67,16 +67,30 @@ export function hasPermission(
 }
 
 // Check if user has any admin role
+// Explicit SUPER ADMIN detection (supports both multi-role array and legacy single user.role)
+export function isSuperAdmin(user: UserWithRoles | null | undefined): boolean {
+  if (!user) return false;
+  const rolesMatch = user.roles?.some(role => {
+    const n = (role.name || role.displayName || '').toLowerCase();
+    return n === 'super_admin' || n === 'super admin' || n === 'superadmin';
+  }) ?? false;
+  // Legacy fallback: some parts of the app may still populate user.role only.
+  const legacy = (user as any)?.role && typeof (user as any).role === 'string' && ['super_admin','super admin','superadmin'].includes((user as any).role.toLowerCase());
+  return rolesMatch || legacy;
+}
+
 export function isAdmin(user: UserWithRoles | null | undefined): boolean {
   if (!user) return false;
-  
-  // Check for admin permissions or admin role names
+  // SUPER ADMIN is always considered admin
+  if (isSuperAdmin(user)) return true;
+
+  // Check for explicit admin-like permissions or admin-ish role names
   return hasPermission(user, 'MANAGE', 'practice') ||
          hasPermission(user, 'ADMIN', '*') ||
-         (user.roles?.some(role => 
-           role.name.toLowerCase().includes('admin') ||
-           role.name.toLowerCase().includes('administrator')
-         ) ?? false);
+         (user.roles?.some(role => {
+           const n = role.name.toLowerCase();
+           return n.includes('admin') || n.includes('administrator');
+         }) ?? false);
 }
 
 // Check if user can manage users

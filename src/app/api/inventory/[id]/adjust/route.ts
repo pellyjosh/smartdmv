@@ -72,7 +72,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // Update the inventory item
-    const [updatedItem] = await db
+    const [updatedItem] = await tenantDb
       .update(inventory)
       .set({
         quantity: newQuantity,

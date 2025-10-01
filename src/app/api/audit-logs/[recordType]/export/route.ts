@@ -51,7 +51,7 @@ export async function GET(
     }
 
     // Execute the query
-    const logs = await db
+    const logs = await tenantDb
       .select({
         id: auditLogs.id,
         timestamp: auditLogs.timestamp,

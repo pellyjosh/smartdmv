@@ -23,7 +23,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { itemIds, quantityChange } = batchAdjustSchema.parse(body);
+    const parsed = batchAdjustSchema.parse(body);
+    const itemIds = parsed.itemIds as number[];
+    const quantityChange = parsed.quantityChange as number;
 
     if (itemIds.length === 0) {
       return NextResponse.json({ error: 'No items selected' }, { status: 400 });
@@ -33,7 +35,7 @@ export async function POST(request: NextRequest) {
     let updatedCount = 0;
     for (const itemId of itemIds) {
       try {
-        await db
+        await tenantDb
           .update(inventory)
           .set({ 
             quantity: sql`${inventory.quantity} + ${quantityChange}`,

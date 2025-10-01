@@ -11,8 +11,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ practic
     if (!userPractice) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const practiceId = Number(resolvedParams.practiceId);
     if (practiceId !== parseInt(userPractice.practiceId)) return NextResponse.json({ error: 'Access denied' }, { status: 403 });
-    const db = await getCurrentTenantDb();
-    const rows = await db.select().from(payPeriods).where(eq(payPeriods.practiceId, practiceId)).orderBy(desc(payPeriods.startDate));
+  const tenantDb = await getCurrentTenantDb();
+  const rows = await tenantDb.select().from(payPeriods).where(eq(payPeriods.practiceId, practiceId)).orderBy(desc(payPeriods.startDate));
     return NextResponse.json(rows);
   } catch (e) {
     console.error('List pay periods error', e);
@@ -30,8 +30,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
     const body = await req.json();
     const { name, startDate, endDate, payDate, status, description } = body;
     if (!name || !startDate || !endDate || !payDate) return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
-    const db = await getCurrentTenantDb();
-    const [created] = await db.insert(payPeriods).values({
+  const tenantDb = await getCurrentTenantDb();
+  const [created] = await tenantDb.insert(payPeriods).values({
       practiceId,
       name,
       startDate: new Date(startDate),

@@ -1,8 +1,6 @@
 // src/app/api/soap-templates/route.ts
 import { NextResponse } from "next/server";
-import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-;
 import { soapTemplates } from "@/db/schemas/soapNoteTemplateSchema";
 import { z } from "zod";
 import { eq, desc, and, like } from "drizzle-orm";
@@ -34,6 +32,7 @@ const soapTemplatePartialSchema = soapTemplateSchema.partial();
 
 // GET /api/soap-templates - Fetch all SOAP templates with filtering options
 const getHandler = async (request: Request) => {
+  const tenantDb = await getCurrentTenantDb();
   const { searchParams } = new URL(request.url);
   const practiceId = searchParams.get("practiceId");
   const category = searchParams.get("category");
@@ -77,7 +76,13 @@ const getHandler = async (request: Request) => {
     queryOptions.limit = parseInt(limit);
   }
 
-  const templates = await tenantDb.query.soapTemplates.findMany(queryOptions);
+  let templates;
+  try {
+    templates = await tenantDb.query.soapTemplates.findMany(queryOptions);
+  } catch (e) {
+    console.error('[GET /api/soap-templates] query failed', e);
+    return NextResponse.json({ error: 'Failed to fetch SOAP templates' }, { status: 500 });
+  }
   
   // Filter by species if provided (since species is stored as array)
   let filteredTemplates = templates;
@@ -95,6 +100,7 @@ export const GET = withNetworkErrorHandlingAndRetry(getHandler);
 
 // POST /api/soap-templates - Create a new SOAP template
 const postHandler = async (request: Request) => {
+  const tenantDb = await getCurrentTenantDb();
   const data = await request.json();
   
   // Validate data using Zod schema
@@ -112,7 +118,9 @@ const postHandler = async (request: Request) => {
   
   // Insert into database, disregarding TypeScript errors as per project pattern
   // @ts-ignore
-  const [newTemplate] = await tenantDb.insert(soapTemplates).values({
+  let newTemplate;
+  try {
+    ;[newTemplate] = await tenantDb.insert(soapTemplates).values({
     name: validatedData.name,
     description: validatedData.description,
     category: validatedData.category,
@@ -124,7 +132,11 @@ const postHandler = async (request: Request) => {
     isDefault: validatedData.isDefault,
     practiceId: validatedData.practiceId,
     createdById: validatedData.createdById,
-  }).returning();
+    }).returning();
+  } catch (e) {
+    console.error('[POST /api/soap-templates] insert failed', e);
+    return NextResponse.json({ error: 'Failed to create SOAP template' }, { status: 500 });
+  }
   
   return NextResponse.json(
     { 

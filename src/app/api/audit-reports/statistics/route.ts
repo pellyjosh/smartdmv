@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all logs matching the criteria
-    const logs = await db
+    const logs = await tenantDb
       .select({
         action: auditLogs.action,
         recordType: auditLogs.recordType,

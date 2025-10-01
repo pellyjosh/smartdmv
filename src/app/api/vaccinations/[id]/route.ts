@@ -123,7 +123,7 @@ export async function PUT(
     }
 
     // Update vaccination record
-    const [updatedVaccination] = await db
+    const [updatedVaccination] = await tenantDb
       .update(vaccinations)
       .set({
         ...body,

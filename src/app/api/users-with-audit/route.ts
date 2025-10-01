@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already exists
-    const existingUser = await db
+    const existingUser = await tenantDb
       .select()
       .from(users)
       .where(eq(users.email, email))
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, 12);
 
     // Create the user
-    const newUser = await db
+    const newUser = await tenantDb
       .insert(users)
       .values({
         name,

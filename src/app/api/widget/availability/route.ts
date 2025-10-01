@@ -27,8 +27,8 @@ export async function OPTIONS(request: NextRequest) {
 // API key validation
 async function validateApiKey(apiKey: string, practiceId: number): Promise<boolean> {
   try {
+    const tenantDb = await getCurrentTenantDb();
     const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
-    
     const keyRecord = await tenantDb.query.integrationApiKeys.findFirst({
       where: and(
         eq(integrationApiKeys.practiceId, practiceId),
@@ -36,7 +36,6 @@ async function validateApiKey(apiKey: string, practiceId: number): Promise<boole
         eq(integrationApiKeys.isActive, true)
       )
     });
-    
     return !!keyRecord;
   } catch (error) {
     console.error('API key validation error:', error);
@@ -78,7 +77,7 @@ export async function GET(request: NextRequest) {
     const end = endDate ? new Date(endDate) : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000); // 3 months ahead
 
     // Get all booked appointments for the practice within the date range
-    const bookedAppointments = await db
+    const bookedAppointments = await tenantDb
       .select({
         date: appointments.date,
         durationMinutes: appointments.durationMinutes,
@@ -98,7 +97,7 @@ export async function GET(request: NextRequest) {
     // Convert appointments to time slots format expected by the widget
     const bookedSlots: string[] = [];
     
-    bookedAppointments.forEach(appointment => {
+  bookedAppointments.forEach((appointment: { date: Date; durationMinutes: number | null; status: string }) => {
       const appointmentDate = new Date(appointment.date);
       const dateString = appointmentDate.toISOString().split('T')[0];
       const timeString = appointmentDate.toTimeString().slice(0, 5); // HH:MM format

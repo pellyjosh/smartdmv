@@ -29,7 +29,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete selected items
-    const deletedItems = await db
+    const deletedItems = await tenantDb
       .delete(inventory)
       .where(
         and(

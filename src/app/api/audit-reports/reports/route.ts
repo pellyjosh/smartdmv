@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
           dateFormat = 'YYYY-MM-DD';
       }
       
-  const logs = (await db
+  const logs = (await tenantDb
         .select({
           id: auditLogs.id,
           timestamp: auditLogs.timestamp,
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
       
     } else {
       // Non-time-based grouping (user, action, recordType)
-  const logs = (await db
+  const logs = (await tenantDb
         .select({
           id: auditLogs.id,
           timestamp: auditLogs.timestamp,

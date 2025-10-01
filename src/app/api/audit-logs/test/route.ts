@@ -114,7 +114,7 @@ export async function DELETE(request: NextRequest) {
 
   try {
     // Delete all audit logs that have test: true in metadata
-    const deletedLogs = await db
+    const deletedLogs = await tenantDb
       .delete(auditLogs)
       .where(sql`metadata->>'test' = 'true'`)
       .returning();

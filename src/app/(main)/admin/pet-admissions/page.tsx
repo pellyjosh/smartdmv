@@ -1,28 +1,83 @@
-'use client';
-import { useEffect, useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiRequest, queryClient } from '@/lib/queryClient';
-import { hasRole } from '@/lib/rbac-helpers';
-import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm, useFormContext } from 'react-hook-form';
-import { z } from 'zod';
-import { Loader2, Plus, X, User, Clipboard, Home, CalendarClock, Edit, FileText } from 'lucide-react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { useUser } from '@/context/UserContext';
+"use client";
+import { useEffect, useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { hasRole } from "@/lib/rbac-helpers";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm, useFormContext } from "react-hook-form";
+import { z } from "zod";
+import {
+  Loader2,
+  Plus,
+  X,
+  User,
+  Clipboard,
+  Home,
+  CalendarClock,
+  Edit,
+  FileText,
+} from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useUser } from "@/context/UserContext";
 // Types for the admission data
-type AdmissionStatus = 'admitted' | 'discharged' | 'hold' | 'isolation';
+type AdmissionStatus = "admitted" | "discharged" | "hold" | "isolation";
 
 type Admission = {
   id: number;
@@ -79,7 +134,7 @@ type Pet = {
   name: string;
   species: string;
   breed: string | null;
-  ownerId: Text
+  ownerId: number; // corrected type from Text to number
 };
 
 type User = {
@@ -94,7 +149,9 @@ const admissionFormSchema = z.object({
   petId: z.string().min(1, { message: "Pet is required" }),
   clientId: z.string().min(1, { message: "Client is required" }),
   practiceId: z.string().min(1, { message: "PricticeId is required" }),
-  attendingVetId: z.string().min(1, { message: "Attending veterinarian is required" }),
+  attendingVetId: z
+    .string()
+    .min(1, { message: "Attending veterinarian is required" }),
   reason: z.string().min(1, { message: "Reason for admission is required" }),
   notes: z.string().optional(),
   roomId: z.string().optional(),
@@ -118,7 +175,9 @@ const dischargeFormSchema = z.object({
 const roomFormSchema = z.object({
   roomNumber: z.string().min(1, { message: "Room number is required" }),
   type: z.string().min(1, { message: "Room type is required" }),
-  capacity: z.coerce.number().min(1, { message: "Capacity must be at least 1" }),
+  capacity: z.coerce
+    .number()
+    .min(1, { message: "Capacity must be at least 1" }),
   notes: z.string().optional(),
 });
 
@@ -126,11 +185,16 @@ const roomFormSchema = z.object({
 const StatusBadge = ({ status }: { status: AdmissionStatus }) => {
   const getVariant = () => {
     switch (status) {
-      case 'admitted': return 'default';
-      case 'discharged': return 'secondary';
-      case 'hold': return 'outline';  // Changed from 'warning' to 'outline'
-      case 'isolation': return 'destructive';
-      default: return 'default';
+      case "admitted":
+        return "default";
+      case "discharged":
+        return "secondary";
+      case "hold":
+        return "outline"; // Changed from 'warning' to 'outline'
+      case "isolation":
+        return "destructive";
+      default:
+        return "default";
     }
   };
 
@@ -142,17 +206,25 @@ const PetAdmissionPage = () => {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("active");
   const [dischargeDialogOpen, setDischargeDialogOpen] = useState(false);
-  const [selectedAdmission, setSelectedAdmission] = useState<Admission | null>(null);
+  const [selectedAdmission, setSelectedAdmission] = useState<Admission | null>(
+    null
+  );
   const [addNoteDialogOpen, setAddNoteDialogOpen] = useState(false);
   const [addMedicationDialogOpen, setAddMedicationDialogOpen] = useState(false);
   const [addRoomDialogOpen, setAddRoomDialogOpen] = useState(false);
+  const [admitDialogOpen, setAdmitDialogOpen] = useState(false); // control admit dialog
 
   const { userPracticeId } = useUser();
 
   // Queries
-  const { data: admissions = [], isLoading: isLoadingAdmissions, refetch: refetchAdmissions } = useQuery<Admission[]>({
-    queryKey: ['/api/admissions'],
-    queryFn: async () => { // Added queryFn here
+  const {
+    data: admissions = [],
+    isLoading: isLoadingAdmissions,
+    refetch: refetchAdmissions,
+  } = useQuery<Admission[]>({
+    queryKey: ["/api/admissions"],
+    queryFn: async () => {
+      // Added queryFn here
       const res = await apiRequest("GET", "/api/admissions");
       if (!res.ok) {
         const error = await res.json();
@@ -163,9 +235,14 @@ const PetAdmissionPage = () => {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  const { data: rooms = [], isLoading: isLoadingRooms, refetch: refetchRooms } = useQuery<AdmissionRoom[]>({
-    queryKey: ['/api/admission-rooms'],
-    queryFn: async () => { // Added queryFn here
+  const {
+    data: rooms = [],
+    isLoading: isLoadingRooms,
+    refetch: refetchRooms,
+  } = useQuery<AdmissionRoom[]>({
+    queryKey: ["/api/admission-rooms"],
+    queryFn: async () => {
+      // Added queryFn here
       const res = await apiRequest("GET", "/api/admission-rooms");
       if (!res.ok) {
         const error = await res.json();
@@ -176,23 +253,31 @@ const PetAdmissionPage = () => {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  const { data: availableRooms = [], refetch: refetchAvailableRooms } = useQuery<AdmissionRoom[]>({
-    queryKey: ['/api/admission-rooms', 'available'],
-    queryFn: async () => {
-      const res = await apiRequest("GET", "/api/admission-rooms?available=true");
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to fetch available rooms");
-      }
-      return await res.json();
-    },
-    staleTime: 1000 * 60 * 5,
-  });
+  const { data: availableRooms = [], refetch: refetchAvailableRooms } =
+    useQuery<AdmissionRoom[]>({
+      queryKey: ["/api/admission-rooms", "available"],
+      queryFn: async () => {
+        const res = await apiRequest(
+          "GET",
+          "/api/admission-rooms?available=true"
+        );
+        if (!res.ok) {
+          const error = await res.json();
+          throw new Error(error.error || "Failed to fetch available rooms");
+        }
+        return await res.json();
+      },
+      staleTime: 1000 * 60 * 5,
+    });
 
   const { data: pets = [] } = useQuery<Pet[]>({
-    queryKey: ['/api/pets'],
-    queryFn: async () => { // Added queryFn here
-      const res = await apiRequest("GET", `/api/pets?practiceId=${userPracticeId}`);
+    queryKey: ["/api/pets"],
+    queryFn: async () => {
+      // Added queryFn here
+      const res = await apiRequest(
+        "GET",
+        `/api/pets?practiceId=${userPracticeId}`
+      );
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to fetch pets");
@@ -203,9 +288,12 @@ const PetAdmissionPage = () => {
   });
 
   const { data: users = [] } = useQuery<User[]>({
-    queryKey: ['/api/users'],
-    queryFn: async () => { 
-      const res = await apiRequest("GET", `/api/users?practiceId=${userPracticeId}`);
+    queryKey: ["/api/users"],
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/users?practiceId=${userPracticeId}`
+      );
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to fetch users");
@@ -226,7 +314,7 @@ const PetAdmissionPage = () => {
       notes: "",
       roomId: "",
       status: "admitted",
-      practiceId: userPracticeId,
+      practiceId: userPracticeId ? String(userPracticeId) : "",
     },
   });
 
@@ -266,7 +354,16 @@ const PetAdmissionPage = () => {
   // Mutations
   const createAdmissionMutation = useMutation({
     mutationFn: async (data: z.infer<typeof admissionFormSchema>) => {
-      const res = await apiRequest("POST", "/api/admissions", data);
+      // Convert string IDs into numbers expected by backend
+      const payload = {
+        ...data,
+        petId: Number(data.petId),
+        clientId: Number(data.clientId),
+        attendingVetId: Number(data.attendingVetId),
+        roomId: data.roomId ? Number(data.roomId) : null,
+        practiceId: Number(data.practiceId),
+      };
+      const res = await apiRequest("POST", "/api/admissions", payload);
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to create admission");
@@ -278,11 +375,11 @@ const PetAdmissionPage = () => {
         title: "Admission Created",
         description: "Pet has been admitted",
       });
-      setAddRoomDialogOpen(false);
+      setAdmitDialogOpen(false); // close admit dialog
       admissionForm.reset();
-      queryClient.invalidateQueries({ queryKey: ['/api/admissions'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admissions"] });
       // Invalidate the parent key to refetch both all rooms and available rooms
-      queryClient.invalidateQueries({ queryKey: ['/api/admission-rooms'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admission-rooms"] });
     },
     onError: (error) => {
       toast({
@@ -294,8 +391,10 @@ const PetAdmissionPage = () => {
   });
 
   const dischargeAdmissionMutation = useMutation({
-    mutationFn: async ({ id, notes }: { id: number, notes?: string }) => {
-      const res = await apiRequest("POST", `/api/admissions/${id}/discharge`, { notes });
+    mutationFn: async ({ id, notes }: { id: number; notes?: string }) => {
+      const res = await apiRequest("POST", `/api/admissions/${id}/discharge`, {
+        notes,
+      });
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to discharge pet");
@@ -310,9 +409,9 @@ const PetAdmissionPage = () => {
       dischargeForm.reset();
       setDischargeDialogOpen(false);
       setSelectedAdmission(null);
-      queryClient.invalidateQueries({ queryKey: ['/api/admissions'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admissions"] });
       // Invalidate the parent key to refetch both all rooms and available rooms
-      queryClient.invalidateQueries({ queryKey: ['/api/admission-rooms'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admission-rooms"] });
     },
     onError: (error) => {
       toast({
@@ -324,8 +423,18 @@ const PetAdmissionPage = () => {
   });
 
   const addNoteMutation = useMutation({
-    mutationFn: async ({ admissionId, note }: { admissionId: number, note: string }) => {
-      const res = await apiRequest("POST", `/api/admissions/${admissionId}/notes`, { note });
+    mutationFn: async ({
+      admissionId,
+      note,
+    }: {
+      admissionId: number;
+      note: string;
+    }) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/admissions/${admissionId}/notes`,
+        { note }
+      );
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to add note");
@@ -341,7 +450,9 @@ const PetAdmissionPage = () => {
       setAddNoteDialogOpen(false);
       // Invalidate specific admission notes query if implemented, otherwise general admissions
       if (selectedAdmission) {
-        queryClient.invalidateQueries({ queryKey: [`/api/admissions/${selectedAdmission.id}/notes`] });
+        queryClient.invalidateQueries({
+          queryKey: [`/api/admissions/${selectedAdmission.id}/notes`],
+        });
       }
     },
     onError: (error) => {
@@ -354,8 +465,22 @@ const PetAdmissionPage = () => {
   });
 
   const addMedicationMutation = useMutation({
-    mutationFn: async ({ admissionId, medicationName, dosage, notes }: { admissionId: number, medicationName: string, dosage: string, notes?: string }) => {
-      const res = await apiRequest("POST", `/api/admissions/${admissionId}/medications`, { medicationName, dosage, notes });
+    mutationFn: async ({
+      admissionId,
+      medicationName,
+      dosage,
+      notes,
+    }: {
+      admissionId: number;
+      medicationName: string;
+      dosage: string;
+      notes?: string;
+    }) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/admissions/${admissionId}/medications`,
+        { medicationName, dosage, notes }
+      );
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to add medication");
@@ -371,7 +496,9 @@ const PetAdmissionPage = () => {
       setAddMedicationDialogOpen(false);
       // Invalidate specific admission medications query if implemented, otherwise general admissions
       if (selectedAdmission) {
-        queryClient.invalidateQueries({ queryKey: [`/api/admissions/${selectedAdmission.id}/medications`] });
+        queryClient.invalidateQueries({
+          queryKey: [`/api/admissions/${selectedAdmission.id}/medications`],
+        });
       }
     },
     onError: (error) => {
@@ -401,8 +528,8 @@ const PetAdmissionPage = () => {
       roomForm.reset();
       setAddRoomDialogOpen(false);
       refetchRooms(); // Explicitly refetch all rooms
-    refetchAvailableRooms(); 
-      queryClient.invalidateQueries({ queryKey: ['/api/admission-rooms'] }); // This will invalidate both room queries
+      refetchAvailableRooms();
+      queryClient.invalidateQueries({ queryKey: ["/api/admission-rooms"] }); // This will invalidate both room queries
     },
     onError: (error) => {
       toast({
@@ -421,23 +548,29 @@ const PetAdmissionPage = () => {
 
   const onDischargeSubmit = (data: z.infer<typeof dischargeFormSchema>) => {
     if (selectedAdmission) {
-      dischargeAdmissionMutation.mutate({ id: selectedAdmission.id, notes: data.notes });
+      dischargeAdmissionMutation.mutate({
+        id: selectedAdmission.id,
+        notes: data.notes,
+      });
     }
   };
 
   const onNoteSubmit = (data: z.infer<typeof noteFormSchema>) => {
     if (selectedAdmission) {
-      addNoteMutation.mutate({ admissionId: selectedAdmission.id, note: data.note }); // Ensure note is string
+      addNoteMutation.mutate({
+        admissionId: selectedAdmission.id,
+        note: data.note,
+      }); // Ensure note is string
     }
   };
 
   const onMedicationSubmit = (data: z.infer<typeof medicationFormSchema>) => {
     if (selectedAdmission) {
-      addMedicationMutation.mutate({ 
+      addMedicationMutation.mutate({
         admissionId: selectedAdmission.id, // Ensure admissionId is number
-        medicationName: data.medicationName, 
-        dosage: data.dosage, 
-        notes: data.notes 
+        medicationName: data.medicationName,
+        dosage: data.dosage,
+        notes: data.notes,
       });
     }
   };
@@ -464,18 +597,21 @@ const PetAdmissionPage = () => {
   };
 
   // Filter admissions by status for active tab
-  const filteredAdmissions = activeTab === "active" 
-    ? admissions.filter(a => ['admitted', 'hold', 'isolation'].includes(a.status))
-    : admissions.filter(a => a.status === 'discharged'); // Ensure 'discharged' is correctly filtered
+  const filteredAdmissions =
+    activeTab === "active"
+      ? admissions.filter((a) =>
+          ["admitted", "hold", "isolation"].includes(a.status)
+        )
+      : admissions.filter((a) => a.status === "discharged"); // Ensure 'discharged' is correctly filtered
 
   // Component
   return (
     <div className="container py-4">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">Pet Admissions</h1>
-        <Dialog>
+        <Dialog open={admitDialogOpen} onOpenChange={setAdmitDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button onClick={() => setAdmitDialogOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
               Admit New Pet
             </Button>
@@ -488,7 +624,10 @@ const PetAdmissionPage = () => {
               </DialogDescription>
             </DialogHeader>
             <Form {...admissionForm}>
-              <form onSubmit={admissionForm.handleSubmit(onAdmissionSubmit)} className="space-y-4">
+              <form
+                onSubmit={admissionForm.handleSubmit(onAdmissionSubmit)}
+                className="space-y-4"
+              >
                 <FormField
                   control={admissionForm.control}
                   name="petId"
@@ -498,13 +637,21 @@ const PetAdmissionPage = () => {
                       <Select
                         onValueChange={(value) => {
                           field.onChange(value); // Update the petId field
-                          const selectedPet = pets.find(pet => pet.id.toString() === value);
+                          const selectedPet = pets.find(
+                            (pet) => pet.id.toString() === value
+                          );
                           if (selectedPet) {
-                            admissionForm.setValue("clientId", selectedPet.ownerId.toString(), {
+                            admissionForm.setValue(
+                              "clientId",
+                              selectedPet.ownerId.toString(),
+                              {
+                                shouldValidate: true,
+                              }
+                            );
+                          } else {
+                            admissionForm.setValue("clientId", "", {
                               shouldValidate: true,
                             });
-                          } else {
-                            admissionForm.setValue("clientId", "", { shouldValidate: true });
                           }
                         }}
                         defaultValue={field.value}
@@ -515,7 +662,7 @@ const PetAdmissionPage = () => {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {pets.map(pet => (
+                          {pets.map((pet) => (
                             <SelectItem key={pet.id} value={pet.id.toString()}>
                               {pet.name} ({pet.species})
                             </SelectItem>
@@ -531,7 +678,9 @@ const PetAdmissionPage = () => {
                   control={admissionForm.control}
                   name="clientId"
                   render={({ field }) => {
-                    const selectedClient = users.find(user => user.id.toString() === field.value);
+                    const selectedClient = users.find(
+                      (user) => user.id.toString() === field.value
+                    );
                     return (
                       <FormItem>
                         <FormLabel>Client (Owner)</FormLabel>
@@ -541,7 +690,7 @@ const PetAdmissionPage = () => {
                             value={
                               selectedClient
                                 ? `${selectedClient.username} (${selectedClient.email})`
-                                : ''
+                                : ""
                             }
                             disabled
                             className="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 cursor-not-allowed"
@@ -553,26 +702,47 @@ const PetAdmissionPage = () => {
                   }}
                 />
 
+                {/* Attending Veterinarian */}
                 <FormField
                   control={admissionForm.control}
                   name="attendingVetId"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Attending Veterinarian</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select a veterinarian" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                        {users
-                          .filter(u => hasRole(u as any, 'VETERINARIAN'))
-                          .map(user => (
-                            <SelectItem key={user.id} value={user.id.toString()}>
-                              {user.username} ({user.email})
-                            </SelectItem>
-                          ))}
+                          {(() => {
+                            const vets = users.filter((u) =>
+                              hasRole(u as any, "VETERINARIAN")
+                            );
+                            if (vets.length === 0) {
+                              return (
+                                <SelectItem
+                                  disabled
+                                  value="no-vets"
+                                  className="text-muted-foreground"
+                                >
+                                  No veterinarian records found
+                                </SelectItem>
+                              );
+                            }
+                            return vets.map((vet) => (
+                              <SelectItem
+                                key={vet.id}
+                                value={vet.id.toString()}
+                              >
+                                {vet.username} ({vet.email})
+                              </SelectItem>
+                            ));
+                          })()}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -580,6 +750,7 @@ const PetAdmissionPage = () => {
                   )}
                 />
 
+                {/* Reason for Admission */}
                 <FormField
                   control={admissionForm.control}
                   name="reason"
@@ -587,7 +758,10 @@ const PetAdmissionPage = () => {
                     <FormItem>
                       <FormLabel>Reason for Admission</FormLabel>
                       <FormControl>
-                        <Textarea placeholder="Enter the reason for admission" {...field} />
+                        <Textarea
+                          placeholder="Enter the reason for admission"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -601,7 +775,10 @@ const PetAdmissionPage = () => {
                     <FormItem>
                       <FormLabel>Additional Notes</FormLabel>
                       <FormControl>
-                        <Textarea placeholder="Enter any additional notes" {...field} />
+                        <Textarea
+                          placeholder="Enter any additional notes"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -615,23 +792,29 @@ const PetAdmissionPage = () => {
                     <FormItem>
                       <FormLabel>Room Assignment</FormLabel>
                       <div className="flex space-x-2">
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
                           <FormControl>
                             <SelectTrigger className="flex-1">
                               <SelectValue placeholder="Assign a room (optional)" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {availableRooms.map(room => (
-                              <SelectItem key={room.id} value={room.id.toString()}>
+                            {availableRooms.map((room) => (
+                              <SelectItem
+                                key={room.id}
+                                value={room.id.toString()}
+                              >
                                 {room.roomNumber} - {room.type}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        <Button 
-                          type="button" 
-                          variant="outline" 
+                        <Button
+                          type="button"
+                          variant="outline"
                           onClick={() => setAddRoomDialogOpen(true)}
                         >
                           <Plus className="h-4 w-4" />
@@ -651,15 +834,22 @@ const PetAdmissionPage = () => {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Status</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="admitted">Regular Admission</SelectItem>
-                          <SelectItem value="hold">Hold for Observation</SelectItem>
+                          <SelectItem value="admitted">
+                            Regular Admission
+                          </SelectItem>
+                          <SelectItem value="hold">
+                            Hold for Observation
+                          </SelectItem>
                           <SelectItem value="isolation">Isolation</SelectItem>
                         </SelectContent>
                       </Select>
@@ -670,7 +860,9 @@ const PetAdmissionPage = () => {
 
                 <DialogFooter>
                   <Button type="submit">
-                    {createAdmissionMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {createAdmissionMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                     Admit Pet
                   </Button>
                 </DialogFooter>
@@ -688,7 +880,10 @@ const PetAdmissionPage = () => {
               </DialogDescription>
             </DialogHeader>
             <Form {...roomForm}>
-              <form onSubmit={roomForm.handleSubmit(onRoomSubmit)} className="space-y-4">
+              <form
+                onSubmit={roomForm.handleSubmit(onRoomSubmit)}
+                className="space-y-4"
+              >
                 <FormField
                   control={roomForm.control}
                   name="roomNumber"
@@ -709,7 +904,10 @@ const PetAdmissionPage = () => {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Room Type</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select room type" />
@@ -749,7 +947,10 @@ const PetAdmissionPage = () => {
                     <FormItem>
                       <FormLabel>Notes</FormLabel>
                       <FormControl>
-                        <Textarea placeholder="Any special notes about this room" {...field} />
+                        <Textarea
+                          placeholder="Any special notes about this room"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -758,7 +959,9 @@ const PetAdmissionPage = () => {
 
                 <DialogFooter>
                   <Button type="submit">
-                    {createRoomMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {createRoomMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                     Create Room
                   </Button>
                 </DialogFooter>
@@ -784,7 +987,10 @@ const PetAdmissionPage = () => {
             </div>
           ) : filteredAdmissions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <p>No {activeTab === "active" ? "active" : "discharged"} admissions found.</p>
+              <p>
+                No {activeTab === "active" ? "active" : "discharged"} admissions
+                found.
+              </p>
             </div>
           ) : (
             <Table>
@@ -800,38 +1006,49 @@ const PetAdmissionPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAdmissions.map(admission => {
-                  const pet = pets.find(p => p.id === admission.petId);
-                  const room = rooms.find(r => r.id === admission.roomId);
-                  
+                {filteredAdmissions.map((admission) => {
+                  const pet = pets.find((p) => p.id === admission.petId);
+                  const room = rooms.find((r) => r.id === admission.roomId);
+
                   return (
                     <TableRow key={admission.id}>
                       <TableCell>{admission.id}</TableCell>
-                      <TableCell>{pet?.name || 'Unknown'}</TableCell>
-                      <TableCell className="max-w-xs truncate">{admission.reason}</TableCell>
-                      <TableCell><StatusBadge status={admission.status} /></TableCell>
-                      <TableCell>{room?.roomNumber || 'N/A'}</TableCell>
-                      <TableCell>{format(new Date(admission.admissionDate), 'MMM d, yyyy')}</TableCell>
+                      <TableCell>{pet?.name || "Unknown"}</TableCell>
+                      <TableCell className="max-w-xs truncate">
+                        {admission.reason}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={admission.status} />
+                      </TableCell>
+                      <TableCell>{room?.roomNumber || "N/A"}</TableCell>
+                      <TableCell>
+                        {format(
+                          new Date(admission.admissionDate),
+                          "MMM d, yyyy"
+                        )}
+                      </TableCell>
                       <TableCell>
                         <div className="flex space-x-2">
                           {activeTab === "active" && (
                             <>
-                              <Button 
-                                size="icon" 
+                              <Button
+                                size="icon"
                                 variant="outline"
                                 onClick={() => handleAddNoteClick(admission)}
                               >
                                 <FileText className="h-4 w-4" />
                               </Button>
-                              <Button 
-                                size="icon" 
+                              <Button
+                                size="icon"
                                 variant="outline"
-                                onClick={() => handleAddMedicationClick(admission)}
+                                onClick={() =>
+                                  handleAddMedicationClick(admission)
+                                }
                               >
                                 <Clipboard className="h-4 w-4" />
                               </Button>
-                              <Button 
-                                size="icon" 
+                              <Button
+                                size="icon"
                                 variant="outline"
                                 onClick={() => handleDischargeClick(admission)}
                               >
@@ -854,7 +1071,9 @@ const PetAdmissionPage = () => {
         <Card>
           <CardHeader>
             <CardTitle>Admission Rooms</CardTitle>
-            <CardDescription>Available and occupied rooms for inpatient care</CardDescription>
+            <CardDescription>
+              Available and occupied rooms for inpatient care
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingRooms ? (
@@ -876,14 +1095,22 @@ const PetAdmissionPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rooms.map(room => (
+                  {rooms.map((room) => (
                     <TableRow key={room.id}>
                       <TableCell>{room.roomNumber}</TableCell>
                       <TableCell>{room.type}</TableCell>
                       <TableCell>{room.capacity}</TableCell>
                       <TableCell>
-                        <Badge variant={room.status === "available" ? "default" : "secondary"}>
-                          {room.status === "available" ? "Available" : "Occupied"}
+                        <Badge
+                          variant={
+                            room.status === "available"
+                              ? "default"
+                              : "secondary"
+                          }
+                        >
+                          {room.status === "available"
+                            ? "Available"
+                            : "Occupied"}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -893,7 +1120,10 @@ const PetAdmissionPage = () => {
             )}
           </CardContent>
           <CardFooter className="flex justify-center border-t px-6 py-4">
-            <Button variant="outline" onClick={() => setAddRoomDialogOpen(true)}>
+            <Button
+              variant="outline"
+              onClick={() => setAddRoomDialogOpen(true)}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add Room
             </Button>
@@ -902,12 +1132,16 @@ const PetAdmissionPage = () => {
       </div>
 
       {/* Discharge Dialog */}
-      <AlertDialog open={dischargeDialogOpen} onOpenChange={setDischargeDialogOpen}>
+      <AlertDialog
+        open={dischargeDialogOpen}
+        onOpenChange={setDischargeDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Discharge Pet</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to discharge this pet? This will free up any assigned room and update records.
+              Are you sure you want to discharge this pet? This will free up any
+              assigned room and update records.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Form {...dischargeForm}>
@@ -919,7 +1153,10 @@ const PetAdmissionPage = () => {
                   <FormItem className="mb-4">
                     <FormLabel>Discharge Notes</FormLabel>
                     <FormControl>
-                      <Textarea placeholder="Enter any discharge notes or follow-up instructions" {...field} />
+                      <Textarea
+                        placeholder="Enter any discharge notes or follow-up instructions"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -929,7 +1166,9 @@ const PetAdmissionPage = () => {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction asChild>
                   <Button type="submit">
-                    {dischargeAdmissionMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {dischargeAdmissionMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                     Discharge
                   </Button>
                 </AlertDialogAction>
@@ -945,7 +1184,8 @@ const PetAdmissionPage = () => {
           <DialogHeader>
             <DialogTitle>Add Treatment Note</DialogTitle>
             <DialogDescription>
-              Add a note about the pet's condition, treatment, or any observations.
+              Add a note about the pet's condition, treatment, or any
+              observations.
             </DialogDescription>
           </DialogHeader>
           <Form {...noteForm}>
@@ -965,7 +1205,9 @@ const PetAdmissionPage = () => {
               />
               <DialogFooter className="mt-4">
                 <Button type="submit">
-                  {addNoteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {addNoteMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
                   Add Note
                 </Button>
               </DialogFooter>
@@ -975,7 +1217,10 @@ const PetAdmissionPage = () => {
       </Dialog>
 
       {/* Add Medication Dialog */}
-      <Dialog open={addMedicationDialogOpen} onOpenChange={setAddMedicationDialogOpen}>
+      <Dialog
+        open={addMedicationDialogOpen}
+        onOpenChange={setAddMedicationDialogOpen}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Record Medication Administration</DialogTitle>
@@ -1018,7 +1263,10 @@ const PetAdmissionPage = () => {
                   <FormItem>
                     <FormLabel>Notes</FormLabel>
                     <FormControl>
-                      <Textarea placeholder="Any additional notes about the administration" {...field} />
+                      <Textarea
+                        placeholder="Any additional notes about the administration"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1026,7 +1274,9 @@ const PetAdmissionPage = () => {
               />
               <DialogFooter className="mt-4">
                 <Button type="submit">
-                  {addMedicationMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {addMedicationMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
                   Record Medication
                 </Button>
               </DialogFooter>

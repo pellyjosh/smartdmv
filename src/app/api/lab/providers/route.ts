@@ -38,13 +38,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const providers = await db
+    const providers = await tenantDb
       .select()
       .from(labProviderSettings)
-      .where(eq(labProviderSettings.practiceId, userPractice.practiceId));
+      .where(eq(labProviderSettings.practiceId, parseInt(userPractice.practiceId)));
 
     // Parse settings JSON strings back to objects
-    const processedProviders = providers.map(provider => ({
+    const processedProviders = providers.map((provider: any) => ({
       ...provider,
       settings: provider.settings ? (() => {
         try {
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validated = providerSettingsSchema.parse(body);
 
-    const [provider] = await db
+    const [provider] = await tenantDb
       .insert(labProviderSettings)
       .values({
         ...validated,
@@ -113,7 +113,7 @@ export async function PUT(request: NextRequest) {
 
     const validated = providerSettingsSchema.partial().parse(updateData);
 
-    const [updatedProvider] = await db
+    const [updatedProvider] = await tenantDb
       .update(labProviderSettings)
       .set({
         ...validated,
@@ -123,7 +123,7 @@ export async function PUT(request: NextRequest) {
       .where(
         and(
           eq(labProviderSettings.id, id),
-          eq(labProviderSettings.practiceId, userPractice.practiceId)
+          eq(labProviderSettings.practiceId, parseInt(userPractice.practiceId))
         )
       )
       .returning();
@@ -159,12 +159,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Provider ID is required' }, { status: 400 });
     }
 
-    const [deletedProvider] = await db
+    const [deletedProvider] = await tenantDb
       .delete(labProviderSettings)
       .where(
         and(
           eq(labProviderSettings.id, parseInt(id)),
-          eq(labProviderSettings.practiceId, userPractice.practiceId)
+          eq(labProviderSettings.practiceId, parseInt(userPractice.practiceId))
         )
       )
       .returning();

@@ -15,12 +15,12 @@ export async function GET(req: NextRequest, context: { params: Promise<{ practic
     const { searchParams } = new URL(req.url);
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    const db = await getCurrentTenantDb();
+  const tenantDb = await getCurrentTenantDb();
   const clauses = [eq(workHours.practiceId, practiceId)];
   if (startDate) clauses.push(gte(workHours.date, new Date(startDate)));
   if (endDate) clauses.push(lte(workHours.date, new Date(endDate)));
   const where = and(...clauses);
-    const rows = await db.select({
+  const rows = await tenantDb.select({
       id: workHours.id,
       userId: workHours.userId,
       date: workHours.date,
@@ -54,8 +54,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
     const body = await req.json();
     const { userId, date, hoursWorked, payRateId, description, isApproved } = body;
     if (!userId || !date || hoursWorked == null) return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
-    const db = await getCurrentTenantDb();
-    const [created] = await db.insert(workHours).values({
+  const tenantDb = await getCurrentTenantDb();
+  const [created] = await tenantDb.insert(workHours).values({
       practiceId,
       userId: Number(userId),
       date: new Date(date),

@@ -185,7 +185,7 @@ export async function PATCH(request: NextRequest) {
       }
     };
     try {
-      const [row] = await db
+      const [row] = await tenantDb
         .update(users)
         .set(safeUpdateData)
         .where(eq(users.id, userId))
@@ -311,7 +311,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    const [deleted] = await db
+    const [deleted] = await tenantDb
       .delete(users)
       .where(eq(users.id, userId))
       .returning();

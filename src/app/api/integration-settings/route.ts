@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     if (existingSettings) {
       // Update existing settings
-      await db
+      await tenantDb
         .update(integrationSettings)
         .set(settingsData)
         .where(eq(integrationSettings.id, existingSettings.id));

@@ -57,7 +57,7 @@ export async function PATCH(
     }
 
     // Update appointment status and end time
-    const updatedAppointment = await db
+    const updatedAppointment = await tenantDb
       .update(appointments)
       .set({
         status: 'completed',

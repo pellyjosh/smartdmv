@@ -43,7 +43,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const provider = await db
+    const provider = await tenantDb
       .select()
       .from(labProviderSettings)
       .where(
@@ -103,7 +103,7 @@ export async function PUT(
     const body = await request.json();
     const validated = providerSettingsSchema.partial().parse(body);
 
-    const [updatedProvider] = await db
+    const [updatedProvider] = await tenantDb
       .update(labProviderSettings)
       .set({
         ...validated,
@@ -147,7 +147,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const [deletedProvider] = await db
+    const [deletedProvider] = await tenantDb
       .delete(labProviderSettings)
       .where(
         and(

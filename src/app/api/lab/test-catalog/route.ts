@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
       whereConditions.push(eq(labTestCatalog.isActive, isActive === 'true'));
     }
 
-    const tests = await db
+    const tests = await tenantDb
       .select()
       .from(labTestCatalog)
       .where(and(...whereConditions))
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     const testCode = validated.testCode || 
       `${validated.provider.toUpperCase()}-${validated.testName.replace(/[^A-Za-z0-9]/g, '').toUpperCase().substring(0, 10)}-${Date.now().toString().slice(-4)}`;
 
-    const [test] = await db
+    const [test] = await tenantDb
       .insert(labTestCatalog)
       .values({
         ...validated,
@@ -150,7 +150,7 @@ export async function PUT(request: NextRequest) {
 
     const validated = partialTestCatalogSchema.parse(updateData);
 
-    const [updatedTest] = await db
+    const [updatedTest] = await tenantDb
       .update(labTestCatalog)
       .set({
         ...validated,
@@ -198,7 +198,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Test ID is required' }, { status: 400 });
     }
 
-    const [deletedTest] = await db
+    const [deletedTest] = await tenantDb
       .delete(labTestCatalog)
       .where(
         and(

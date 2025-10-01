@@ -95,7 +95,7 @@ export async function PATCH(
     
     // Update in database, disregarding TypeScript errors as per project pattern
     // @ts-ignore
-    const [updatedTemplate] = await db
+    const [updatedTemplate] = await tenantDb
       .update(soapTemplates)
       .set(validatedData)
       .where(eq(soapTemplates.id, id))

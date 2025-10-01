@@ -134,7 +134,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     // Update the inventory item
-    const [updatedItem] = await db
+    const [updatedItem] = await tenantDb
       .update(inventory)
       .set(updateData)
       .where(eq(inventory.id, itemId))

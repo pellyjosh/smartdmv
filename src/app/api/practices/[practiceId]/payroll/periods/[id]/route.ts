@@ -14,10 +14,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ pract
     const id = Number(resolvedParams.id);
     const body = await req.json();
     const { name, startDate, endDate, payDate, status, description } = body;
-    const db = await getCurrentTenantDb();
-    const [existing] = await db.select().from(payPeriods).where(and(eq(payPeriods.id, id), eq(payPeriods.practiceId, practiceId)));
+  const tenantDb = await getCurrentTenantDb();
+  const [existing] = await tenantDb.select().from(payPeriods).where(and(eq(payPeriods.id, id), eq(payPeriods.practiceId, practiceId)));
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    const [updated] = await db.update(payPeriods).set({
+  const [updated] = await tenantDb.update(payPeriods).set({
       name: name || existing.name,
       startDate: startDate ? new Date(startDate) : existing.startDate,
       endDate: endDate ? new Date(endDate) : existing.endDate,
@@ -40,8 +40,8 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ prac
     const practiceId = Number(resolvedParams.practiceId);
     if (practiceId !== parseInt(userPractice.practiceId)) return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     const id = Number(resolvedParams.id);
-    const db = await getCurrentTenantDb();
-    const [deleted] = await db.delete(payPeriods).where(and(eq(payPeriods.id, id), eq(payPeriods.practiceId, practiceId))).returning();
+  const tenantDb = await getCurrentTenantDb();
+  const [deleted] = await tenantDb.delete(payPeriods).where(and(eq(payPeriods.id, id), eq(payPeriods.practiceId, practiceId))).returning();
     if (!deleted) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (e) {

@@ -32,18 +32,18 @@ export async function GET(request: NextRequest) {
       if (fields.includes('role')) selectFields.role = users.role;
       if (fields.includes('username')) selectFields.username = users.username;
 
-      usersData = await db
+      usersData = await tenantDb
         .select(selectFields)
         .from(users)
         .where(eq(users.practiceId, parseInt(practiceId)));
     } else {
       // Return all user data with additional computed fields
-      const allUsers = await db
+      const allUsers = await tenantDb
         .select()
         .from(users)
         .where(eq(users.practiceId, parseInt(practiceId)));
 
-      usersData = allUsers.map(user => ({
+      usersData = allUsers.map((user: any) => ({
         id: user.id.toString(),
         email: user.email,
         name: user.name,

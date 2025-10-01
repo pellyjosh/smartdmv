@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
         });
 
         if (existingSettings) {
-          await db
+          await tenantDb
             .update(integrationSettings)
             .set({
               websiteUrl: url,

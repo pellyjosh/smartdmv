@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     const validatedData = overrideSchema.parse(body);
 
     // Get user details
-    const user = await db
+    const user = await tenantDb
       .select({
         name: users.name,
         email: users.email

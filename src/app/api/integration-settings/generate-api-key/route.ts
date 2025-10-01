@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         lastGenerated: new Date().toISOString()
       };
 
-      await db
+      await tenantDb
         .update(integrationSettings)
         .set({
           apiSettings: JSON.stringify(updatedApiSettings),

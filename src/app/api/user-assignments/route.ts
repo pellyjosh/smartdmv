@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch users from the practice with their role assignments
-    const userAssignments = await db
+    const userAssignments = await tenantDb
       .select({
         userId: users.id,
         userName: users.name,
@@ -58,7 +58,8 @@ export async function GET(request: NextRequest) {
       .where(eq(users.practiceId, parseInt(practiceId)));
 
     // Group assignments by user
-    const assignmentsByUser = userAssignments.reduce((acc, row) => {
+  interface AssignmentRow { userId: number; userName: string | null; userEmail: string | null; currentRole: string | null; lastUpdated: Date | null; assignmentId: number | null; roleId: number | null; roleName: string | null; roleDisplayName: string | null; assignedAt: Date | null; isActive: boolean | null }
+  const assignmentsByUser = userAssignments.reduce((acc: Record<number, any>, row: AssignmentRow) => {
       if (!acc[row.userId]) {
         acc[row.userId] = {
           id: `assignment_${row.userId}`,
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if assignment already exists
-    const existingAssignment = await db
+    const existingAssignment = await tenantDb
       .select()
       .from(userRoles)
       .where(
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new assignment
-    const [newAssignment] = await db
+    const [newAssignment] = await tenantDb
       .insert(userRoles)
       .values({
         userId,
@@ -139,16 +140,12 @@ export async function POST(request: NextRequest) {
     // Create audit log
     try {
       await createAuditLog({
-        entityType: 'USER_ROLE',
-        entityId: newAssignment.id.toString(),
+        recordType: 'ROLE',
+        recordId: newAssignment.id.toString(),
         action: 'CREATE',
-        changes: {
-          userId,
-          roleId,
-          assigned: true,
-        },
-        performedBy: SYSTEM_USER_NAME,
-        practiceId: validatedData.practiceId,
+        description: `Assigned role ${roleId} to user ${userId}`,
+        metadata: { userId, roleId, assigned: true },
+        practiceId: validatedData.practiceId?.toString()
       });
     } catch (auditError) {
       console.error('Failed to create audit log:', auditError);
@@ -181,7 +178,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Find and deactivate the assignment
-    const [revokedAssignment] = await db
+    const [revokedAssignment] = await tenantDb
       .update(userRoles)
       .set({
         isActive: false,
@@ -203,17 +200,12 @@ export async function DELETE(request: NextRequest) {
     // Create audit log
     try {
       await createAuditLog({
-        entityType: 'USER_ROLE',
-        entityId: revokedAssignment.id.toString(),
+        recordType: 'ROLE',
+        recordId: revokedAssignment.id.toString(),
         action: 'UPDATE',
-        changes: {
-          userId,
-          roleId,
-          revoked: true,
-          isActive: false,
-        },
-        performedBy: SYSTEM_USER_NAME,
-        practiceId: validatedData.practiceId,
+        description: `Revoked role ${roleId} from user ${userId}`,
+        metadata: { userId, roleId, revoked: true, isActive: false },
+        practiceId: validatedData.practiceId?.toString()
       });
     } catch (auditError) {
       console.error('Failed to create audit log:', auditError);

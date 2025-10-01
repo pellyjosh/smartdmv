@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get total user count for the practice
-    const [totalUsersResult] = await db
+    const [totalUsersResult] = await tenantDb
       .select({ count: count() })
       .from(users)
       .where(eq(users.practiceId, parseInt(practiceId)));
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const totalUsers = totalUsersResult?.count || 0;
 
     // Get role assignment statistics
-    const roleStats = await db
+    const roleStats = await tenantDb
       .select({
         roleId: roles.id,
         roleName: roles.name,
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
       .groupBy(roles.id, roles.name, roles.displayName, roles.isSystemDefined);
 
     // Get legacy role counts (users who haven't been migrated to role assignments)
-    const legacyRoleStats = await db
+    const legacyRoleStats = await tenantDb
       .select({
         roleName: users.role,
         userCount: count(users.id)
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     const combinedStats = new Map();
 
     // Add legacy role counts first
-    legacyRoleStats.forEach(stat => {
+  legacyRoleStats.forEach((stat: { roleName: string | null; userCount: number | null }) => {
       if (stat.roleName) {
         combinedStats.set(stat.roleName, {
           roleName: stat.roleName,
@@ -79,8 +79,8 @@ export async function GET(request: NextRequest) {
     });
 
     // Override with role assignment counts (these are more accurate)
-    roleStats.forEach(stat => {
-      if (stat.userCount > 0) {
+  roleStats.forEach((stat: { roleId: number; roleName: string; roleDisplayName: string | null; isSystemDefined: boolean; userCount: number | null }) => {
+        if ((stat.userCount || 0) > 0) {
         combinedStats.set(stat.roleName, {
           roleId: stat.roleId,
           roleName: stat.roleName,
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Get users without any role assignments (for statistics)
-    const [unassignedUsersResult] = await db
+    const [unassignedUsersResult] = await tenantDb
       .select({ count: count() })
       .from(users)
       .leftJoin(userRoles, and(
@@ -114,8 +114,8 @@ export async function GET(request: NextRequest) {
       summary: {
         totalAssignedUsers: totalUsers - unassignedUsers,
         totalRoles: roleStats.length,
-        customRoles: roleStats.filter(r => !r.isSystemDefined).length,
-        systemRoles: roleStats.filter(r => r.isSystemDefined).length
+        customRoles: roleStats.filter((r: { isSystemDefined: boolean }) => !r.isSystemDefined).length,
+        systemRoles: roleStats.filter((r: { isSystemDefined: boolean }) => r.isSystemDefined).length
       }
     });
 

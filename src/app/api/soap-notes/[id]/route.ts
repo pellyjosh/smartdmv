@@ -157,7 +157,7 @@ export async function PATCH(
     // Let Drizzle handle boolean conversions automatically for each database type
     
     // @ts-ignore
-    const [updatedSoapNote] = await (db as any).update(soapNotes)
+    const [updatedSoapNote] = await (tenantDb as any).update(soapNotes)
       .set(updateData)
       .where(eq(soapNotes.id, soapNoteId))
       .returning();
@@ -225,7 +225,7 @@ export async function DELETE(
 
     // Delete the SOAP note
     // @ts-ignore
-    await (db as any).delete(soapNotes).where(eq(soapNotes.id, soapNoteId));
+    await (tenantDb as any).delete(soapNotes).where(eq(soapNotes.id, soapNoteId));
 
     return NextResponse.json(
       { message: "SOAP note deleted successfully" },

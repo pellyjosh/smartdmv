@@ -80,6 +80,8 @@ export async function GET_BY_ID(request: NextRequest, { params }: { params: { id
   }
 
   try {
+    // Get the tenant-specific database
+    const tenantDb = await getCurrentTenantDb();
     const admissionRoom = await tenantDb.query.admissions.findFirst({
       where: eq(admissions.id, id),
       with: {
@@ -163,7 +165,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ error: 'No fields to update provided' }, { status: 400 });
     }
 
-    const [updatedRoom] = await db
+    const [updatedRoom] = await tenantDb
       .update(rooms)
       .set({ ...updateData })
       .where(eq(rooms.id, id))

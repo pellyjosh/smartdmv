@@ -106,7 +106,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       }
     });
 
-    const [updatedResource] = await db
+    const [updatedResource] = await tenantDb
       .update(healthResources)
       .set(processedData)
       .where(eq(healthResources.id, resourceId))
@@ -139,7 +139,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
 
     console.log('Deleting health resource ID:', id);
 
-    const deleted = await db
+    const deleted = await tenantDb
       .delete(healthResources)
       .where(eq(healthResources.id, resourceId))
       .returning();

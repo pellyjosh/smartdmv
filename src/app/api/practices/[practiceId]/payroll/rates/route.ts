@@ -12,8 +12,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ practic
     if (!userPractice) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const practiceId = Number(resolvedParams.practiceId);
     if (practiceId !== parseInt(userPractice.practiceId)) return NextResponse.json({ error: 'Access denied' }, { status: 403 });
-    const db = await getCurrentTenantDb();
-    const rows = await db.select({
+  const tenantDb = await getCurrentTenantDb();
+  const rows = await tenantDb.select({
       id: payRates.id,
       userId: payRates.userId,
       rateType: payRates.rateType,
@@ -39,8 +39,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
     const body = await req.json();
     const { userId, rateType, rate, effectiveDate, description } = body;
     if (!userId || !rateType || rate == null || !effectiveDate) return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
-    const db = await getCurrentTenantDb();
-    const [created] = await db.insert(payRates).values({
+  const tenantDb = await getCurrentTenantDb();
+  const [created] = await tenantDb.insert(payRates).values({
       practiceId,
       userId: Number(userId),
       rateType,

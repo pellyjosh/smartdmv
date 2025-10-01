@@ -49,7 +49,7 @@ export async function GET(req: Request) {
     let results;
     if (practiceId) {
       const practiceIdNum = parseInt(practiceId, 10);
-      results = await db
+      results = await tenantDb
         .select({ ...schema.pets, ownerName: schema.users.name })
         .from(schema.pets)
         .leftJoin(schema.users, eq(schema.pets.ownerId, schema.users.id))
@@ -169,7 +169,7 @@ export async function PATCH(req: Request) {
       setData.ownerId = Number.isNaN(parsed) ? setData.ownerId : parsed;
     }
 
-    const updatedPet = await db
+    const updatedPet = await tenantDb
       .update(schema.pets)
       .set(setData as any)
       .where(eq(schema.pets.id, petIdNum))

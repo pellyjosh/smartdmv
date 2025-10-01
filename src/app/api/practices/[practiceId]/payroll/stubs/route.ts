@@ -14,9 +14,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ practic
     if (practiceId !== parseInt(userPractice.practiceId)) return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     const { searchParams } = new URL(req.url);
     const payPeriodId = searchParams.get('payPeriodId');
-    const db = await getCurrentTenantDb();
+  const tenantDb = await getCurrentTenantDb();
     const baseWhere = eq(payroll.practiceId, practiceId);
-    const rows = await db.select({
+  const rows = await tenantDb.select({
       id: payroll.id,
       employeeId: payroll.employeeId,
       payPeriodId: payroll.payPeriodId,

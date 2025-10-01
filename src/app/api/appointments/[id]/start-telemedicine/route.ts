@@ -60,7 +60,7 @@ export async function PATCH(
     const roomId = appointment.roomId || nanoid(12);
 
     // Update appointment status and start time
-    const updatedAppointment = await db
+    const updatedAppointment = await tenantDb
       .update(appointments)
       .set({
         status: 'in_progress',

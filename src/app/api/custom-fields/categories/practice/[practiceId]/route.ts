@@ -3,7 +3,7 @@ import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 ;
 import { customFieldCategories } from '@/db/schemas/customFieldsSchema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 export async function GET(
     req: Request,
@@ -21,7 +21,7 @@ export async function GET(
     }
 
     const categories = await tenantDb.query.customFieldCategories.findMany({
-      where: eq(customFieldCategories.practiceId, practiceId),
+      where: eq(customFieldCategories.practiceId, parseInt(practiceId, 10)),
     });
 
     return NextResponse.json(categories);
@@ -48,7 +48,10 @@ export async function POST(req: Request) {
 
     // Check for existing category with the same name in the same practice
     const existingCategory = await tenantDb.query.customFieldCategories.findFirst({
-      where: eq(customFieldCategories.name, data.name),
+      where: and(
+        eq(customFieldCategories.name, data.name),
+        eq(customFieldCategories.practiceId, data.practiceId)
+      ),
     });
 
     if (existingCategory) {
@@ -58,7 +61,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const newCategory = await db
+    const newCategory = await tenantDb
       .insert(customFieldCategories)
       .values(data)
       .returning();

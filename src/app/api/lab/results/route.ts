@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     const petId = searchParams.get('petId');
 
     // Join with orders to filter by practice
-    let whereConditions = [eq(labOrders.practiceId, userPractice.practiceId)];
+  let whereConditions = [eq(labOrders.practiceId, parseInt(userPractice.practiceId))];
 
     if (orderId) {
       whereConditions.push(eq(labResults.labOrderId, parseInt(orderId)));
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
       whereConditions.push(eq(labResults.status, status as any));
     }
 
-    const results = await db
+    const results = await tenantDb
       .select({
         id: labResults.id,
         labOrderId: labResults.labOrderId,
@@ -112,14 +112,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validated = labResultSchema.parse(body);
 
-    const [result] = await db
+    const [result] = await tenantDb
       .insert(labResults)
       .values({
         ...validated,
         referenceRange: validated.referenceRange ? JSON.stringify(validated.referenceRange) : null,
         previousValue: validated.previousValue ? JSON.stringify(validated.previousValue) : null,
         abnormalFlags: validated.abnormalFlags ? JSON.stringify(validated.abnormalFlags) : null,
-        previousDate: validated.previousDate ? new Date(validated.previousDate) : null,
+  previousDate: validated.previousDate ? new Date(validated.previousDate as string) : null,
       })
       .returning();
 
@@ -154,14 +154,14 @@ export async function PUT(request: NextRequest) {
     const validated = labResultSchema.partial().parse(updateData);
 
     // Verify the result belongs to this practice through the order
-    const existingResult = await db
+    const existingResult = await tenantDb
       .select({ id: labResults.id })
       .from(labResults)
       .innerJoin(labOrders, eq(labResults.labOrderId, labOrders.id))
       .where(
         and(
           eq(labResults.id, id),
-          eq(labOrders.practiceId, userPractice.practiceId)
+          eq(labOrders.practiceId, parseInt(userPractice.practiceId))
         )
       )
       .limit(1);
@@ -170,14 +170,14 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Result not found' }, { status: 404 });
     }
 
-    const [updatedResult] = await db
+    const [updatedResult] = await tenantDb
       .update(labResults)
       .set({
         ...validated,
         referenceRange: validated.referenceRange ? JSON.stringify(validated.referenceRange) : undefined,
         previousValue: validated.previousValue ? JSON.stringify(validated.previousValue) : undefined,
         abnormalFlags: validated.abnormalFlags ? JSON.stringify(validated.abnormalFlags) : undefined,
-        previousDate: validated.previousDate ? new Date(validated.previousDate) : undefined,
+        previousDate: validated.previousDate ? new Date(validated.previousDate as string) : undefined,
         reviewedAt: validated.reviewedBy ? new Date() : undefined,
       })
       .where(eq(labResults.id, id))

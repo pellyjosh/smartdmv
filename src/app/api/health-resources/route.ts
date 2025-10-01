@@ -50,15 +50,15 @@ export async function GET(request: Request) {
           }
         }
       },
-      orderBy: (healthResources, { desc, asc }) => [
-        desc(healthResources.featured),
-        asc(healthResources.category),
-        desc(healthResources.createdAt)
+      orderBy: (hr: typeof healthResources, sortFns: { desc: any; asc: any }) => [
+        sortFns.desc(hr.featured),
+        sortFns.asc(hr.category),
+        sortFns.desc(hr.createdAt)
       ],
     });
 
     // Transform resources for frontend
-    const transformedResources = resources.map(resource => ({
+    const transformedResources = resources.map((resource: any) => ({
       id: resource.id,
       title: resource.title,
       description: resource.description,
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
 
     const newViewCount = (parseInt(resource.viewCount || '0') + 1).toString();
 
-    await db
+    await tenantDb
       .update(healthResources)
       .set({ viewCount: newViewCount })
       .where(eq(healthResources.id, resourceId));

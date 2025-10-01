@@ -1,4 +1,4 @@
- 'use client'
+"use client";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
@@ -29,8 +29,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { 
-  Pagination, 
+import {
+  Pagination,
   PaginationContent,
   PaginationEllipsis,
   PaginationItem,
@@ -38,11 +38,24 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { Loader2, Plus, Search, Filter, Calendar, AlertTriangle, Clock, CheckCircle } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Search,
+  Filter,
+  Calendar,
+  AlertTriangle,
+  Clock,
+  CheckCircle,
+} from "lucide-react";
 import { useUser } from "@/context/UserContext";
-import { isPracticeAdministrator, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
+import {
+  isPracticeAdministrator,
+  isVeterinarian,
+  isAdmin,
+  isSuperAdmin,
+} from "@/lib/rbac-helpers";
 import { format } from "date-fns";
-
 
 const VaccinationsPage = () => {
   const { user, isLoading, userPracticeId } = useUser();
@@ -61,23 +74,23 @@ const VaccinationsPage = () => {
     queryKey: ["/api/vaccinations", practiceId, activeTab],
     queryFn: async () => {
       const baseUrl = `/api/vaccinations?practiceId=${practiceId}`;
-      
+
       // Different endpoint based on active tab
       let url = baseUrl;
       if (activeTab === "upcoming") {
         const today = new Date();
         const threeMonthsFromNow = new Date();
         threeMonthsFromNow.setMonth(threeMonthsFromNow.getMonth() + 3);
-        
+
         url = `/api/vaccinations/due?practiceId=${practiceId}&startDate=${today.toISOString()}&endDate=${threeMonthsFromNow.toISOString()}`;
       } else if (activeTab === "expired") {
         const today = new Date();
         const threeMonthsAgo = new Date();
         threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-        
+
         url = `/api/vaccinations/expiring?practiceId=${practiceId}&startDate=${threeMonthsAgo.toISOString()}&endDate=${today.toISOString()}`;
       }
-      
+
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error("Failed to fetch vaccinations");
@@ -102,12 +115,13 @@ const VaccinationsPage = () => {
 
   // If we have an error fetching vaccinations, use useEffect to prevent infinite re-renders
   const [errorToastShown, setErrorToastShown] = useState(false);
-  
+
   useEffect(() => {
     if (error && !errorToastShown) {
       toast({
         title: "Error",
-        description: "Failed to load vaccination records. Please try again later.",
+        description:
+          "Failed to load vaccination records. Please try again later.",
         variant: "destructive",
       });
       setErrorToastShown(true);
@@ -117,65 +131,71 @@ const VaccinationsPage = () => {
   // Get vaccination priority for sorting (higher number = more urgent)
   const getVaccinationPriority = (vaccination: any): number => {
     const { status, nextDueDate, expirationDate } = vaccination;
-    
+
     if (status === "cancelled") return 0;
     if (status === "missed") return 5;
-    
+
     const today = new Date();
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(today.getDate() + 30);
-    
+
     // Check expiration dates first
     if (expirationDate) {
       const expDate = new Date(expirationDate);
       if (expDate < today) return 4; // Expired
       if (expDate < thirtyDaysFromNow) return 3; // Expiring soon
     }
-    
+
     // Check due dates
     if (nextDueDate) {
       const dueDate = new Date(nextDueDate);
       if (dueDate < today) return 4; // Overdue
       if (dueDate < thirtyDaysFromNow) return 2; // Due soon
     }
-    
+
     return 1; // Valid
   };
 
   // Filter vaccinations based on search term and species filter
-  const filteredVaccinations = error 
+  const filteredVaccinations = error
     ? []
-    : vaccinations?.filter((vaccination: any) => {
-      // Find the associated pet for this vaccination
-      const pet = pets?.find((p: any) => p.id === vaccination.petId);
-      
-      // Apply species filter
-      if (speciesFilter !== "all" && pet?.species.toLowerCase() !== speciesFilter) {
-        return false;
-      }
-      
-      // Apply search term filter (search by pet name or vaccine name)
-      const searchLower = searchTerm.toLowerCase();
-      return searchTerm === "" || 
-             pet?.name.toLowerCase().includes(searchLower) ||
-             vaccination.vaccineName.toLowerCase().includes(searchLower) ||
-             vaccination.manufacturer?.toLowerCase().includes(searchLower) ||
-             vaccination.lotNumber?.toLowerCase().includes(searchLower);
-    })
-    // Sort by priority (most urgent first) then by administration date
-    ?.sort((a: any, b: any) => {
-      const priorityA = getVaccinationPriority(a);
-      const priorityB = getVaccinationPriority(b);
-      
-      if (priorityA !== priorityB) {
-        return priorityB - priorityA; // Higher priority first
-      }
-      
-      // If same priority, sort by administration date (newest first)
-      const dateA = new Date(a.administrationDate).getTime();
-      const dateB = new Date(b.administrationDate).getTime();
-      return dateB - dateA;
-    });
+    : vaccinations
+        ?.filter((vaccination: any) => {
+          // Find the associated pet for this vaccination
+          const pet = pets?.find((p: any) => p.id === vaccination.petId);
+
+          // Apply species filter
+          if (
+            speciesFilter !== "all" &&
+            pet?.species.toLowerCase() !== speciesFilter
+          ) {
+            return false;
+          }
+
+          // Apply search term filter (search by pet name or vaccine name)
+          const searchLower = searchTerm.toLowerCase();
+          return (
+            searchTerm === "" ||
+            pet?.name.toLowerCase().includes(searchLower) ||
+            vaccination.vaccineName.toLowerCase().includes(searchLower) ||
+            vaccination.manufacturer?.toLowerCase().includes(searchLower) ||
+            vaccination.lotNumber?.toLowerCase().includes(searchLower)
+          );
+        })
+        // Sort by priority (most urgent first) then by administration date
+        ?.sort((a: any, b: any) => {
+          const priorityA = getVaccinationPriority(a);
+          const priorityB = getVaccinationPriority(b);
+
+          if (priorityA !== priorityB) {
+            return priorityB - priorityA; // Higher priority first
+          }
+
+          // If same priority, sort by administration date (newest first)
+          const dateA = new Date(a.administrationDate).getTime();
+          const dateB = new Date(b.administrationDate).getTime();
+          return dateB - dateA;
+        });
 
   // Find pet name by ID
   const getPetName = (petId: any): string => {
@@ -191,28 +211,29 @@ const VaccinationsPage = () => {
 
   // Calculate statistics
   const getVaccinationStats = () => {
-    if (!vaccinations) return { total: 0, overdue: 0, dueThisMonth: 0, valid: 0 };
-    
+    if (!vaccinations)
+      return { total: 0, overdue: 0, dueThisMonth: 0, valid: 0 };
+
     const today = new Date();
     const oneMonthFromNow = new Date();
     oneMonthFromNow.setMonth(today.getMonth() + 1);
-    
+
     let overdue = 0;
     let dueThisMonth = 0;
     let valid = 0;
-    
+
     vaccinations.forEach((vaccination: any) => {
       const priority = getVaccinationPriority(vaccination);
       if (priority >= 4) overdue++;
       else if (priority >= 2) dueThisMonth++;
       else valid++;
     });
-    
+
     return {
       total: vaccinations.length,
       overdue,
       dueThisMonth,
-      valid
+      valid,
     };
   };
 
@@ -227,52 +248,84 @@ const VaccinationsPage = () => {
   // Get status badge based on vaccination status and next due date
   const getStatusBadge = (vaccination: any): JSX.Element => {
     const { status, nextDueDate, expirationDate } = vaccination;
-    
+
     if (status === "cancelled") {
-      return <span className="px-2 py-1 bg-gray-200 text-gray-800 rounded-full text-xs">Cancelled</span>;
+      return (
+        <span className="px-2 py-1 bg-gray-200 text-gray-800 rounded-full text-xs">
+          Cancelled
+        </span>
+      );
     }
-    
+
     if (status === "scheduled") {
-      return <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">Scheduled</span>;
+      return (
+        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+          Scheduled
+        </span>
+      );
     }
-    
+
     if (status === "missed") {
-      return <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">Missed</span>;
+      return (
+        <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">
+          Missed
+        </span>
+      );
     }
-    
+
     // Check for expired or expiring soon
     if (expirationDate) {
       const expDate = new Date(expirationDate);
       const today = new Date();
       const thirtyDaysFromNow = new Date();
       thirtyDaysFromNow.setDate(today.getDate() + 30);
-      
+
       if (expDate < today) {
-        return <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">Expired</span>;
+        return (
+          <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">
+            Expired
+          </span>
+        );
       }
-      
+
       if (expDate < thirtyDaysFromNow) {
-        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">Expiring Soon</span>;
+        return (
+          <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">
+            Expiring Soon
+          </span>
+        );
       }
     }
-    
+
     // Check for due or due soon
     if (nextDueDate) {
       const dueDate = new Date(nextDueDate);
       const today = new Date();
       const thirtyDaysFromNow = new Date();
       thirtyDaysFromNow.setDate(today.getDate() + 30);
-      
+
       if (dueDate < today) {
-        return <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">Overdue</span>;
+        return (
+          <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">
+            Overdue
+          </span>
+        );
       }
-      
+
       if (dueDate < thirtyDaysFromNow) {
-        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">Due Soon</span>;
+        return (
+          <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">
+            Due Soon
+          </span>
+        );
       }
     }
-    
-    return <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">Valid</span>;
+
+    return (
+      <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+        Valid
+      </span>
+    );
   };
 
   if (isLoading) {
@@ -284,9 +337,10 @@ const VaccinationsPage = () => {
   }
 
   const canManageVaccinations =
+    isAdmin(user as any) || // covers SUPER ADMIN via updated helpers
     isPracticeAdministrator(user as any) ||
     isVeterinarian(user as any) ||
-    isAdmin(user as any);
+    isSuperAdmin(user as any); // explicit (redundant but harmless) for clarity during transition
 
   return (
     <>
@@ -302,13 +356,11 @@ const VaccinationsPage = () => {
           {canManageVaccinations && (
             <div className="flex gap-2">
               <Link href="/admin/vaccinations/types">
-                <Button variant="outline">
-                  Manage Vaccine Types
-                </Button>
+                <Button variant="outline">Manage Vaccine Types</Button>
               </Link>
               <Link href="/admin/vaccinations/add">
                 <Button>
-                  <Plus className="h-4 w-4 mr-2" /> 
+                  <Plus className="h-4 w-4 mr-2" />
                   Add Vaccination
                 </Button>
               </Link>
@@ -326,13 +378,15 @@ const VaccinationsPage = () => {
                     <Calendar className="h-4 w-4 text-blue-600" />
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-muted-foreground">Total Records</p>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Total Records
+                    </p>
                     <p className="text-2xl font-bold">{stats.total}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center">
@@ -340,13 +394,17 @@ const VaccinationsPage = () => {
                     <AlertTriangle className="h-4 w-4 text-red-600" />
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-muted-foreground">Overdue</p>
-                    <p className="text-2xl font-bold text-red-600">{stats.overdue}</p>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Overdue
+                    </p>
+                    <p className="text-2xl font-bold text-red-600">
+                      {stats.overdue}
+                    </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center">
@@ -354,13 +412,17 @@ const VaccinationsPage = () => {
                     <Clock className="h-4 w-4 text-yellow-600" />
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-muted-foreground">Due Soon</p>
-                    <p className="text-2xl font-bold text-yellow-600">{stats.dueThisMonth}</p>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Due Soon
+                    </p>
+                    <p className="text-2xl font-bold text-yellow-600">
+                      {stats.dueThisMonth}
+                    </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center">
@@ -368,8 +430,12 @@ const VaccinationsPage = () => {
                     <CheckCircle className="h-4 w-4 text-green-600" />
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-muted-foreground">Up to Date</p>
-                    <p className="text-2xl font-bold text-green-600">{stats.valid}</p>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Up to Date
+                    </p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {stats.valid}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -381,12 +447,13 @@ const VaccinationsPage = () => {
           <CardHeader>
             <CardTitle>Vaccination Records</CardTitle>
             <CardDescription>
-              View and manage vaccination records across all pets in the practice
+              View and manage vaccination records across all pets in the
+              practice
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs 
-              defaultValue="all" 
+            <Tabs
+              defaultValue="all"
               className="w-full mb-6"
               onValueChange={setActiveTab}
               value={activeTab}
@@ -412,8 +479,8 @@ const VaccinationsPage = () => {
 
               <div className="flex gap-2">
                 <div className="w-full md:w-auto">
-                  <Select 
-                    value={speciesFilter} 
+                  <Select
+                    value={speciesFilter}
                     onValueChange={setSpeciesFilter}
                   >
                     <SelectTrigger className="w-full md:w-[180px]">
@@ -441,11 +508,11 @@ const VaccinationsPage = () => {
               <div className="h-[300px] flex flex-col items-center justify-center text-center p-4">
                 <h3 className="text-lg font-medium">No vaccinations found</h3>
                 <p className="text-sm text-muted-foreground mt-1 mb-4">
-                  {activeTab === "all" 
+                  {activeTab === "all"
                     ? "No vaccination records found. Add some vaccinations to get started."
                     : activeTab === "upcoming"
-                      ? "No upcoming vaccinations due in the next 3 months."
-                      : "No recently expired vaccinations in the last 3 months."}
+                    ? "No upcoming vaccinations due in the next 3 months."
+                    : "No recently expired vaccinations in the last 3 months."}
                 </p>
                 {canManageVaccinations && (
                   <Link href="/admin/vaccinations/add">
@@ -487,10 +554,14 @@ const VaccinationsPage = () => {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <div className="font-medium">{vaccination.vaccineName}</div>
+                              <div className="font-medium">
+                                {vaccination.vaccineName}
+                              </div>
                               <div className="text-xs text-muted-foreground">
-                                {vaccination.manufacturer || "Unknown manufacturer"}
-                                {vaccination.lotNumber && ` • Lot: ${vaccination.lotNumber}`}
+                                {vaccination.manufacturer ||
+                                  "Unknown manufacturer"}
+                                {vaccination.lotNumber &&
+                                  ` • Lot: ${vaccination.lotNumber}`}
                               </div>
                             </div>
                           </TableCell>
@@ -500,16 +571,17 @@ const VaccinationsPage = () => {
                           <TableCell>
                             {formatDate(vaccination.nextDueDate)}
                           </TableCell>
-                          <TableCell>
-                            {getStatusBadge(vaccination)}
-                          </TableCell>
+                          <TableCell>{getStatusBadge(vaccination)}</TableCell>
                           <TableCell>
                             <div className="text-sm">
-                              {vaccination.administeringVet?.name || "Not specified"}
+                              {vaccination.administeringVet?.name ||
+                                "Not specified"}
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Link href={`/admin/vaccinations/${vaccination.id}`}>
+                            <Link
+                              href={`/admin/vaccinations/${vaccination.id}`}
+                            >
                               <Button variant="ghost" size="sm">
                                 Details
                               </Button>
@@ -528,7 +600,9 @@ const VaccinationsPage = () => {
                         <PaginationPrevious href="#" />
                       </PaginationItem>
                       <PaginationItem>
-                        <PaginationLink href="#" isActive>1</PaginationLink>
+                        <PaginationLink href="#" isActive>
+                          1
+                        </PaginationLink>
                       </PaginationItem>
                       <PaginationItem>
                         <PaginationNext href="#" />

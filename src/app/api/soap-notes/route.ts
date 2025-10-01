@@ -92,7 +92,8 @@ export async function GET(request: Request) {
     const practitionerId = searchParams.get("practitionerId"); // For "My Notes" filter
     const recent = searchParams.get("recent"); // For "Recent" filter (last 30 days)
     const search = searchParams.get("search"); // For search functionality
-    const limit = searchParams.get("limit"); // Optional limit
+  const limit = searchParams.get("limit"); // Optional limit
+  const offset = searchParams.get("offset"); // Optional offset for pagination
 
     // Build where conditions
     const conditions = [];
@@ -149,7 +150,17 @@ export async function GET(request: Request) {
     }
 
     if (limit) {
-      queryOptions.limit = parseInt(limit);
+      const parsedLimit = parseInt(limit, 10);
+      if (!isNaN(parsedLimit) && parsedLimit > 0) {
+        queryOptions.limit = Math.min(parsedLimit, 100); // cap to prevent huge responses
+      }
+    }
+
+    if (offset) {
+      const parsedOffset = parseInt(offset, 10);
+      if (!isNaN(parsedOffset) && parsedOffset >= 0) {
+        (queryOptions as any).offset = parsedOffset;
+      }
     }
 
   const notes = await tenantDb.query.soapNotes.findMany(queryOptions);
