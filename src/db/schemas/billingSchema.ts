@@ -9,6 +9,29 @@ import { appointments } from './appointmentsSchema';
 import { createInsertSchema } from 'drizzle-zod';
 
 // Invoices table
+// Service Codes table (used for pricing & catalog of billable items)
+export const serviceCodes = dbTable('service_codes', {
+  id: primaryKeyId(),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id),
+  code: text('code').notNull().unique(),
+  description: text('description').notNull(),
+  category: text('category').notNull(),
+  defaultPrice: decimal('default_price').notNull().default('0.00'),
+  taxable: text('taxable', { enum: ['yes', 'no'] }).notNull().default(sql`'yes'`),
+  taxRateId: integer('tax_rate_id'), // Future link to tax rates table
+  active: text('active', { enum: ['yes', 'no'] }).notNull().default(sql`'yes'`),
+  createdAt: timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`).$onUpdate(() => sql`CURRENT_TIMESTAMP`),
+});
+
+export const serviceCodesRelations = relations(serviceCodes, ({ one }) => ({
+  practice: one(practices, {
+    fields: [serviceCodes.practiceId],
+    references: [practices.id],
+  }),
+}));
+
+// Invoices table
 export const invoices = dbTable('invoices', {
   id: primaryKeyId(),
   practiceId: foreignKeyInt("practice_id").notNull().references(() => practices.id),

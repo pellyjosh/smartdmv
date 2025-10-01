@@ -1,12 +1,13 @@
 // src/app/api/soap/appointments/route.ts
 import { NextResponse } from "next/server";
+import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
+;
 import { appointments } from "@/db/schema";
 import { eq, or, and, lte } from "drizzle-orm";
 import { withNetworkErrorHandlingAndRetry } from "@/lib/api-middleware";
 
 const getHandler = async (request: Request) => {
-  const tenantDb = await getCurrentTenantDb();
   const { searchParams } = new URL(request.url);
   const includeCompleted = searchParams.get("includeCompleted") === "true";
   const status = searchParams.get("status");
@@ -64,33 +65,36 @@ const getHandler = async (request: Request) => {
     (whereConditions.length === 1 ? whereConditions[0] : and(...whereConditions)) : 
     undefined;
   
-  try {
-    if (whereCondition) {
-      appointmentsList = await tenantDb.query.appointments.findMany({
-        where: whereCondition,
-        with: {
-          pet: { with: { owner: true } },
-          client: true,
-          practitioner: true,
-          practice: true
+  if (whereCondition) {
+    appointmentsList = await tenantDb.query.appointments.findMany({
+      where: whereCondition,
+      with: {
+        pet: {
+          with: {
+            owner: true
+          }
         },
-        // Add explicit any types to satisfy current codebase style without importing schema type
-        orderBy: (appointments: any, helpers: { desc: (col: any) => any }) => [helpers.desc(appointments.date)]
-      });
-    } else {
-      appointmentsList = await tenantDb.query.appointments.findMany({
-        with: {
-          pet: { with: { owner: true } },
-          client: true,
-          practitioner: true,
-          practice: true
+        client: true,
+        practitioner: true,
+        practice: true
+      },
+      orderBy: (appointments, { desc }) => [desc(appointments.date)]
+    });
+  } else {
+    // Include all appointments
+    appointmentsList = await tenantDb.query.appointments.findMany({
+      with: {
+        pet: {
+          with: {
+            owner: true
+          }
         },
-        orderBy: (appointments: any, helpers: { desc: (col: any) => any }) => [helpers.desc(appointments.date)]
-      });
-    }
-  } catch (e) {
-    console.error('[GET /api/soap/appointments] query failed', e);
-    return NextResponse.json({ error: 'Failed to fetch SOAP appointments' }, { status: 500 });
+        client: true,
+        practitioner: true,
+        practice: true
+      },
+      orderBy: (appointments, { desc }) => [desc(appointments.date)]
+    });
   }
   
   // console.log('SOAP Appointments API - Returning appointments:', {

@@ -566,18 +566,13 @@ const PetAdmissionPage = () => {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {users
-                            .filter(u => hasRole(u as any, 'VETERINARIAN'))
-                            .map(user => (
-                              <SelectItem key={user.id} value={user.id.toString()}>
-                                {user.username} ({user.email})
-                              </SelectItem>
-                            ))}
-                          {users.filter(u => hasRole(u as any, 'VETERINARIAN')).length === 0 && (
-                            <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                              No veterinarian records found
-                            </div>
-                          )}
+                        {users
+                          .filter(u => hasRole(u as any, 'VETERINARIAN'))
+                          .map(user => (
+                            <SelectItem key={user.id} value={user.id.toString()}>
+                              {user.username} ({user.email})
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
