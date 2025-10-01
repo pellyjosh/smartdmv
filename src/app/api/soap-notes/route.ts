@@ -80,7 +80,7 @@ const soapNotePartialSchema = soapNoteSchema.partial({
 });
 
 // GET /api/soap-notes - Fetch all SOAP notes with filtering options
-import { eq, desc, and, or, like, gte } from "drizzle-orm";
+import { eq, desc, and, or, like, gte, sql } from "drizzle-orm";
 
 export async function GET(request: Request) {
   // Get the tenant-specific database
@@ -92,7 +92,10 @@ export async function GET(request: Request) {
     const practitionerId = searchParams.get("practitionerId"); // For "My Notes" filter
     const recent = searchParams.get("recent"); // For "Recent" filter (last 30 days)
     const search = searchParams.get("search"); // For search functionality
-    const limit = searchParams.get("limit"); // Optional limit
+  const limit = searchParams.get("limit"); // Optional limit (page size)
+  const page = parseInt(searchParams.get("page") || '1', 10); // 1-based page index
+  const pageSize = limit ? Math.min(Math.max(parseInt(limit, 10), 1), 100) : 20;
+  const offset = (page - 1) * pageSize;
 
     // Build where conditions
     const conditions = [];
@@ -141,18 +144,21 @@ export async function GET(request: Request) {
         pet: true,
         updatedBy: true,
       },
-      orderBy: [desc(soapNotes.createdAt)] // Always order by newest first
+      orderBy: [desc(soapNotes.createdAt)],
+      limit: pageSize,
+      offset,
     };
 
     if (whereClause) {
       queryOptions.where = whereClause;
     }
 
-    if (limit) {
-      queryOptions.limit = parseInt(limit);
-    }
+    const notes = await tenantDb.query.soapNotes.findMany(queryOptions);
 
-  const notes = await tenantDb.query.soapNotes.findMany(queryOptions);
+    // Total count for pagination (omit limit/offset)
+    const totalResult = await tenantDb.select({ count: sql<number>`count(*)` }).from(soapNotes).where(whereClause as any);
+    const total = totalResult?.[0]?.count || 0;
+    const totalPages = Math.ceil(total / pageSize) || 1;
 
   // Log audit for viewing sensitive medical data
   const auditUserContext = await getUserContextFromStandardRequest(request);
@@ -177,7 +183,21 @@ export async function GET(request: Request) {
     );
   }
 
-  return NextResponse.json(notes);
+  return NextResponse.json({
+      data: notes,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages,
+      },
+      filters: {
+        petId,
+        practitionerId,
+        recent,
+        search,
+      }
+    });
   } catch (error) {
     console.error("Error fetching SOAP notes:", error);
     return NextResponse.json(

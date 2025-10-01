@@ -218,7 +218,7 @@
 //             </div>
 //           </CardContent>
 //           <CardFooter className="flex flex-col gap-2">
-//             <Button className="w-full" onClick={() => setLocation(`/appointments?view=schedule&petId=${pet.id}`)}>
+//             <Button className="w-full" onClick={() => setLocation(`/admin/appointments?view=schedule&petId=${pet.id}`)}>
 //               Schedule Appointment
 //             </Button>
 //             <Button variant="outline" className="w-full" onClick={() => setLocation(`/pet-soap-notes/${pet.id}`)}>
@@ -321,7 +321,7 @@
 //                       <h3 className="text-sm font-medium">Appointment History</h3>
 //                       <Button 
 //                         size="sm" 
-//                         onClick={() => setLocation(`/appointments?view=schedule&petId=${pet.id}`)}
+//                         onClick={() => setLocation(`/admin/appointments?view=schedule&petId=${pet.id}`)}
 //                       >
 //                         New Appointment
 //                       </Button>
@@ -372,7 +372,7 @@
 //                         <p className="text-muted-foreground mb-4">No appointment history</p>
 //                         <Button 
 //                           size="sm" 
-//                           onClick={() => setLocation(`/appointments?view=schedule&petId=${pet.id}`)}
+//                           onClick={() => setLocation(`/admin/appointments?view=schedule&petId=${pet.id}`)}
 //                         >
 //                           Schedule First Appointment
 //                         </Button>

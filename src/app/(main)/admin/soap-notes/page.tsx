@@ -1,24 +1,57 @@
-'use client';
+"use client";
 import React, { use, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useUser } from "@/context/UserContext";
-import { type SOAPNote, type SOAPTemplate, type Treatment, insertSOAPNoteSchema, insertSOAPTemplateSchema } from "@/db/schema";
-import { isVeterinarian, isPracticeAdministrator, isAdmin } from '@/lib/rbac-helpers';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  type SOAPNote,
+  type SOAPTemplate,
+  type Treatment,
+  insertSOAPNoteSchema,
+  insertSOAPTemplateSchema,
+} from "@/db/schema";
+import {
+  isVeterinarian,
+  isPracticeAdministrator,
+  isAdmin,
+} from "@/lib/rbac-helpers";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; 
-import { 
-  AlertCircle, Check, Edit, Lock, PlusCircle, Trash2, Calendar, User, 
-  Clipboard, Clock, Pill, Filter, FileText, Copy, ClipboardCopy, Paperclip, 
-  Loader2, Camera, Eye, Image as ImageIcon
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertCircle,
+  Check,
+  Edit,
+  Lock,
+  PlusCircle,
+  Trash2,
+  Calendar,
+  User,
+  Clipboard,
+  Clock,
+  Pill,
+  Filter,
+  FileText,
+  Copy,
+  ClipboardCopy,
+  Paperclip,
+  Loader2,
+  Camera,
+  Eye,
+  Image as ImageIcon,
 } from "lucide-react";
 import { PrescriptionForm } from "@/components/prescriptions/prescription-form";
 import { PrescriptionList } from "@/components/prescriptions/prescription-list";
@@ -26,17 +59,47 @@ import { TreatmentList } from "@/components/treatments/treatment-list";
 import { TreatmentForm } from "@/components/treatments/treatment-form";
 import { FileUpload, type UploadedFile } from "@/components/shared/file-upload";
 import { FileAttachmentList } from "@/components/shared/file-attachment-list";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-
 
 // SOAP Note form schema with validation
 const soapNoteFormSchema = z.object({
@@ -67,17 +130,17 @@ interface SOAPNotesListProps {
   forcePetName?: string;
   forcePetSpecies?: string;
   forcePetBreed?: string;
-  filter?: 'all' | 'my-notes' | 'recent'; // Add filter prop
+  filter?: "all" | "my-notes" | "recent"; // Add filter prop
   searchQuery?: string; // Add search query prop
 }
 
-function SOAPNotesList({ 
-  petIdOverride, 
-  forcePetName, 
-  forcePetSpecies, 
+function SOAPNotesList({
+  petIdOverride,
+  forcePetName,
+  forcePetSpecies,
   forcePetBreed,
-  filter = 'all',
-  searchQuery = ''
+  filter = "all",
+  searchQuery = "",
 }: SOAPNotesListProps) {
   const { toast } = useToast();
   const { user, userPracticeId } = useUser();
@@ -89,75 +152,84 @@ function SOAPNotesList({
   const [noteToDelete, setNoteToDelete] = useState<number | null>(null);
   const [isLockConfirmOpen, setIsLockConfirmOpen] = useState(false);
   const [noteToLock, setNoteToLock] = useState<number | null>(null);
-  
-  console.log("SOAPNotesList - DETAILED PROPS:", JSON.stringify({ 
-    petIdOverride, 
-    forcePetName, 
-    forcePetSpecies, 
-    forcePetBreed 
-  }, null, 2));
-  
+
+  console.log(
+    "SOAPNotesList - DETAILED PROPS:",
+    JSON.stringify(
+      {
+        petIdOverride,
+        forcePetName,
+        forcePetSpecies,
+        forcePetBreed,
+      },
+      null,
+      2
+    )
+  );
+
   // Use the petIdOverride or get it from URL if present
   let petId = petIdOverride || undefined;
   if (!petId) {
     const searchParams = new URLSearchParams(window.location.search);
-    const urlPetId = searchParams.get('petId');
+    const urlPetId = searchParams.get("petId");
     if (urlPetId) {
       petId = urlPetId;
     }
   }
-  
+
   console.log("SOAPNotesList - final petId value:", petId);
-  
+
   // Fetch pet details if petId is provided
   const { data: pet } = useQuery({
-    queryKey: ['/api/pets', 'single', petId],
+    queryKey: ["/api/pets", "single", petId],
     queryFn: async () => {
       if (!petId) {
-        throw new Error('Pet ID is required');
+        throw new Error("Pet ID is required");
       }
       try {
         console.log(`Fetching pet with ID ${petId}`);
         const response = await fetch(`/api/pets/${petId}`);
         if (!response.ok) {
-          console.error(`Failed to fetch pet with ID ${petId}, status: ${response.status}`);
-          throw new Error('Failed to fetch pet');
+          console.error(
+            `Failed to fetch pet with ID ${petId}, status: ${response.status}`
+          );
+          throw new Error("Failed to fetch pet");
         }
         const data = await response.json();
-        console.log('Pet data received:', data);
+        console.log("Pet data received:", data);
         return data;
       } catch (error) {
-        console.error('Error fetching pet:', error);
+        console.error("Error fetching pet:", error);
         // If we can't fetch the pet but we know it's pet ID 4, use hardcoded fallback
-        if (petId === '4') {
-          console.log('Using hardcoded pet data for Maxy');
+        if (petId === "4") {
+          console.log("Using hardcoded pet data for Maxy");
           return {
             id: 4,
-            name: 'Maxy',
-            species: 'canine',
-            breed: 'german_shepherd'
+            name: "Maxy",
+            species: "canine",
+            breed: "german_shepherd",
           };
         }
         throw error;
       }
     },
-    enabled: !!petId
+    enabled: !!petId,
   });
 
   // Fetch all pets for name mapping
   const { data: allPets } = useQuery({
-    queryKey: ['/api/pets/all', userPracticeId],
+    queryKey: ["/api/pets/all", userPracticeId],
     queryFn: async () => {
       if (!userPracticeId) {
-        throw new Error('Practice ID is required');
+        throw new Error("Practice ID is required");
       }
       const response = await fetch(`/api/pets?practiceId=${userPracticeId}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch pets');
+        throw new Error("Failed to fetch pets");
       }
       return response.json();
     },
-    enabled: !!userPracticeId
+    enabled: !!userPracticeId,
     // Always fetch pets so we can map names in SOAP note cards
   });
 
@@ -170,51 +242,54 @@ function SOAPNotesList({
     });
     return map;
   }, [allPets]);
-  
+
   // Fetch SOAP notes, with optional petId filter and additional filtering
-  const { data: notes, isLoading, error, refetch: refetchSoap } = useQuery({
-    queryKey: ['/api/soap-notes'],
+  const {
+    data: notes = [],
+    isLoading,
+    error,
+    refetch: refetchSoap,
+  } = useQuery<SOAPNote[]>({
+    queryKey: ["/api/soap-notes", { petId, filter, searchQuery }],
     queryFn: async () => {
       const params = new URLSearchParams();
-      
-      if (petId) {
-        params.append('petId', petId);
-      }
-      
-      if (filter === 'my-notes' && user?.id) {
-        params.append('practitionerId', user.id);
-      }
-      
-      if (filter === 'recent') {
-        params.append('recent', 'true');
-      }
-      
-      if (searchQuery.trim()) {
-        params.append('search', searchQuery.trim());
-      }
-      
-      const url = `/api/soap-notes${params.toString() ? '?' + params.toString() : ''}`;
-      console.log('SOAPNotesList - Fetching from URL:', url);
+
+      if (petId) params.append("petId", petId);
+      if (filter === "my-notes" && user?.id)
+        params.append("practitionerId", user.id);
+      if (filter === "recent") params.append("recent", "true");
+      if (searchQuery.trim()) params.append("search", searchQuery.trim());
+
+      // Keep page/limit defaults if backend expects them (optional)
+      if (!params.has("limit")) params.append("limit", "20");
+      if (!params.has("page")) params.append("page", "1");
+
+      const url = `/api/soap-notes${
+        params.toString() ? "?" + params.toString() : ""
+      }`;
+      console.log("SOAPNotesList - Fetching from URL:", url);
       const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Failed to fetch SOAP notes');
-      }
-      return response.json();
-    }
+      if (!response.ok) throw new Error("Failed to fetch SOAP notes");
+      const json = await response.json();
+      // Support both legacy (array) and new paginated { data: [] } shapes
+      if (Array.isArray(json)) return json as SOAPNote[];
+      if (Array.isArray(json.data)) return json.data as SOAPNote[];
+      return [];
+    },
   });
-  
+
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest('DELETE', `/api/soap-notes/${id}`);
+      await apiRequest("DELETE", `/api/soap-notes/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/soap-notes'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/soap-notes"] });
       refetchSoap();
       toast({
         title: "SOAP note deleted",
         description: "The SOAP note has been deleted successfully",
-      }); 
+      });
       setIsConfirmDeleteOpen(false);
     },
     onError: (error: Error) => {
@@ -223,20 +298,21 @@ function SOAPNotesList({
         description: error.message,
         variant: "destructive",
       });
-    }
+    },
   });
-  
+
   // Lock mutation
   const lockMutation = useMutation({
     mutationFn: async (id: number) => {
-      const res = await apiRequest('POST', `/api/soap-notes/${id}/lock`);
+      const res = await apiRequest("POST", `/api/soap-notes/${id}/lock`);
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/soap-notes'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/soap-notes"] });
       toast({
         title: "SOAP note locked",
-        description: "The SOAP note has been locked and can no longer be edited",
+        description:
+          "The SOAP note has been locked and can no longer be edited",
       });
       refetchSoap();
       setIsLockConfirmOpen(false);
@@ -247,41 +323,41 @@ function SOAPNotesList({
         description: error.message,
         variant: "destructive",
       });
-    }
+    },
   });
-  
+
   const handleDelete = (id: number) => {
     setNoteToDelete(id);
     setIsConfirmDeleteOpen(true);
   };
-  
+
   const confirmDelete = () => {
     if (noteToDelete) {
       deleteMutation.mutate(noteToDelete);
     }
   };
-  
+
   const handleLock = (id: number) => {
     setNoteToLock(id);
     setIsLockConfirmOpen(true);
   };
-  
+
   const confirmLock = () => {
     if (noteToLock) {
       lockMutation.mutate(noteToLock);
     }
   };
-  
+
   const openDetailsDialog = (id: number) => {
     setSelectedNoteId(id);
     setIsDetailsDialogOpen(true);
   };
-  
+
   const openCreateDialog = () => {
     setSelectedNoteId(null);
     setIsDialogOpen(true);
   };
-  
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -291,30 +367,35 @@ function SOAPNotesList({
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Error</AlertTitle>
-        <AlertDescription>Failed to load SOAP notes: {error.message}</AlertDescription>
+        <AlertDescription>
+          Failed to load SOAP notes: {error.message}
+        </AlertDescription>
       </Alert>
     );
   }
-  
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-4">        
+      <div className="flex justify-between items-center mb-4">
         <div className="flex gap-2">
           <Button onClick={openCreateDialog}>
             <PlusCircle className="mr-2 h-4 w-4" /> Quick Create
           </Button>
-          <Button variant="outline" onClick={() => window.location.href = "/admin/soap-notes/create"}>
+          <Button
+            variant="outline"
+            onClick={() => (window.location.href = "/admin/soap-notes/create")}
+          >
             <FileText className="mr-2 h-4 w-4" /> Full Session
           </Button>
         </div>
       </div>
-      
+
       {notes?.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
@@ -326,14 +407,18 @@ function SOAPNotesList({
                     No Medical Records for {forcePetName || "Maxy"}
                   </h3>
                   <p className="text-gray-500 mb-4">
-                    {forcePetName || "Maxy"} doesn't have any SOAP notes or medical records yet
+                    {forcePetName || "Maxy"} doesn't have any SOAP notes or
+                    medical records yet
                   </p>
                 </>
               ) : (
                 <>
-                  <h3 className="text-lg font-medium mb-2">No SOAP Notes Yet</h3>
+                  <h3 className="text-lg font-medium mb-2">
+                    No SOAP Notes Yet
+                  </h3>
                   <p className="text-gray-500 mb-4">
-                    Start documenting patient visits by creating your first SOAP note
+                    Start documenting patient visits by creating your first SOAP
+                    note
                   </p>
                 </>
               )}
@@ -341,7 +426,12 @@ function SOAPNotesList({
                 <Button onClick={openCreateDialog}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Quick Create
                 </Button>
-                <Button variant="outline" onClick={() => window.location.href = "/admin/soap-notes/create"}>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    (window.location.href = "/admin/soap-notes/create")
+                  }
+                >
                   <FileText className="mr-2 h-4 w-4" /> Full Session
                 </Button>
               </div>
@@ -356,24 +446,37 @@ function SOAPNotesList({
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="flex items-center text-lg">
-                      {petId ? 
-                        `${forcePetName || pet?.name || 'Unknown Pet'} - Medical Record #${note.id}` :
-                        `${petNameMap[note.petId] || 'Unknown Pet'} - SOAP Note #${note.id}`
-                      }
+                      {petId
+                        ? `${
+                            forcePetName || pet?.name || "Unknown Pet"
+                          } - Medical Record #${note.id}`
+                        : `${
+                            petNameMap[note.petId] || "Unknown Pet"
+                          } - SOAP Note #${note.id}`}
                       {note.locked && (
-                        <Badge variant="outline" className="ml-2 bg-amber-50 text-amber-600 border-amber-200">
+                        <Badge
+                          variant="outline"
+                          className="ml-2 bg-amber-50 text-amber-600 border-amber-200"
+                        >
                           <Lock className="mr-1 h-3 w-3" /> Locked
                         </Badge>
                       )}
                       {note.hasPrescriptions && (
-                        <Badge variant="outline" className="ml-2 bg-blue-50 text-blue-600 border-blue-200">
+                        <Badge
+                          variant="outline"
+                          className="ml-2 bg-blue-50 text-blue-600 border-blue-200"
+                        >
                           <Pill className="mr-1 h-3 w-3" /> Has Prescriptions
                         </Badge>
                       )}
                     </CardTitle>
                     <CardDescription className="flex flex-wrap gap-3 mt-1">
                       <span className="flex items-center text-xs text-gray-500">
-                        📅 {format(new Date(note.createdAt || new Date()), 'MMM d, yyyy')}
+                        📅{" "}
+                        {format(
+                          new Date(note.createdAt || new Date()),
+                          "MMM d, yyyy"
+                        )}
                       </span>
                       <span className="flex items-center text-xs text-gray-500">
                         👨‍⚕️ Dr. {note.practitionerId}
@@ -386,29 +489,32 @@ function SOAPNotesList({
                     </CardDescription>
                   </div>
                   <div className="flex gap-1">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => openDetailsDialog(note.id)}
                       className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
                     >
                       <Edit className="h-4 w-4 mr-1" />
                       Edit
                     </Button>
-                    {!note.locked && (isVeterinarian(user as any) || isPracticeAdministrator(user as any) || isAdmin(user as any)) && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleLock(note.id)}
-                        className="bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200"
-                      >
-                        <Lock className="h-4 w-4 mr-1" />
-                        Lock
-                      </Button>
-                    )}
+                    {!note.locked &&
+                      (isVeterinarian(user as any) ||
+                        isPracticeAdministrator(user as any) ||
+                        isAdmin(user as any)) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleLock(note.id)}
+                          className="bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200"
+                        >
+                          <Lock className="h-4 w-4 mr-1" />
+                          Lock
+                        </Button>
+                      )}
                     {!note.locked && (
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         onClick={() => handleDelete(note.id)}
                         className="bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
@@ -424,26 +530,34 @@ function SOAPNotesList({
                 <div className="grid grid-cols-2 gap-4 mb-3">
                   <div>
                     <h4 className="text-sm font-medium mb-1">Subjective</h4>
-                    <p className="text-sm line-clamp-2 text-gray-500 dark:text-gray-400">{note.subjective || 'N/A'}</p>
+                    <p className="text-sm line-clamp-2 text-gray-500 dark:text-gray-400">
+                      {note.subjective || "N/A"}
+                    </p>
                   </div>
                   <div>
                     <h4 className="text-sm font-medium mb-1">Objective</h4>
-                    <p className="text-sm line-clamp-2 text-gray-500 dark:text-gray-400">{note.objective || 'N/A'}</p>
+                    <p className="text-sm line-clamp-2 text-gray-500 dark:text-gray-400">
+                      {note.objective || "N/A"}
+                    </p>
                   </div>
                   <div>
                     <h4 className="text-sm font-medium mb-1">Assessment</h4>
-                    <p className="text-sm line-clamp-2 text-gray-500 dark:text-gray-400">{note.assessment || 'No assessment provided.'}</p>
+                    <p className="text-sm line-clamp-2 text-gray-500 dark:text-gray-400">
+                      {note.assessment || "No assessment provided."}
+                    </p>
                   </div>
                   <div>
                     <h4 className="text-sm font-medium mb-1">Plan</h4>
-                    <p className="text-sm line-clamp-2 text-gray-500 dark:text-gray-400">{note.plan || 'No plan provided.'}</p>
+                    <p className="text-sm line-clamp-2 text-gray-500 dark:text-gray-400">
+                      {note.plan || "No plan provided."}
+                    </p>
                   </div>
                 </div>
               </CardContent>
               <div className="px-6 py-2 flex justify-end">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="bg-green-600 hover:bg-green-700 text-white border-green-600 hover:border-green-700 text-xs h-8 font-medium"
                   onClick={() => openDetailsDialog(note.id)}
                 >
@@ -454,44 +568,48 @@ function SOAPNotesList({
           ))}
         </div>
       )}
-      
+
       {/* Create/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Create SOAP Note</DialogTitle>
             <DialogDescription>
-              Document the patient's subjective, objective, assessment, and plan details
+              Document the patient's subjective, objective, assessment, and plan
+              details
             </DialogDescription>
           </DialogHeader>
-          <SOAPNoteForm 
-            onSuccess={() => setIsDialogOpen(false)} 
+          <SOAPNoteForm
+            onSuccess={() => setIsDialogOpen(false)}
             refetchSoap={refetchSoap}
           />
         </DialogContent>
       </Dialog>
-      
+
       {/* Details Dialog */}
-      <SOAPNoteDetailsDialog 
-        open={isDetailsDialogOpen} 
-        onOpenChange={setIsDetailsDialogOpen} 
-        noteId={selectedNoteId || 0} 
+      <SOAPNoteDetailsDialog
+        open={isDetailsDialogOpen}
+        onOpenChange={setIsDetailsDialogOpen}
+        noteId={selectedNoteId || 0}
         practiceId={userPracticeId}
       />
-      
+
       {/* Delete Confirmation */}
-      <AlertDialog open={isConfirmDeleteOpen} onOpenChange={setIsConfirmDeleteOpen}>
+      <AlertDialog
+        open={isConfirmDeleteOpen}
+        onOpenChange={setIsConfirmDeleteOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the SOAP note 
-              and remove it from our servers.
+              This action cannot be undone. This will permanently delete the
+              SOAP note and remove it from our servers.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
@@ -500,24 +618,21 @@ function SOAPNotesList({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      
+
       {/* Lock Confirmation */}
       <AlertDialog open={isLockConfirmOpen} onOpenChange={setIsLockConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Lock this SOAP note?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. Once locked, the SOAP note cannot be edited or deleted.
-              This is typically done when the patient encounter is complete and the documentation is finalized.
+              This action cannot be undone. Once locked, the SOAP note cannot be
+              edited or deleted. This is typically done when the patient
+              encounter is complete and the documentation is finalized.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={confirmLock}
-            >
-              Lock
-            </AlertDialogAction>
+            <AlertDialogAction onClick={confirmLock}>Lock</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -526,12 +641,12 @@ function SOAPNotesList({
 }
 
 // Dialog component to display SOAP note details
-function SOAPNoteDetailsDialog({ 
-  open, 
-  onOpenChange, 
+function SOAPNoteDetailsDialog({
+  open,
+  onOpenChange,
   noteId,
-  practiceId
-}: { 
+  practiceId,
+}: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   noteId: number;
@@ -540,96 +655,111 @@ function SOAPNoteDetailsDialog({
   const { toast } = useToast();
   const [isPrescriptionFormOpen, setIsPrescriptionFormOpen] = useState(false);
   const [showTreatmentForm, setShowTreatmentForm] = useState(false);
-  const [selectedTreatment, setSelectedTreatment] = useState<Treatment | undefined>(undefined);
+  const [selectedTreatment, setSelectedTreatment] = useState<
+    Treatment | undefined
+  >(undefined);
   const [activeTab, setActiveTab] = useState("details");
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [attachments, setAttachments] = useState<UploadedFile[]>([]);
-  
-  
+
   // Fetch the SOAP note with its ID
-  const { data: note, isLoading, error } = useQuery<SOAPNote>({
-    queryKey: ['/api/soap-notes', noteId],
+  const {
+    data: note,
+    isLoading,
+    error,
+  } = useQuery<SOAPNote>({
+    queryKey: ["/api/soap-notes", noteId],
     queryFn: async () => {
       const response = await fetch(`/api/soap-notes/${noteId}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch SOAP note');
+        throw new Error("Failed to fetch SOAP note");
       }
       return response.json();
     },
-    enabled: !!noteId
+    enabled: !!noteId,
   });
-  
+
   // Fetch related appointment if available
   const { data: appointment } = useQuery({
-    queryKey: ['/api/appointments', note?.appointmentId],
+    queryKey: ["/api/appointments", note?.appointmentId],
     queryFn: async () => {
       const response = await fetch(`/api/appointments/${note?.appointmentId}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch appointment');
+        throw new Error("Failed to fetch appointment");
       }
       return response.json();
     },
-    enabled: !!note?.appointmentId
+    enabled: !!note?.appointmentId,
   });
-  
+
   // Fetch pet details
   const { data: pet } = useQuery({
-    queryKey: ['/api/pets', 'single', note?.petId],
+    queryKey: ["/api/pets", "single", note?.petId],
     queryFn: async () => {
       const response = await fetch(`/api/pets/${note?.petId}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch pet');
+        throw new Error("Failed to fetch pet");
       }
       return response.json();
     },
-    enabled: !!note?.petId
+    enabled: !!note?.petId,
   });
-  
+
   // Fetch practitioner details
   const { data: practitioner } = useQuery({
-    queryKey: ['/api/users', note?.practitionerId],
+    queryKey: ["/api/users", note?.practitionerId],
     queryFn: async () => {
       const response = await fetch(`/api/users/${note?.practitionerId}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch practitioner');
+        throw new Error("Failed to fetch practitioner");
       }
       return response.json();
     },
-    enabled: !!note?.practitionerId
+    enabled: !!note?.practitionerId,
   });
 
   // Fetch attachments for this SOAP note
-  const { data: soapAttachments, isLoading: attachmentsLoading, refetch: refetchAttachments } = useQuery({
-    queryKey: ['/api/medical-record-attachments/soap-note', note?.id],
+  const {
+    data: soapAttachments,
+    isLoading: attachmentsLoading,
+    refetch: refetchAttachments,
+  } = useQuery({
+    queryKey: ["/api/medical-record-attachments/soap-note", note?.id],
     queryFn: async () => {
-      const response = await fetch(`/api/medical-record-attachments/soap-note/${note?.id}`);
+      const response = await fetch(
+        `/api/medical-record-attachments/soap-note/${note?.id}`
+      );
       if (!response.ok) {
         if (response.status === 404) {
           return []; // No attachments found
         }
-        throw new Error('Failed to fetch attachments');
+        throw new Error("Failed to fetch attachments");
       }
       return response.json();
     },
-    enabled: !!note?.id
+    enabled: !!note?.id,
   });
-  
+
   // Attachments feature temporarily disabled
-  
+
   // Prescription form dialog
   const closePrescriptionForm = () => {
     setIsPrescriptionFormOpen(false);
     // Refresh the prescription list
-    queryClient.invalidateQueries({ queryKey: ['/api/prescriptions', note?.id] });
+    queryClient.invalidateQueries({
+      queryKey: ["/api/prescriptions", note?.id],
+    });
   };
 
   // File upload handlers
   const handleFilesUploaded = async (uploadedFiles: UploadedFile[]) => {
-    console.log('Files uploaded:', uploadedFiles);
-    setAttachments(prev => [...prev, ...uploadedFiles]);
+    console.log("Files uploaded:", uploadedFiles);
+    setAttachments((prev) => [...prev, ...uploadedFiles]);
     setShowFileUpload(false);
     // Immediately refetch attachments list instead of just invalidating
-    await queryClient.invalidateQueries({ queryKey: ['/api/medical-record-attachments/soap-note', note?.id] });
+    await queryClient.invalidateQueries({
+      queryKey: ["/api/medical-record-attachments/soap-note", note?.id],
+    });
     refetchAttachments();
     toast({
       title: "Files uploaded successfully",
@@ -639,28 +769,36 @@ function SOAPNoteDetailsDialog({
 
   const handleAttachmentDelete = async (fileId: number) => {
     try {
-      console.log('Deleting attachment:', fileId);
-      const response = await fetch(`/api/medical-record-attachments/delete/${fileId}`, {
-        method: 'DELETE',
-      });
-      
+      console.log("Deleting attachment:", fileId);
+      const response = await fetch(
+        `/api/medical-record-attachments/delete/${fileId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
       if (!response.ok) {
-        throw new Error('Failed to delete attachment');
+        throw new Error("Failed to delete attachment");
       }
-      
-      setAttachments(prev => prev.filter(file => file.id !== fileId));
+
+      setAttachments((prev) => prev.filter((file) => file.id !== fileId));
       // Immediately refetch attachments list instead of just invalidating
-      await queryClient.invalidateQueries({ queryKey: ['/api/medical-record-attachments/soap-note', note?.id] });
+      await queryClient.invalidateQueries({
+        queryKey: ["/api/medical-record-attachments/soap-note", note?.id],
+      });
       refetchAttachments();
       toast({
         title: "Attachment deleted",
         description: "The file has been removed from this SOAP note",
       });
     } catch (error) {
-      console.error('Error deleting attachment:', error);
+      console.error("Error deleting attachment:", error);
       toast({
         title: "Error deleting attachment",
-        description: error instanceof Error ? error.message : "Failed to delete the attachment",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to delete the attachment",
         variant: "destructive",
       });
     }
@@ -670,7 +808,10 @@ function SOAPNoteDetailsDialog({
     <>
       {/* Prescription Form Dialog */}
       {note && (
-        <Dialog open={isPrescriptionFormOpen} onOpenChange={setIsPrescriptionFormOpen}>
+        <Dialog
+          open={isPrescriptionFormOpen}
+          onOpenChange={setIsPrescriptionFormOpen}
+        >
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Add Prescription</DialogTitle>
@@ -678,15 +819,15 @@ function SOAPNoteDetailsDialog({
                 Create a prescription for this patient
               </DialogDescription>
             </DialogHeader>
-            <PrescriptionForm 
-              soapNoteId={note.id} 
+            <PrescriptionForm
+              soapNoteId={note.id}
               practiceId={1}
-              onPrescriptionCreated={closePrescriptionForm} 
+              onPrescriptionCreated={closePrescriptionForm}
             />
           </DialogContent>
         </Dialog>
       )}
-      
+
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
           {isLoading ? (
@@ -705,9 +846,14 @@ function SOAPNoteDetailsDialog({
                 <div className="flex justify-between items-start">
                   <div>
                     <DialogTitle className="flex items-center text-xl">
-                      {pet ? `${pet.name} - Medical Record #${note.id}` : `Medical Record #${note.id}`}
+                      {pet
+                        ? `${pet.name} - Medical Record #${note.id}`
+                        : `Medical Record #${note.id}`}
                       {note.locked && (
-                        <Badge variant="outline" className="ml-2 bg-amber-50 text-amber-600 border-amber-200">
+                        <Badge
+                          variant="outline"
+                          className="ml-2 bg-amber-50 text-amber-600 border-amber-200"
+                        >
                           <Lock className="mr-1 h-3 w-3" /> Locked
                         </Badge>
                       )}
@@ -715,11 +861,15 @@ function SOAPNoteDetailsDialog({
                     <DialogDescription className="flex flex-wrap gap-3 mt-1">
                       <span className="flex items-center text-xs">
                         <Calendar className="mr-1 h-3 w-3" />
-                        {note.createdAt ? format(new Date(note.createdAt), 'PP') : 'N/A'}
+                        {note.createdAt
+                          ? format(new Date(note.createdAt), "PP")
+                          : "N/A"}
                       </span>
                       <span className="flex items-center text-xs">
                         <User className="mr-1 h-3 w-3" />
-                        {practitioner ? practitioner.name : `Dr. ${note.practitionerId}`}
+                        {practitioner
+                          ? practitioner.name
+                          : `Dr. ${note.practitionerId}`}
                       </span>
                       <span className="flex items-center text-xs">
                         <Clipboard className="mr-1 h-3 w-3" />
@@ -727,24 +877,37 @@ function SOAPNoteDetailsDialog({
                       </span>
                     </DialogDescription>
                   </div>
-                  
+
                   <div className="flex items-center space-x-2">
                     {!note.locked && (
-                      <Button variant="outline" size="sm" onClick={() => window.location.href = `/admin/soap-notes/edit/${note.id}`}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          (window.location.href = `/admin/soap-notes/edit/${note.id}`)
+                        }
+                      >
                         <Edit className="mr-2 h-4 w-4" /> Edit
                       </Button>
                     )}
                   </div>
                 </div>
               </DialogHeader>
-              
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
+
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="mt-4"
+              >
                 <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="details">SOAP Details</TabsTrigger>
                   <TabsTrigger value="prescriptions" className="relative">
                     Prescriptions
                     {note.hasPrescriptions && (
-                      <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs">
+                      <Badge
+                        variant="secondary"
+                        className="ml-2 h-5 w-5 p-0 text-xs"
+                      >
                         •
                       </Badge>
                     )}
@@ -752,26 +915,33 @@ function SOAPNoteDetailsDialog({
                   <TabsTrigger value="attachments" className="relative">
                     Attachments
                     {soapAttachments && soapAttachments.length > 0 && (
-                      <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs">
+                      <Badge
+                        variant="secondary"
+                        className="ml-2 h-5 w-5 p-0 text-xs"
+                      >
                         {soapAttachments.length}
                       </Badge>
                     )}
                   </TabsTrigger>
                   <TabsTrigger value="treatments" className="relative">
                     Treatments
-                    <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs">
+                    <Badge
+                      variant="secondary"
+                      className="ml-2 h-5 w-5 p-0 text-xs"
+                    >
                       •
                     </Badge>
                   </TabsTrigger>
                 </TabsList>
-                
+
                 <TabsContent value="details" className="mt-4 space-y-4">
                   <div className="grid grid-cols-2 gap-6">
                     <div>
                       <h3 className="text-sm font-medium mb-2">Subjective</h3>
                       <Card>
                         <CardContent className="p-4 whitespace-pre-wrap">
-                          {note.subjective || 'No subjective information provided.'}
+                          {note.subjective ||
+                            "No subjective information provided."}
                         </CardContent>
                       </Card>
                     </div>
@@ -779,7 +949,8 @@ function SOAPNoteDetailsDialog({
                       <h3 className="text-sm font-medium mb-2">Objective</h3>
                       <Card>
                         <CardContent className="p-4 whitespace-pre-wrap">
-                          {note.objective || 'No objective information provided.'}
+                          {note.objective ||
+                            "No objective information provided."}
                         </CardContent>
                       </Card>
                     </div>
@@ -787,7 +958,7 @@ function SOAPNoteDetailsDialog({
                       <h3 className="text-sm font-medium mb-2">Assessment</h3>
                       <Card>
                         <CardContent className="p-4 whitespace-pre-wrap">
-                          {note.assessment || 'No assessment provided.'}
+                          {note.assessment || "No assessment provided."}
                         </CardContent>
                       </Card>
                     </div>
@@ -795,18 +966,18 @@ function SOAPNoteDetailsDialog({
                       <h3 className="text-sm font-medium mb-2">Plan</h3>
                       <Card>
                         <CardContent className="p-4 whitespace-pre-wrap">
-                          {note.plan || 'No plan provided.'}
+                          {note.plan || "No plan provided."}
                         </CardContent>
                       </Card>
                     </div>
                   </div>
                 </TabsContent>
-                
+
                 <TabsContent value="prescriptions" className="mt-4">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-medium">Prescriptions</h3>
                     {!note.locked && (
-                      <Button 
+                      <Button
                         onClick={() => setIsPrescriptionFormOpen(true)}
                         size="sm"
                       >
@@ -814,21 +985,18 @@ function SOAPNoteDetailsDialog({
                       </Button>
                     )}
                   </div>
-                  <PrescriptionList 
-                    soapNoteId={note.id} 
-                    readOnly={note.locked ?? false} 
+                  <PrescriptionList
+                    soapNoteId={note.id}
+                    readOnly={note.locked ?? false}
                   />
                 </TabsContent>
-                
+
                 <TabsContent value="attachments" className="mt-4">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-medium">Attachments</h3>
                     {!note.locked && (
-                      <Button 
-                        size="sm" 
-                        onClick={() => setShowFileUpload(true)}
-                      >
-                        <Paperclip className="h-4 w-4 mr-2" /> 
+                      <Button size="sm" onClick={() => setShowFileUpload(true)}>
+                        <Paperclip className="h-4 w-4 mr-2" />
                         Attach Files
                       </Button>
                     )}
@@ -839,9 +1007,9 @@ function SOAPNoteDetailsDialog({
                       <CardContent className="p-4">
                         <div className="flex justify-between items-center mb-3">
                           <h4 className="font-medium">Upload Files</h4>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => setShowFileUpload(false)}
                           >
                             Cancel
@@ -856,13 +1024,16 @@ function SOAPNoteDetailsDialog({
                           maxFiles={10}
                           maxSizeMB={25}
                           allowedFileTypes={[
-                            "image/jpeg", "image/png", "image/gif", "image/webp",
-                            "application/pdf", 
+                            "image/jpeg",
+                            "image/png",
+                            "image/gif",
+                            "image/webp",
+                            "application/pdf",
                             "text/plain",
-                            "application/msword", 
+                            "application/msword",
                             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                             "application/vnd.ms-excel",
-                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                           ]}
                         />
                       </CardContent>
@@ -886,16 +1057,19 @@ function SOAPNoteDetailsDialog({
                     <Card>
                       <CardContent className="p-6 text-center">
                         <Paperclip className="h-12 w-12 mx-auto text-gray-400 mb-3" />
-                        <h4 className="text-lg font-medium text-gray-600 mb-2">No attachments yet</h4>
+                        <h4 className="text-lg font-medium text-gray-600 mb-2">
+                          No attachments yet
+                        </h4>
                         <p className="text-gray-500 mb-4">
-                          Attach images, documents, lab results, or other files related to this medical record
+                          Attach images, documents, lab results, or other files
+                          related to this medical record
                         </p>
                         {!note.locked && (
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             onClick={() => setShowFileUpload(true)}
                           >
-                            <Paperclip className="h-4 w-4 mr-2" /> 
+                            <Paperclip className="h-4 w-4 mr-2" />
                             Attach Files
                           </Button>
                         )}
@@ -903,38 +1077,41 @@ function SOAPNoteDetailsDialog({
                     </Card>
                   )}
                 </TabsContent>
-                
+
                 <TabsContent value="treatments" className="mt-4">
                   <div className="flex justify-between items-center mb-4">
                     <div>
-                      <h3 className="text-lg font-medium">Treatments & Procedures</h3>
+                      <h3 className="text-lg font-medium">
+                        Treatments & Procedures
+                      </h3>
                       <p className="text-sm text-gray-500">
-                        Record medications, procedures, and treatments administered
+                        Record medications, procedures, and treatments
+                        administered
                       </p>
                     </div>
                     {!note.locked && (
-                      <Button 
+                      <Button
                         size="sm"
                         onClick={() => setShowTreatmentForm(true)}
                       >
-                        <PlusCircle className="h-4 w-4 mr-2" /> 
+                        <PlusCircle className="h-4 w-4 mr-2" />
                         Add Treatment
                       </Button>
                     )}
                   </div>
-                  
-                  <TreatmentList 
-                    soapNoteId={note.id} 
-                    locked={note.locked || false} 
+
+                  <TreatmentList
+                    soapNoteId={note.id}
+                    locked={note.locked || false}
                     onAddTreatment={() => setShowTreatmentForm(true)}
                     onEditTreatment={(treatment) => {
                       setSelectedTreatment(treatment);
                       setShowTreatmentForm(true);
                     }}
                   />
-                  
+
                   {showTreatmentForm && (
-                    <TreatmentForm 
+                    <TreatmentForm
                       soapNoteId={note.id}
                       petId={note.petId}
                       isOpen={showTreatmentForm}
@@ -942,7 +1119,9 @@ function SOAPNoteDetailsDialog({
                         setShowTreatmentForm(false);
                         setSelectedTreatment(undefined);
                         // Refresh the treatment list
-                        queryClient.invalidateQueries({ queryKey: ['/api/treatments/soap-note', note.id] });
+                        queryClient.invalidateQueries({
+                          queryKey: ["/api/treatments/soap-note", note.id],
+                        });
                       }}
                       treatmentToEdit={selectedTreatment}
                     />
@@ -954,7 +1133,9 @@ function SOAPNoteDetailsDialog({
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Error</AlertTitle>
-              <AlertDescription>No data found for this SOAP note</AlertDescription>
+              <AlertDescription>
+                No data found for this SOAP note
+              </AlertDescription>
             </Alert>
           )}
         </DialogContent>
@@ -964,56 +1145,60 @@ function SOAPNoteDetailsDialog({
 }
 
 // Form for creating or editing a SOAP note
-export function SOAPNoteForm({ 
-  initialData, 
+export function SOAPNoteForm({
+  initialData,
   onSuccess,
-  refetchSoap
+  refetchSoap,
 }: {
   initialData?: SOAPNote;
-  onSuccess?: () => void; 
+  onSuccess?: () => void;
   refetchSoap?: () => void;
 }) {
   const { toast } = useToast();
   const { user, userPracticeId } = useUser();
   const [searchParams] = useState(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       return new URLSearchParams(window.location.search);
     }
     return new URLSearchParams();
   });
-  const petId = searchParams.get('petId');
-  
+  const petId = searchParams.get("petId");
+
   // Fetch pets for selection
   const { data: pets, isLoading: petsLoading } = useQuery({
-    queryKey: ['/api/pets', 'list', userPracticeId],
+    queryKey: ["/api/pets", "list", userPracticeId],
     queryFn: async () => {
       if (!userPracticeId) {
-        throw new Error('Practice ID is required');
+        throw new Error("Practice ID is required");
       }
       const response = await fetch(`/api/pets?practiceId=${userPracticeId}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch pets');
+        throw new Error("Failed to fetch pets");
       }
       return response.json();
     },
-    enabled: !!userPracticeId
+    enabled: !!userPracticeId,
   });
-  
+
   // Create or update mutation
   const mutation = useMutation({
     mutationFn: async (data: SoapNoteFormValues) => {
-      const url = initialData ? `/api/soap-notes/${initialData.id}` : '/api/soap-notes';
-      const method = initialData ? 'PATCH' : 'POST';
+      const url = initialData
+        ? `/api/soap-notes/${initialData.id}`
+        : "/api/soap-notes";
+      const method = initialData ? "PATCH" : "POST";
       const res = await apiRequest(method, url, data);
       return await res.json();
     },
     onSuccess: (data) => {
       toast({
         title: initialData ? "SOAP note updated" : "SOAP note created",
-        description: initialData ? "Your changes have been saved" : "New SOAP note has been created",
+        description: initialData
+          ? "Your changes have been saved"
+          : "New SOAP note has been created",
       });
       // Invalidate and immediately refetch SOAP notes
-      queryClient.invalidateQueries({ queryKey: ['/api/soap-notes'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/soap-notes"] });
       if (refetchSoap) {
         refetchSoap();
       }
@@ -1025,29 +1210,39 @@ export function SOAPNoteForm({
         description: error.message,
         variant: "destructive",
       });
-    }
+    },
   });
-  
+
   // Form setup
   const form = useForm<SoapNoteFormValues>({
     resolver: zodResolver(soapNoteFormSchema),
-    defaultValues: initialData ? {
-      petId: initialData.petId?.toString() || '',
-      practitionerId: initialData.practitionerId?.toString() || '',
-      subjective: Array.isArray(initialData.subjective) ? initialData.subjective.join('\n') : initialData.subjective || '',
-      objective: Array.isArray(initialData.objective) ? initialData.objective.join('\n') : initialData.objective || '',
-      assessment: Array.isArray(initialData.assessment) ? initialData.assessment.join('\n') : initialData.assessment || '',
-      plan: Array.isArray(initialData.plan) ? initialData.plan.join('\n') : initialData.plan || '',
-    } : {
-      petId: petId || '',
-      practitionerId: user?.id || '',
-      subjective: '',
-      objective: '',
-      assessment: '',
-      plan: '',
-    }
+    defaultValues: initialData
+      ? {
+          petId: initialData.petId?.toString() || "",
+          practitionerId: initialData.practitionerId?.toString() || "",
+          subjective: Array.isArray(initialData.subjective)
+            ? initialData.subjective.join("\n")
+            : initialData.subjective || "",
+          objective: Array.isArray(initialData.objective)
+            ? initialData.objective.join("\n")
+            : initialData.objective || "",
+          assessment: Array.isArray(initialData.assessment)
+            ? initialData.assessment.join("\n")
+            : initialData.assessment || "",
+          plan: Array.isArray(initialData.plan)
+            ? initialData.plan.join("\n")
+            : initialData.plan || "",
+        }
+      : {
+          petId: petId || "",
+          practitionerId: user?.id || "",
+          subjective: "",
+          objective: "",
+          assessment: "",
+          plan: "",
+        },
   });
-  
+
   // Form submission handler
   const onSubmit = (data: SoapNoteFormValues) => {
     console.log("Form submitted with data:", data);
@@ -1062,29 +1257,48 @@ export function SOAPNoteForm({
       isValid: form.formState.isValid,
       errors: form.formState.errors,
       values: {
-        petId: { value: form.getValues('petId'), error: form.formState.errors.petId },
-        subjective: { value: form.getValues('subjective'), error: form.formState.errors.subjective },
-        objective: { value: form.getValues('objective'), error: form.formState.errors.objective },
-        assessment: { value: form.getValues('assessment'), error: form.formState.errors.assessment },
-        plan: { value: form.getValues('plan'), error: form.formState.errors.plan },
-        practitionerId: { value: form.getValues('practitionerId'), type: typeof form.getValues('practitionerId'), error: form.formState.errors.practitionerId }
-      }
+        petId: {
+          value: form.getValues("petId"),
+          error: form.formState.errors.petId,
+        },
+        subjective: {
+          value: form.getValues("subjective"),
+          error: form.formState.errors.subjective,
+        },
+        objective: {
+          value: form.getValues("objective"),
+          error: form.formState.errors.objective,
+        },
+        assessment: {
+          value: form.getValues("assessment"),
+          error: form.formState.errors.assessment,
+        },
+        plan: {
+          value: form.getValues("plan"),
+          error: form.formState.errors.plan,
+        },
+        practitionerId: {
+          value: form.getValues("practitionerId"),
+          type: typeof form.getValues("practitionerId"),
+          error: form.formState.errors.practitionerId,
+        },
+      },
     });
     form.handleSubmit(onSubmit)(event);
   };
-  
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {!petId && (
-// Form field for pet selection
+          // Form field for pet selection
           <FormField
             control={form.control}
             name="petId"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Patient</FormLabel>
-                <Select 
+                <Select
                   onValueChange={field.onChange}
                   defaultValue={field.value}
                   disabled={petsLoading}
@@ -1107,7 +1321,7 @@ export function SOAPNoteForm({
             )}
           />
         )}
-        
+
         <FormField
           control={form.control}
           name="subjective"
@@ -1125,7 +1339,7 @@ export function SOAPNoteForm({
             </FormItem>
           )}
         />
-        
+
         <FormField
           control={form.control}
           name="objective"
@@ -1143,7 +1357,7 @@ export function SOAPNoteForm({
             </FormItem>
           )}
         />
-        
+
         <FormField
           control={form.control}
           name="assessment"
@@ -1161,7 +1375,7 @@ export function SOAPNoteForm({
             </FormItem>
           )}
         />
-        
+
         <FormField
           control={form.control}
           name="plan"
@@ -1179,10 +1393,10 @@ export function SOAPNoteForm({
             </FormItem>
           )}
         />
-        
+
         <DialogFooter>
-          <Button 
-            type="button" 
+          <Button
+            type="button"
             onClick={handleButtonClick}
             // disabled={!form.formState.isValid || mutation.isPending}
             className="w-full sm:w-auto"
@@ -1190,7 +1404,7 @@ export function SOAPNoteForm({
             {mutation.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
-            {initialData ? 'Update SOAP Note' : 'Create SOAP Note'}
+            {initialData ? "Update SOAP Note" : "Create SOAP Note"}
           </Button>
         </DialogFooter>
       </form>
@@ -1203,55 +1417,66 @@ function SOAPTemplatesList() {
   const { toast } = useToast();
   const { user, userPracticeId } = useUser(); // Move useUser hook here
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<SOAPTemplate | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<SOAPTemplate | null>(
+    null
+  );
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState<number | null>(null);
-  
+
   // Fetch templates
-  const { data: templates, isLoading, error, refetch: refetchTemplates } = useQuery({
-    queryKey: ['/api/soap-templates'],
+  const {
+    data: templates,
+    isLoading,
+    error,
+    refetch: refetchTemplates,
+  } = useQuery({
+    queryKey: ["/api/soap-templates"],
     queryFn: async () => {
-      const response = await fetch('/api/soap-templates');
+      const response = await fetch("/api/soap-templates");
       if (!response.ok) {
-        throw new Error('Failed to fetch templates');
+        throw new Error("Failed to fetch templates");
       }
       return response.json();
-    }
+    },
   });
-  
+
   // Create or update mutation
   const templateMutation = useMutation({
     mutationFn: async (data: SoapTemplateFormValues) => {
       // Transform form data to match API schema
       const apiData = {
         name: data.name,
-        category: data.category || '',
-        subjective_template: data.subjective || '',
-        objective_template: data.objective || '',
-        assessment_template: data.assessment || '',
-        plan_template: data.plan || '',
-        practiceId: userPracticeId || 'practice_MAIN_HQ', // Use user's practice or fallback
-        createdById: user?.id || 'unknown', // Use current user ID
-        isDefault: false
+        category: data.category || "",
+        subjective_template: data.subjective || "",
+        objective_template: data.objective || "",
+        assessment_template: data.assessment || "",
+        plan_template: data.plan || "",
+        practiceId: userPracticeId || "practice_MAIN_HQ", // Use user's practice or fallback
+        createdById: user?.id || "unknown", // Use current user ID
+        isDefault: false,
       };
-      
-      console.log('Template mutation - Form data:', data);
-      console.log('Template mutation - API data:', apiData);
-      console.log('Template mutation - User:', user);
-      console.log('Template mutation - Practice ID:', userPracticeId);
-      
-      const url = editingTemplate ? `/api/soap-templates/${editingTemplate.id}` : '/api/soap-templates';
-      const method = editingTemplate ? 'PATCH' : 'POST';
+
+      console.log("Template mutation - Form data:", data);
+      console.log("Template mutation - API data:", apiData);
+      console.log("Template mutation - User:", user);
+      console.log("Template mutation - Practice ID:", userPracticeId);
+
+      const url = editingTemplate
+        ? `/api/soap-templates/${editingTemplate.id}`
+        : "/api/soap-templates";
+      const method = editingTemplate ? "PATCH" : "POST";
       const res = await apiRequest(method, url, apiData);
       return await res.json();
     },
     onSuccess: () => {
       // Invalidate and immediately refetch templates
-      queryClient.invalidateQueries({ queryKey: ['/api/soap-templates'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/soap-templates"] });
       refetchTemplates();
       toast({
         title: editingTemplate ? "Template updated" : "Template created",
-        description: editingTemplate ? "Your changes have been saved" : "New template has been created",
+        description: editingTemplate
+          ? "Your changes have been saved"
+          : "New template has been created",
       });
       setIsFormOpen(false);
       setEditingTemplate(null);
@@ -1262,17 +1487,17 @@ function SOAPTemplatesList() {
         description: error.message,
         variant: "destructive",
       });
-    }
+    },
   });
-  
+
   // Delete mutation
   const deleteTemplateMutation = useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest('DELETE', `/api/soap-templates/${id}`);
+      await apiRequest("DELETE", `/api/soap-templates/${id}`);
     },
     onSuccess: () => {
       // Invalidate and immediately refetch templates
-      queryClient.invalidateQueries({ queryKey: ['/api/soap-templates'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/soap-templates"] });
       refetchTemplates();
       toast({
         title: "Template deleted",
@@ -1286,34 +1511,34 @@ function SOAPTemplatesList() {
         description: error.message,
         variant: "destructive",
       });
-    }
+    },
   });
-  
+
   const handleEdit = (template: SOAPTemplate) => {
     setEditingTemplate(template);
     setIsFormOpen(true);
   };
-  
+
   const handleDelete = (id: number) => {
     setTemplateToDelete(id);
     setIsConfirmDeleteOpen(true);
   };
-  
+
   const confirmDelete = () => {
     if (templateToDelete) {
       deleteTemplateMutation.mutate(templateToDelete);
     }
   };
-  
+
   const openCreateForm = () => {
     setEditingTemplate(null);
     setIsFormOpen(true);
   };
-  
+
   const onTemplateFormSubmit = (data: SoapTemplateFormValues) => {
     templateMutation.mutate(data);
   };
-  
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -1323,17 +1548,19 @@ function SOAPTemplatesList() {
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Error</AlertTitle>
-        <AlertDescription>Failed to load templates: {(error as Error).message}</AlertDescription>
+        <AlertDescription>
+          Failed to load templates: {(error as Error).message}
+        </AlertDescription>
       </Alert>
     );
   }
-  
+
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
@@ -1342,7 +1569,7 @@ function SOAPTemplatesList() {
           <PlusCircle className="mr-2 h-4 w-4" /> New Template
         </Button>
       </div>
-      
+
       {templates?.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
@@ -1367,12 +1594,14 @@ function SOAPTemplatesList() {
                   <div>
                     <CardTitle>{template.name}</CardTitle>
                     {template.category && (
-                      <CardDescription>Category: {template.category}</CardDescription>
+                      <CardDescription>
+                        Category: {template.category}
+                      </CardDescription>
                     )}
                   </div>
                   <div className="flex gap-1">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => handleEdit(template)}
                       className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
@@ -1380,8 +1609,8 @@ function SOAPTemplatesList() {
                       <Edit className="h-4 w-4 mr-1" />
                       Edit
                     </Button>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => handleDelete(template.id)}
                       className="bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
@@ -1396,25 +1625,41 @@ function SOAPTemplatesList() {
                 {template.subjective_template && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Subjective</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{Array.isArray(template.subjective_template) ? template.subjective_template.join(', ') : template.subjective_template}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {Array.isArray(template.subjective_template)
+                        ? template.subjective_template.join(", ")
+                        : template.subjective_template}
+                    </p>
                   </div>
                 )}
                 {template.objective_template && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Objective</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{Array.isArray(template.objective_template) ? template.objective_template.join(', ') : template.objective_template}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {Array.isArray(template.objective_template)
+                        ? template.objective_template.join(", ")
+                        : template.objective_template}
+                    </p>
                   </div>
                 )}
                 {template.assessment_template && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Assessment</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{Array.isArray(template.assessment_template) ? template.assessment_template.join(', ') : template.assessment_template}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {Array.isArray(template.assessment_template)
+                        ? template.assessment_template.join(", ")
+                        : template.assessment_template}
+                    </p>
                   </div>
                 )}
                 {template.plan_template && (
                   <div>
                     <h4 className="text-sm font-medium mb-1">Plan</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{Array.isArray(template.plan_template) ? template.plan_template.join(', ') : template.plan_template}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {Array.isArray(template.plan_template)
+                        ? template.plan_template.join(", ")
+                        : template.plan_template}
+                    </p>
                   </div>
                 )}
               </CardContent>
@@ -1422,37 +1667,43 @@ function SOAPTemplatesList() {
           ))}
         </div>
       )}
-      
+
       {/* Create/Edit Template Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editingTemplate ? 'Edit Template' : 'Create Template'}</DialogTitle>
+            <DialogTitle>
+              {editingTemplate ? "Edit Template" : "Create Template"}
+            </DialogTitle>
             <DialogDescription>
-              {editingTemplate 
-                ? 'Update your SOAP note template' 
-                : 'Create a reusable template for common conditions'}
+              {editingTemplate
+                ? "Update your SOAP note template"
+                : "Create a reusable template for common conditions"}
             </DialogDescription>
           </DialogHeader>
-          <SOAPTemplateForm 
-            initialData={editingTemplate || undefined} 
-            onSubmit={onTemplateFormSubmit} 
+          <SOAPTemplateForm
+            initialData={editingTemplate || undefined}
+            onSubmit={onTemplateFormSubmit}
           />
         </DialogContent>
       </Dialog>
-      
+
       {/* Delete Confirmation */}
-      <AlertDialog open={isConfirmDeleteOpen} onOpenChange={setIsConfirmDeleteOpen}>
+      <AlertDialog
+        open={isConfirmDeleteOpen}
+        onOpenChange={setIsConfirmDeleteOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete this SOAP template.
+              This action cannot be undone. This will permanently delete this
+              SOAP template.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
@@ -1468,49 +1719,52 @@ function SOAPTemplatesList() {
 // Section for applying a template to the current SOAP note
 function ApplyTemplateSection({
   onApplyTemplate,
-  categoryFilter
-}: { 
+  categoryFilter,
+}: {
   onApplyTemplate: (template: SOAPTemplate) => void;
   categoryFilter?: string;
 }) {
   const { data: templates, isLoading } = useQuery({
-    queryKey: ['/api/soap-templates'],
+    queryKey: ["/api/soap-templates"],
     queryFn: async () => {
-      const response = await fetch('/api/soap-templates');
+      const response = await fetch("/api/soap-templates");
       if (!response.ok) {
-        throw new Error('Failed to fetch templates');
+        throw new Error("Failed to fetch templates");
       }
       return response.json();
-    }
+    },
   });
-  
+
   // Filter templates by category if needed
-  const filteredTemplates = templates?.filter((template: SOAPTemplate) => 
-    !categoryFilter || template.category === categoryFilter
+  const filteredTemplates = templates?.filter(
+    (template: SOAPTemplate) =>
+      !categoryFilter || template.category === categoryFilter
   );
-  
+
   if (isLoading) return <Skeleton className="h-32 w-full" />;
-  
+
   if (!templates || templates.length === 0) {
     return (
       <Card>
         <CardContent className="p-4 text-center">
-          <p className="text-muted-foreground text-sm">No templates available</p>
+          <p className="text-muted-foreground text-sm">
+            No templates available
+          </p>
         </CardContent>
       </Card>
     );
   }
-  
+
   return (
     <div className="space-y-2">
       <h3 className="text-sm font-medium">Apply Template</h3>
       <div className="grid grid-cols-2 gap-2">
         {filteredTemplates.length > 0 ? (
           filteredTemplates.map((template: SOAPTemplate) => (
-            <Button 
-              key={template.id} 
-              variant="outline" 
-              size="sm" 
+            <Button
+              key={template.id}
+              variant="outline"
+              size="sm"
               className="justify-start"
               onClick={() => onApplyTemplate(template)}
             >
@@ -1519,7 +1773,9 @@ function ApplyTemplateSection({
             </Button>
           ))
         ) : (
-          <p className="text-muted-foreground text-sm col-span-2">No templates in this category</p>
+          <p className="text-muted-foreground text-sm col-span-2">
+            No templates in this category
+          </p>
         )}
       </div>
     </div>
@@ -1527,38 +1783,52 @@ function ApplyTemplateSection({
 }
 
 // Form for creating or editing a SOAP template
-function SOAPTemplateForm({ 
-  initialData, 
-  onSubmit 
-}: { 
+function SOAPTemplateForm({
+  initialData,
+  onSubmit,
+}: {
   initialData?: SOAPTemplate;
   onSubmit: (data: SoapTemplateFormValues) => void;
 }) {
   // Form setup
   const form = useForm<SoapTemplateFormValues>({
     resolver: zodResolver(soapTemplateFormSchema),
-    defaultValues: initialData ? {
-      name: Array.isArray(initialData.name) ? initialData.name.join('\n') : initialData.name || '',
-      category: Array.isArray(initialData.category) ? initialData.category.join('\n') : initialData.category || '',
-      subjective: Array.isArray(initialData.subjective_template) ? initialData.subjective_template.join('\n') : initialData.subjective_template || '',
-      objective: Array.isArray(initialData.objective_template) ? initialData.objective_template.join('\n') : initialData.objective_template || '',
-      assessment: Array.isArray(initialData.assessment_template) ? initialData.assessment_template.join('\n') : initialData.assessment_template || '',
-      plan: Array.isArray(initialData.plan_template) ? initialData.plan_template.join('\n') : initialData.plan_template || ''
-    } : {
-      name: '',
-      category: '',
-      subjective: '',
-      objective: '',
-      assessment: '',
-      plan: ''
-    }
+    defaultValues: initialData
+      ? {
+          name: Array.isArray(initialData.name)
+            ? initialData.name.join("\n")
+            : initialData.name || "",
+          category: Array.isArray(initialData.category)
+            ? initialData.category.join("\n")
+            : initialData.category || "",
+          subjective: Array.isArray(initialData.subjective_template)
+            ? initialData.subjective_template.join("\n")
+            : initialData.subjective_template || "",
+          objective: Array.isArray(initialData.objective_template)
+            ? initialData.objective_template.join("\n")
+            : initialData.objective_template || "",
+          assessment: Array.isArray(initialData.assessment_template)
+            ? initialData.assessment_template.join("\n")
+            : initialData.assessment_template || "",
+          plan: Array.isArray(initialData.plan_template)
+            ? initialData.plan_template.join("\n")
+            : initialData.plan_template || "",
+        }
+      : {
+          name: "",
+          category: "",
+          subjective: "",
+          objective: "",
+          assessment: "",
+          plan: "",
+        },
   });
-  
+
   // Form submission handler
   const onFormSubmit = (data: SoapTemplateFormValues) => {
     onSubmit(data);
   };
-  
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onFormSubmit)} className="space-y-6">
@@ -1575,7 +1845,7 @@ function SOAPTemplateForm({
             </FormItem>
           )}
         />
-        
+
         <FormField
           control={form.control}
           name="category"
@@ -1583,13 +1853,16 @@ function SOAPTemplateForm({
             <FormItem>
               <FormLabel>Category (Optional)</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="e.g., Wellness, Dental, Emergency" />
+                <Input
+                  {...field}
+                  placeholder="e.g., Wellness, Dental, Emergency"
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField
             control={form.control}
@@ -1608,7 +1881,7 @@ function SOAPTemplateForm({
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="objective"
@@ -1626,7 +1899,7 @@ function SOAPTemplateForm({
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="assessment"
@@ -1644,7 +1917,7 @@ function SOAPTemplateForm({
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="plan"
@@ -1663,10 +1936,10 @@ function SOAPTemplateForm({
             )}
           />
         </div>
-        
+
         <DialogFooter>
           <Button type="submit">
-            {initialData ? 'Update Template' : 'Create Template'}
+            {initialData ? "Update Template" : "Create Template"}
           </Button>
         </DialogFooter>
       </form>
@@ -1676,28 +1949,34 @@ function SOAPTemplateForm({
 
 // Pet SOAP Notes View
 function PetSOAPNotesView() {
-  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-  const petId = searchParams.get('petId');
-  
+  const searchParams = new URLSearchParams(
+    typeof window !== "undefined" ? window.location.search : ""
+  );
+  const petId = searchParams.get("petId");
+
   // For clarity and direct debugging, hardcode for Maxy (pet ID 4)
   const petName = "Maxy";
   const petSpecies = "canine";
   const petBreed = "german_shepherd";
   const petWeight = "22 pounds";
-  
+
   // SOAP notes specific to this pet
-  const { data: notes, isLoading, error } = useQuery({
-    queryKey: ['/api/soap-notes', petId],
+  const {
+    data: notes,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["/api/soap-notes", petId],
     queryFn: async () => {
       console.log(`Fetching SOAP notes for pet ID ${petId}`);
       const response = await fetch(`/api/soap-notes?petId=${petId}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch SOAP notes');
+        throw new Error("Failed to fetch SOAP notes");
       }
       return response.json();
-    }
+    },
   });
-  
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -1706,37 +1985,38 @@ function PetSOAPNotesView() {
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Error</AlertTitle>
-        <AlertDescription>Failed to load SOAP notes: {error.message}</AlertDescription>
+        <AlertDescription>
+          Failed to load SOAP notes: {error.message}
+        </AlertDescription>
       </Alert>
     );
   }
-  
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-2">
-          <Input 
-            placeholder="Search notes..." 
-            className="w-[300px]" 
-          />
+          <Input placeholder="Search notes..." className="w-[300px]" />
           <Button variant="outline" size="icon">
             <Filter className="h-4 w-4" />
           </Button>
         </div>
-        
+
         <div className="flex gap-2">
-          <Button onClick={() => window.location.href = "/admin/soap-notes/create"}>
+          <Button
+            onClick={() => (window.location.href = "/admin/soap-notes/create")}
+          >
             <PlusCircle className="mr-2 h-4 w-4" /> New SOAP Note
           </Button>
         </div>
       </div>
-      
+
       {notes?.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
@@ -1749,7 +2029,11 @@ function PetSOAPNotesView() {
                 Maxy doesn't have any SOAP notes or medical records yet
               </p>
               <div className="flex gap-2 justify-center">
-                <Button onClick={() => window.location.href = "/admin/soap-notes/create"}>
+                <Button
+                  onClick={() =>
+                    (window.location.href = "/admin/soap-notes/create")
+                  }
+                >
                   <PlusCircle className="mr-2 h-4 w-4" /> Create SOAP Note
                 </Button>
               </div>
@@ -1763,26 +2047,30 @@ function PetSOAPNotesView() {
               <CardHeader>
                 <CardTitle>Maxy - Medical Record #{note.id}</CardTitle>
                 <CardDescription>
-                  Created on {format(new Date(note.createdAt || new Date()), 'MMM d, yyyy')}
+                  Created on{" "}
+                  {format(
+                    new Date(note.createdAt || new Date()),
+                    "MMM d, yyyy"
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   <div>
                     <h3 className="font-medium">Subjective</h3>
-                    <p>{note.subjective || 'N/A'}</p>
+                    <p>{note.subjective || "N/A"}</p>
                   </div>
                   <div>
                     <h3 className="font-medium">Objective</h3>
-                    <p>{note.objective || 'N/A'}</p>
+                    <p>{note.objective || "N/A"}</p>
                   </div>
                   <div>
                     <h3 className="font-medium">Assessment</h3>
-                    <p>{note.assessment || 'N/A'}</p>
+                    <p>{note.assessment || "N/A"}</p>
                   </div>
                   <div>
                     <h3 className="font-medium">Plan</h3>
-                    <p>{note.plan || 'N/A'}</p>
+                    <p>{note.plan || "N/A"}</p>
                   </div>
                 </div>
               </CardContent>
@@ -1796,26 +2084,27 @@ function PetSOAPNotesView() {
 
 // Main page component
 export default function SOAPNotesPage() {
-  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-  const petId = searchParams.get('petId');
-  
-  // State for search and filtering
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('all');
+  const searchParams = new URLSearchParams(
+    typeof window !== "undefined" ? window.location.search : ""
+  );
+  const petId = searchParams.get("petId");
 
-  
+  // State for search and filtering
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("all");
+
   // For the pet specific view, hardcoding values for Maxy (pet ID 4)
-  const petName = "Maxy"; 
+  const petName = "Maxy";
   const petSpecies = "canine";
   const petBreed = "german_shepherd";
   const petWeight = "22 pounds";
-  
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            {petId ? `Medical Records: ${petName}` : 'SOAP Notes'}
+            {petId ? `Medical Records: ${petName}` : "SOAP Notes"}
           </h1>
           {petId && (
             <p className="text-gray-500 mt-1">
@@ -1827,12 +2116,14 @@ export default function SOAPNotesPage() {
           <Button variant="outline" onClick={() => window.history.back()}>
             Back
           </Button>
-          <Button onClick={() => window.location.href = "/admin/soap-notes/create"}>
+          <Button
+            onClick={() => (window.location.href = "/admin/soap-notes/create")}
+          >
             <PlusCircle className="mr-2 h-4 w-4" /> New SOAP Note
           </Button>
         </div>
       </div>
-      
+
       {petId ? (
         <PetSOAPNotesView />
       ) : (
@@ -1840,9 +2131,9 @@ export default function SOAPNotesPage() {
           {/* Search and Filter Controls */}
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
-              <Input 
-                placeholder="Search notes..." 
-                className="w-[300px]" 
+              <Input
+                placeholder="Search notes..."
+                className="w-[300px]"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -1859,28 +2150,19 @@ export default function SOAPNotesPage() {
               <TabsTrigger value="recent">Recent</TabsTrigger>
               <TabsTrigger value="templates">Templates</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="all" className="space-y-4">
-              <SOAPNotesList 
-                filter="all" 
-                searchQuery={searchQuery}
-              />
+              <SOAPNotesList filter="all" searchQuery={searchQuery} />
             </TabsContent>
-            
+
             <TabsContent value="my-notes" className="space-y-4">
-              <SOAPNotesList 
-                filter="my-notes" 
-                searchQuery={searchQuery}
-              />
+              <SOAPNotesList filter="my-notes" searchQuery={searchQuery} />
             </TabsContent>
-            
+
             <TabsContent value="recent" className="space-y-4">
-              <SOAPNotesList 
-                filter="recent" 
-                searchQuery={searchQuery}
-              />
+              <SOAPNotesList filter="recent" searchQuery={searchQuery} />
             </TabsContent>
-            
+
             <TabsContent value="templates" className="space-y-4">
               <SOAPTemplatesList />
             </TabsContent>

@@ -239,10 +239,10 @@ export default function PetDetailPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-2">
-            <Button className="w-full" onClick={() => router.push(`/appointments?view=schedule&petId=${pet.id}`)}>
+            <Button className="w-full" onClick={() => router.push(`/admin/appointments?view=schedule&petId=${pet.id}`)}>
               Schedule Appointment
             </Button>
-            <Button variant="outline" className="w-full" onClick={() => router.push(`/pet-soap-notes/${pet.id}`)}>
+            <Button variant="outline" className="w-full" onClick={() => router.push(`/admin/pet-soap-notes/${pet.id}`)}>
               View Medical Records
             </Button>
           </CardFooter>
@@ -337,7 +337,7 @@ export default function PetDetailPage() {
                       <h3 className="text-sm font-medium">Appointment History</h3>
                       <Button 
                         size="sm" 
-                        onClick={() => router.push(`/appointments?view=schedule&petId=${pet.id}`)}
+                        onClick={() => router.push(`/admin/appointments?view=schedule&petId=${pet.id}`)}
                       >
                         New Appointment
                       </Button>
@@ -388,7 +388,7 @@ export default function PetDetailPage() {
                         <p className="text-muted-foreground mb-4">No appointment history</p>
                         <Button 
                           size="sm" 
-                          onClick={() => router.push(`/appointments?view=schedule&petId=${pet.id}`)}
+                          onClick={() => router.push(`/admin/appointments?view=schedule&petId=${pet.id}`)}
                         >
                           Schedule First Appointment
                         </Button>
@@ -404,7 +404,7 @@ export default function PetDetailPage() {
                       <Button 
                         size="sm" 
                         variant="outline"
-                        onClick={() => router.push(`/pet-soap-notes/${pet.id}`)}
+                        onClick={() => router.push(`/admin/pet-soap-notes/${pet.id}`)}
                       >
                         View All Records
                       </Button>
@@ -493,7 +493,7 @@ export default function PetDetailPage() {
                       <Button 
                         size="sm" 
                         variant="outline"
-                        onClick={() => router.push(`/pet-soap-notes/${pet.id}`)}
+                        onClick={() => router.push(`/admin/pet-soap-notes/${pet.id}`)}
                       >
                         SOAP Notes
                       </Button>

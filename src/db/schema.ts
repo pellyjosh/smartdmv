@@ -89,24 +89,6 @@ import {
   paymentMethodsRelations
 } from './schemas/billingSchema';
 import {
-  expenses,
-  expenseAttachments,
-  expenseAuditLogs,
-  refunds,
-  payroll,
-  expensesRelations,
-  expenseAttachmentsRelations,
-  expenseAuditLogsRelations,
-  refundsRelations,
-  payrollRelations,
-  payPeriods,
-  payPeriodsRelations,
-  payRates,
-  payRatesRelations,
-  workHours,
-  workHoursRelations
-} from './schemas/financeSchema';
-import {
   healthResources,
   healthResourcesRelations
 } from './schemas/healthResourcesSchema';
@@ -219,23 +201,6 @@ export const schema = {
   paymentsRelations,
   paymentMethods,
   paymentMethodsRelations,
-  // Finance tables
-  expenses,
-  expensesRelations,
-  expenseAttachments,
-  expenseAttachmentsRelations,
-  expenseAuditLogs,
-  expenseAuditLogsRelations,
-  refunds,
-  refundsRelations,
-  payroll,
-  payrollRelations,
-  payPeriods,
-  payPeriodsRelations,
-  payRates,
-  payRatesRelations,
-  workHours,
-  workHoursRelations,
   // Health Resources tables
   healthResources,
   healthResourcesRelations,
@@ -284,7 +249,6 @@ export * from './schemas/permissionOverridesSchema';
 export * from './schemas/rolesSchema';
 export * from './schemas/userRolesSchema';
 export * from './schemas/billingSchema';
-export * from './schemas/financeSchema';
 export * from './schemas/healthResourcesSchema';
 
 // You might also want to re-export the userRoleEnum if it's used elsewhere for typing
