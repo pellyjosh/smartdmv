@@ -720,9 +720,22 @@ const PetAdmissionPage = () => {
                         </FormControl>
                         <SelectContent>
                           {(() => {
-                            const vets = users.filter((u) =>
-                              hasRole(u as any, "VETERINARIAN")
-                            );
+                            // Include both new roles-array based vets and legacy single role field vets
+                            const vets = users.filter((u: any) => {
+                              const legacyRole = (u.role || "")
+                                .toString()
+                                .toLowerCase();
+                              return (
+                                hasRole(u as any, "VETERINARIAN") ||
+                                legacyRole === "veterinarian"
+                              );
+                            });
+                            if (vets.length === 0) {
+                              console.debug(
+                                "[Admissions] No veterinarians found in users list. First 3 users sample:",
+                                users.slice(0, 3)
+                              );
+                            }
                             if (vets.length === 0) {
                               return (
                                 <SelectItem
