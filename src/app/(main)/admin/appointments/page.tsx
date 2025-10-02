@@ -55,7 +55,7 @@ const appointmentFormSchema = z.object({
   date: z.date({ message: "Please select a valid date" }),
   duration: z.coerce.number().min(15, { message: "Duration must be at least 15 minutes" }),
   petId: z.string({ message: "Please select a pet" }),
-  practitionerId: z.string({ message: "Please select a practitioner" }),
+  practitionerId: z.string().min(1, { message: "Please select a practitioner" }),
   practiceId: z.string().optional(),
   notes: z.string().optional(),
   status: z.enum(appointmentStatusEnum).default("pending"),
@@ -75,12 +75,15 @@ export default function AppointmentsPage() {
 
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentFormSchema),
+    mode: 'onChange',
+    reValidateMode: 'onChange',
     defaultValues: {
       title: "",
       type: "virtual",
       date: new Date(),
       duration: 30,
       notes: "",
+      practitionerId: "",
     },
   });
 
@@ -222,7 +225,7 @@ export default function AppointmentsPage() {
     }
 
     if (formattedData.practitionerId) {
-      formattedData.practitionerId = formattedData.practitionerId;
+      formattedData.practitionerId = formattedData.practitionerId.toString();
     }
 
     if (!formattedData.status) {
@@ -262,6 +265,23 @@ export default function AppointmentsPage() {
 
     return () => subscription.unsubscribe();
   }, [form, pets]);
+
+  // Auto-select practitioner when list or user changes and field empty
+  useEffect(() => {
+    const current = form.getValues('practitionerId');
+    if (current) return;
+    if (staff && staff.length === 1) {
+      form.setValue('practitionerId', staff[0].id.toString(), { shouldValidate: true });
+      return;
+    }
+    if (user && hasRole(user as any, 'CLIENT')) {
+      form.setValue('practitionerId', user.id.toString(), { shouldValidate: true });
+      return;
+    }
+    if (user?.id && staff && staff.some((s: any) => s.id === user.id)) {
+      form.setValue('practitionerId', user.id.toString(), { shouldValidate: true });
+    }
+  }, [staff, user, form]);
 
   const isLoading = isLoadingAppointments || isLoadingPets || isLoadingStaff;
 
@@ -450,25 +470,30 @@ export default function AppointmentsPage() {
                   name="practitionerId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Practitioner</FormLabel>
+                      <FormLabel>Practitionerrrrr</FormLabel>
                       <FormControl>
                         <Combobox
                           options={
                             user && hasRole(user as any, 'CLIENT') 
-                              ? [{ value: user.id, label: "Default Practitioner" }]
+                              ? [{ value: user.id.toString(), label: "Default Practitioner" }]
                               : isLoadingStaff 
                                 ? [{ value: "loading", label: "Loading staff..." }]
                                 : staff && staff.length > 0 
                                   ? staff.map((s) => ({
-                                      value: s.id,
+                                      value: s.id.toString(),
                                       label: `${s.name}${s.email ? ` (${s.email})` : ''}`
                                     }))
                                   : user?.id 
-                                    ? [{ value: user.id, label: user.name || "Current User" }]
+                                    ? [{ value: user.id.toString(), label: user.name || "Current User" }]
                                     : [{ value: "none", label: "No practitioners available" }]
                           }
-                          value={field.value}
-                          onSelect={field.onChange}
+                          value={field.value?.toString()}
+                          onSelect={(val) => {
+                            const cleaned = (val === 'none' || val === 'loading') ? '' : val;
+                            field.onChange(cleaned);
+                            // Immediately re-validate to clear error if selection is valid
+                            setTimeout(() => form.trigger('practitionerId'), 0);
+                          }}
                           placeholder="Search and select practitioner..."
                           emptyText="No practitioners found."
                           disabled={isLoadingStaff || (hasRole(user as any, 'CLIENT') && !user?.id)}

@@ -126,10 +126,11 @@ export async function PUT(
     const [updatedVaccination] = await tenantDb
       .update(vaccinations)
       .set({
-        ...body,
-        administrationDate: body.administrationDate ? new Date(body.administrationDate) : undefined,
-        expirationDate: body.expirationDate ? new Date(body.expirationDate) : undefined,
-        nextDueDate: body.nextDueDate ? new Date(body.nextDueDate) : undefined,
+      ...body,
+      administrationDate: body.administrationDate ? new Date(body.administrationDate) : undefined,
+      expirationDate: body.expirationDate ? new Date(body.expirationDate) : undefined,
+      nextDueDate: body.nextDueDate ? new Date(body.nextDueDate) : undefined,
+      updatedAt: new Date(),
       })
       .where(eq(vaccinations.id, vaccinationId))
       .returning();
