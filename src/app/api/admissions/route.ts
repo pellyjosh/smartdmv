@@ -40,6 +40,7 @@ export async function GET_BY_ID(request: NextRequest, { params }: { params: { id
   }
 
   try {
+    const tenantDb = await getCurrentTenantDb();
     const admissionData = await tenantDb.query.admissions.findFirst({
       where: eq(admissions.id, id),
       with: {
@@ -67,16 +68,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    // Accept either string or number for IDs (frontend may already coerce to number)
     const createAdmissionSchema = z.object({
-      petId: z.string().min(1, { message: 'Pet ID is required' }),
-      clientId: z.string().min(1, { message: 'Client ID is required' }),
-      attendingVetId: z.string().min(1, { message: 'Attending Vet ID is required' }),
-      practiceId: z.string().min(1, { message: 'Practice ID is required' }), // Assuming practiceId is passed
+      petId: z.coerce.number().int().positive({ message: 'Pet ID is required' }),
+      clientId: z.coerce.number().int().positive({ message: 'Client ID is required' }),
+      attendingVetId: z.coerce.number().int().positive({ message: 'Attending Vet ID is required' }),
+      practiceId: z.coerce.number().int().positive({ message: 'Practice ID is required' }),
       reason: z.string().min(1, { message: 'Reason is required' }),
       notes: z.string().optional(),
-      roomId: z.string().optional(),
+      roomId: z.coerce.number().int().positive().optional().nullable(),
       status: z.enum(['pending', 'admitted', 'hold', 'isolation', 'discharged']).default('pending'),
-      // admissionDate and dischargeDate will be set by the database or derived
     });
 
     const validatedResult = createAdmissionSchema.safeParse(body);
@@ -88,13 +89,19 @@ export async function POST(request: NextRequest) {
           details: validatedResult.error.errors 
         }, { status: 400 });
       }
-      const admissionDataToInsert = validatedResult.data; 
+      const admissionDataToInsert = validatedResult.data;
 
     const [newAdmission] = await tenantDb.insert(admissions).values({
-      ...admissionDataToInsert,
-      admissionDate: new Date().toISOString(), // Set admission date to now
-      dischargeDate: new Date().toISOString(), // Placeholder, will be updated on discharge
-      // Drizzle will handle createdAt and updatedAt defaults
+      petId: admissionDataToInsert.petId,
+      clientId: admissionDataToInsert.clientId,
+      attendingVetId: admissionDataToInsert.attendingVetId,
+      practiceId: admissionDataToInsert.practiceId,
+      reason: admissionDataToInsert.reason,
+      notes: admissionDataToInsert.notes || null,
+      roomId: admissionDataToInsert.roomId ?? null,
+      status: admissionDataToInsert.status,
+      admissionDate: new Date(), // Use Date object so Drizzle can serialize
+      dischargeDate: null, // Not discharged yet
     }).returning();
 
     if (!newAdmission) {
