@@ -5,6 +5,13 @@ const nextConfig: NextConfig = {
   // Enable standalone mode for Docker deployment
   output: 'standalone',
   
+  // Configure API body size limits
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb',
+    },
+  },
+  
   // Allow dev origins for subdomain testing
   allowedDevOrigins: [
     'testvet.localhost:9002',

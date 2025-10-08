@@ -3,6 +3,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { compressImage, validateImageFile } from "@/lib/image-utils";
 import {
   Card,
   CardContent,
@@ -1691,11 +1692,33 @@ export default function ClientsPage() {
                                             accept="image/*"
                                             ref={fileInputRef}
                                             className="hidden"
-                                            onChange={(e) => {
-                                              const file =
-                                                e.target.files?.[0] || null;
+                                            onChange={async (e) => {
+                                              const file = e.target.files?.[0] || null;
                                               if (file) {
-                                                setPetPhoto(file);
+                                                // Validate file
+                                                const validation = validateImageFile(file, 5);
+                                                if (!validation.valid) {
+                                                  toast({
+                                                    title: "Invalid file",
+                                                    description: validation.error,
+                                                    variant: "destructive",
+                                                  });
+                                                  return;
+                                                }
+                                                
+                                                try {
+                                                  // Compress image
+                                                  const compressedFile = await compressImage(file, 800, 600, 0.8);
+                                                  setPetPhoto(compressedFile);
+                                                  toast({
+                                                    title: "Photo selected",
+                                                    description: `Original: ${(file.size / 1024 / 1024).toFixed(2)}MB → Compressed: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB (Ready for upload)`,
+                                                  });
+                                                } catch (error) {
+                                                  console.error("Image compression failed:", error);
+                                                  // Fall back to original file if compression fails
+                                                  setPetPhoto(file);
+                                                }
                                               }
                                             }}
                                           />
@@ -1716,7 +1739,7 @@ export default function ClientsPage() {
                                       )}
                                     </div>
                                     <FormDescription>
-                                      Upload a photo of the pet (optional)
+                                      Upload a photo of the pet (optional). Recommended: 800x600px or larger, max 5MB. Images will be automatically compressed.
                                     </FormDescription>
                                   </FormItem>
                                 </div>
@@ -2392,15 +2415,40 @@ export default function ClientsPage() {
                         type="file"
                         accept="image/*"
                         ref={fileInputRef}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0] || null;
-                          setPetPhoto(file);
+                          if (file) {
+                            // Validate file
+                            const validation = validateImageFile(file, 5);
+                            if (!validation.valid) {
+                              toast({
+                                title: "Invalid file",
+                                description: validation.error,
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            
+                            try {
+                              // Compress image
+                              const compressedFile = await compressImage(file, 800, 600, 0.8);
+                              setPetPhoto(compressedFile);
+                              toast({
+                                title: "Photo selected",
+                                description: `Original: ${(file.size / 1024 / 1024).toFixed(2)}MB → Compressed: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB (Ready for upload)`,
+                              });
+                            } catch (error) {
+                              console.error("Image compression failed:", error);
+                              // Fall back to original file if compression fails
+                              setPetPhoto(file);
+                            }
+                          }
                         }}
                         className="flex-1"
                       />
                     </div>
                     <FormDescription>
-                      Upload a photo of the pet (optional).
+                      Upload a photo of the pet (optional). Recommended: 800x600px or larger, max 5MB. Images will be automatically compressed to optimize storage.
                     </FormDescription>
                   </FormItem>
                 </div>

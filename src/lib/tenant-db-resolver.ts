@@ -159,3 +159,44 @@ export function clearTenantCache(tenantIdentifier?: string) {
   dbCache.clear(tenantIdentifier);
   console.log(`[TENANT_DB_RESOLVER] Cleared ${tenantIdentifier ? `cache for tenant: ${tenantIdentifier}` : 'all tenant cache'}`);
 }
+
+/**
+ * Get current tenant information including name
+ */
+export async function getCurrentTenantInfo() {
+  try {
+    const headersList = await headers();
+    const tenantIdentifier = headersList.get('X-Tenant-Identifier');
+
+    if (!tenantIdentifier) {
+      throw new Error('No tenant identifier found in request headers');
+    }
+
+    // Query owner database for tenant configuration
+    const [tenant] = await ownerDb
+      .select()
+      .from(tenants)
+      .where(
+        or(
+          eq(tenants.subdomain, tenantIdentifier),
+          eq(tenants.customDomain, tenantIdentifier)
+        )
+      )
+      .limit(1);
+
+    if (!tenant) {
+      throw new Error(`Tenant not found: ${tenantIdentifier}`);
+    }
+
+    return {
+      id: tenant.id,
+      name: tenant.name,
+      subdomain: tenant.subdomain,
+      customDomain: tenant.customDomain,
+      status: tenant.status,
+    };
+  } catch (error) {
+    console.error('Error getting tenant info:', error);
+    return null;
+  }
+}
