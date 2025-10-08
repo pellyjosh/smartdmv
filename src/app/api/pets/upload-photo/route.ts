@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { mkdir, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
-import { getCurrentTenantInfo } from "@/lib/tenant-db-resolver";
 
 // Force Node.js runtime for file system operations
 export const runtime = 'nodejs';
@@ -11,43 +10,73 @@ export async function POST(request: NextRequest) {
   try {
     console.log("=== Pet Photo Upload Started ===");
     console.log("Request method:", request.method);
-    console.log("Request headers:", Object.fromEntries(request.headers.entries()));
+    console.log("Content-Type:", request.headers.get('content-type'));
+    console.log("Content-Length:", request.headers.get('content-length'));
     
-    // Parse FormData with error handling
+    // Simple approach - try to parse formdata directly
     let formData: FormData;
     try {
+      console.log("Attempting to parse FormData...");
       formData = await request.formData();
-      console.log("FormData parsed successfully");
+      console.log("FormData parsed successfully!");
+      
+      // Log all entries
+      const entries = Array.from(formData.entries());
+      console.log("Total FormData entries:", entries.length);
+      
+      for (const [key, value] of entries) {
+        if (value && typeof value === 'object' && 'name' in value && 'size' in value && 'type' in value) {
+          console.log(`Field '${key}': File - name: ${(value as any).name}, size: ${(value as any).size}, type: ${(value as any).type}`);
+        } else {
+          console.log(`Field '${key}': ${value}`);
+        }
+      }
     } catch (formError) {
-      console.error("Failed to parse FormData:", formError);
-      return NextResponse.json({ error: "Failed to parse form data", details: String(formError) }, { status: 400 });
+      console.error("FormData parsing failed:", formError);
+      return NextResponse.json({ 
+        error: "Failed to parse form data", 
+        details: String(formError),
+        contentType: request.headers.get('content-type')
+      }, { status: 400 });
     }
     
-    console.log("FormData received, entries:", Array.from(formData.entries()).map(([key, value]) => [key, value instanceof File ? `File: ${value.name} (${value.size} bytes, type: ${value.type})` : value]));
+    // Get form fields
+    const practiceId = formData.get("practiceId")?.toString() || "general";
+    const clientId = formData.get("clientId")?.toString() || "unknown";  
+    const petId = formData.get("petId")?.toString() || "new";
+    const photo = formData.get("photo");
     
-    const file = formData.get("photo") as File | null;
-    const practiceId = (formData.get("practiceId") as string) || "general";
-    const clientId = (formData.get("clientId") as string) || "unknown";
-    const petId = (formData.get("petId") as string) || "new";
-
-    console.log("Upload parameters:", { practiceId, clientId, petId });
-    console.log("File details:", { 
-      file: file ? "exists" : "null", 
-      isFile: file instanceof File,
-      fileName: file?.name,
-      fileSize: file?.size,
-      fileType: file?.type 
-    });
-
-    if (!file) {
-      console.error("No file found in FormData");
-      return NextResponse.json({ error: "No photo file provided" }, { status: 400 });
+    console.log("Form fields:", { practiceId, clientId, petId });
+    console.log("Photo field type:", typeof photo);
+    console.log("Photo has file properties?", photo && typeof photo === 'object' && 'name' in photo && 'size' in photo);
+    
+    // Validate file - use duck typing instead of instanceof File
+    if (!photo) {
+      console.error("No photo field found");
+      return NextResponse.json({ error: "No photo field in form data" }, { status: 400 });
     }
-
-    if (!(file instanceof File)) {
-      console.error("Photo field is not a File instance:", typeof file, file);
-      return NextResponse.json({ error: "Invalid file format" }, { status: 400 });
+    
+    // Check if it's a file-like object (duck typing)
+    const isFilelike = photo && 
+                      typeof photo === 'object' && 
+                      'name' in photo && 
+                      'size' in photo && 
+                      'type' in photo &&
+                      'arrayBuffer' in photo;
+    
+    if (!isFilelike) {
+      console.error("Photo field is not a file-like object:", photo);
+      return NextResponse.json({ 
+        error: "Photo field is not a file", 
+        fieldType: typeof photo,
+        hasName: typeof photo === 'object' && photo !== null && 'name' in photo,
+        hasSize: typeof photo === 'object' && photo !== null && 'size' in photo,
+        hasType: typeof photo === 'object' && photo !== null && 'type' in photo
+      }, { status: 400 });
     }
+    
+    const file = photo as any; // Type assertion since we've validated it's file-like
+    console.log("File validated:", { name: file.name, size: file.size, type: file.type });
 
     // Check file size (limit to 5MB)
     const maxSize = 5 * 1024 * 1024; // 5MB in bytes
@@ -67,40 +96,22 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get tenant information
-    console.log("Getting tenant information...");
-    let tenantInfo;
-    try {
-      tenantInfo = await getCurrentTenantInfo();
-      console.log("Tenant info retrieved:", tenantInfo);
-    } catch (tenantError) {
-      console.error("Error getting tenant info:", tenantError);
-      tenantInfo = null;
-    }
-    const tenantName = tenantInfo?.name || tenantInfo?.subdomain || "general";
-    console.log("Using tenant name:", tenantName);
-
-    // Build uploads directory with tenant name: /uploads/${tenantName}/${practiceId}/pets/${clientId}/
-    let uploadDir = path.join(process.cwd(), "public", "uploads", tenantName, practiceId, "pets", clientId);
-    let finalTenantName = tenantName;
-    
+    // Simple directory structure without tenant complexity for now
+    const uploadDir = path.join(process.cwd(), "public", "uploads", practiceId, "pets", clientId);
     console.log("Upload directory:", uploadDir);
     
-    console.log("Checking if directory exists...");
+    // Create directory if it doesn't exist
     if (!existsSync(uploadDir)) {
       console.log("Creating directory...");
       try {
         await mkdir(uploadDir, { recursive: true });
         console.log("Directory created successfully");
       } catch (dirError) {
-        console.error("Failed to create tenant-specific directory:", dirError);
-        // Try fallback directory without tenant name for compatibility
-        console.log("Attempting fallback directory...");
-        uploadDir = path.join(process.cwd(), "public", "uploads", "general", "pets", clientId);
-        finalTenantName = "general";
-        console.log("Fallback directory:", uploadDir);
-        await mkdir(uploadDir, { recursive: true });
-        console.log("Fallback directory created successfully");
+        console.error("Failed to create directory:", dirError);
+        return NextResponse.json({ 
+          error: "Failed to create upload directory", 
+          details: String(dirError) 
+        }, { status: 500 });
       }
     } else {
       console.log("Directory already exists");
@@ -138,8 +149,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to save file", details: String(writeError) }, { status: 500 });
     }
 
-    // Return relative path from public/ with tenant name
-    const relativePath = `/uploads/${finalTenantName}/${practiceId}/pets/${clientId}/${filename}`;
+    // Return relative path from public/
+    const relativePath = `/uploads/${practiceId}/pets/${clientId}/${filename}`;
     console.log("Returning relative path:", relativePath);
     console.log("=== Pet Photo Upload Completed Successfully ===");
     

@@ -17,14 +17,24 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const entries = Array.from(formData.entries());
     
+    // Helper function to check if value is file-like
+    const isFilelike = (value: any): boolean => {
+      return value && 
+             typeof value === 'object' && 
+             'name' in value && 
+             'size' in value && 
+             'type' in value &&
+             'arrayBuffer' in value;
+    };
+    
     console.log("FormData entries:", entries.map(([key, value]) => ({
       key,
       valueType: typeof value,
-      isFile: value instanceof File,
-      ...(value instanceof File ? {
-        name: value.name,
-        size: value.size,
-        type: value.type
+      isFile: isFilelike(value),
+      ...(isFilelike(value) ? {
+        name: (value as any).name,
+        size: (value as any).size,
+        type: (value as any).type
       } : { value: String(value) })
     })));
     
@@ -33,11 +43,11 @@ export async function POST(request: NextRequest) {
       entriesCount: entries.length,
       entries: entries.map(([key, value]) => ({
         key,
-        isFile: value instanceof File,
-        ...(value instanceof File ? {
-          name: value.name,
-          size: value.size,
-          type: value.type
+        isFile: isFilelike(value),
+        ...(isFilelike(value) ? {
+          name: (value as any).name,
+          size: (value as any).size,
+          type: (value as any).type
         } : { value: String(value) })
       }))
     });

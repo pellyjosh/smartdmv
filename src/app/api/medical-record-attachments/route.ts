@@ -136,9 +136,18 @@ export async function POST(request: NextRequest) {
     const uploadedFiles = [];
 
     for (const file of files) {
-      if (file instanceof File) {
-        const buffer = Buffer.from(await file.arrayBuffer());
-        const filename = `${Date.now()}-${file.name}`;
+      // Check if it's a file-like object (duck typing for server compatibility)
+      const isFilelike = file && 
+                        typeof file === 'object' && 
+                        'name' in file && 
+                        'size' in file && 
+                        'type' in file &&
+                        'arrayBuffer' in file;
+                        
+      if (isFilelike) {
+        const fileObj = file as any; // Type assertion since we've validated it's file-like
+        const buffer = Buffer.from(await fileObj.arrayBuffer());
+        const filename = `${Date.now()}-${fileObj.name}`;
         const filepath = path.join(uploadDir, filename);
         
         await writeFile(filepath, buffer);
@@ -152,9 +161,9 @@ export async function POST(request: NextRequest) {
               pet_id, practice_id, record_type, record_id, description
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), [
             attachmentId,
-            file.name,
-            file.type,
-            file.size,
+            fileObj.name,
+            fileObj.type,
+            fileObj.size,
             filepath,
             uploadedById,
             petId,
@@ -170,9 +179,9 @@ export async function POST(request: NextRequest) {
           // PostgreSQL implementation using Drizzle ORM
           // @ts-ignore - Drizzle ORM type issue with multi-database support
           const [createdAttachment] = await tenantDb.insert(medicalRecordAttachments).values({
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size,
+            fileName: fileObj.name,
+            fileType: fileObj.type,
+            fileSize: fileObj.size,
             filePath: filepath,
             uploadedById: uploadedById || 'unknown',
             petId: petId || '',
