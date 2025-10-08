@@ -4,32 +4,49 @@ import { existsSync } from "fs";
 import path from "path";
 import { getCurrentTenantInfo } from "@/lib/tenant-db-resolver";
 
-// Configure API route to handle larger file uploads
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '10mb',
-    },
-  },
-}
+// Force Node.js runtime for file system operations
+export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
     console.log("=== Pet Photo Upload Started ===");
+    console.log("Request method:", request.method);
+    console.log("Request headers:", Object.fromEntries(request.headers.entries()));
     
-    const formData = await request.formData();
-    console.log("FormData received, entries:", Array.from(formData.entries()).map(([key, value]) => [key, value instanceof File ? `File: ${value.name} (${value.size} bytes)` : value]));
+    // Parse FormData with error handling
+    let formData: FormData;
+    try {
+      formData = await request.formData();
+      console.log("FormData parsed successfully");
+    } catch (formError) {
+      console.error("Failed to parse FormData:", formError);
+      return NextResponse.json({ error: "Failed to parse form data", details: String(formError) }, { status: 400 });
+    }
+    
+    console.log("FormData received, entries:", Array.from(formData.entries()).map(([key, value]) => [key, value instanceof File ? `File: ${value.name} (${value.size} bytes, type: ${value.type})` : value]));
     
     const file = formData.get("photo") as File | null;
     const practiceId = (formData.get("practiceId") as string) || "general";
     const clientId = (formData.get("clientId") as string) || "unknown";
     const petId = (formData.get("petId") as string) || "new";
 
-    console.log("Upload parameters:", { practiceId, clientId, petId, fileSize: file?.size, fileName: file?.name });
+    console.log("Upload parameters:", { practiceId, clientId, petId });
+    console.log("File details:", { 
+      file: file ? "exists" : "null", 
+      isFile: file instanceof File,
+      fileName: file?.name,
+      fileSize: file?.size,
+      fileType: file?.type 
+    });
 
-    if (!file || !(file instanceof File)) {
-      console.error("No valid file provided");
+    if (!file) {
+      console.error("No file found in FormData");
       return NextResponse.json({ error: "No photo file provided" }, { status: 400 });
+    }
+
+    if (!(file instanceof File)) {
+      console.error("Photo field is not a File instance:", typeof file, file);
+      return NextResponse.json({ error: "Invalid file format" }, { status: 400 });
     }
 
     // Check file size (limit to 5MB)
@@ -99,13 +116,27 @@ export async function POST(request: NextRequest) {
 
     // Write file to disk
     console.log("Converting file to buffer...");
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    console.log("Buffer created, size:", buffer.length, "bytes");
+    let bytes: ArrayBuffer;
+    let buffer: Buffer;
+    
+    try {
+      bytes = await file.arrayBuffer();
+      console.log("ArrayBuffer created, size:", bytes.byteLength, "bytes");
+      buffer = Buffer.from(bytes);
+      console.log("Buffer created, size:", buffer.length, "bytes");
+    } catch (bufferError) {
+      console.error("Failed to convert file to buffer:", bufferError);
+      return NextResponse.json({ error: "Failed to process file data", details: String(bufferError) }, { status: 500 });
+    }
     
     console.log("Writing file to disk...");
-    await writeFile(filePath, buffer);
-    console.log("File written successfully");
+    try {
+      await writeFile(filePath, buffer);
+      console.log("File written successfully");
+    } catch (writeError) {
+      console.error("Failed to write file:", writeError);
+      return NextResponse.json({ error: "Failed to save file", details: String(writeError) }, { status: 500 });
+    }
 
     // Return relative path from public/ with tenant name
     const relativePath = `/uploads/${finalTenantName}/${practiceId}/pets/${clientId}/${filename}`;
