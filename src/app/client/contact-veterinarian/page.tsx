@@ -21,6 +21,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -42,9 +48,10 @@ import {
   Send,
   AlertCircle,
   CheckCircle,
-  Calendar,
+  Calendar as CalendarIcon,
   FileText,
 } from "lucide-react";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { ClientHeader } from "@/components/client/ClientHeader";
@@ -116,7 +123,10 @@ export default function ContactVeterinarianPage() {
   const [subject, setSubject] = useState<string>("");
   const [message, setMessage] = useState<string>("");
   const [phoneNumber, setPhoneNumber] = useState<string>("");
-  const [preferredTime, setPreferredTime] = useState<string>("");
+  const [preferredCallDate, setPreferredCallDate] = useState<Date | undefined>(
+    undefined
+  );
+  const [preferredCallTime, setPreferredCallTime] = useState<string>("");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showVideoDialog, setShowVideoDialog] = useState(false);
@@ -256,7 +266,6 @@ export default function ContactVeterinarianPage() {
     },
     onError: (error: any) => {
       setIsSubmitting(false);
-      console.error("Contact error:", error);
       toast({
         title: "Request Failed",
         description:
@@ -274,7 +283,8 @@ export default function ContactVeterinarianPage() {
     setSubject("");
     setMessage("");
     setPhoneNumber("");
-    setPreferredTime("");
+    setPreferredCallDate(undefined);
+    setPreferredCallTime("");
     setFormErrors({});
   };
 
@@ -286,11 +296,6 @@ export default function ContactVeterinarianPage() {
 
     // Validate form
     if (!validateForm()) {
-      toast({
-        title: "Validation Error",
-        description: "Please fix the errors below and try again.",
-        variant: "destructive",
-      });
       return;
     }
 
@@ -310,14 +315,14 @@ export default function ContactVeterinarianPage() {
         message: message.trim(),
         phoneNumber:
           selectedMethod === "phone_call" ? phoneNumber.trim() : null,
-        preferredTime: preferredTime || null,
+        preferredTime:
+          preferredCallDate && preferredCallTime
+            ? `${format(preferredCallDate, "PPP")} at ${preferredCallTime}`
+            : null,
       };
-
-      console.log("Submitting contact data:", contactData);
 
       await contactMutation.mutateAsync(contactData);
     } catch (error: any) {
-      console.error("Contact request error:", error);
       setIsSubmitting(false);
     }
   };
@@ -580,15 +585,56 @@ export default function ContactVeterinarianPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="preferredTime">
-                      Preferred Call Time (Optional)
+                    <Label htmlFor="preferredCallDate">
+                      Preferred Call Date & Time (Optional)
                     </Label>
-                    <Input
-                      id="preferredTime"
-                      value={preferredTime}
-                      onChange={(e) => setPreferredTime(e.target.value)}
-                      placeholder="e.g., Morning, 2-4 PM, After 6 PM"
-                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "justify-start text-left font-normal",
+                              !preferredCallDate && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {preferredCallDate
+                              ? format(preferredCallDate, "PPP")
+                              : "Pick date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={preferredCallDate}
+                            onSelect={setPreferredCallDate}
+                            disabled={(date) => date < new Date()}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <Select
+                        value={preferredCallTime}
+                        onValueChange={setPreferredCallTime}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select time" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="09:00">9:00 AM</SelectItem>
+                          <SelectItem value="10:00">10:00 AM</SelectItem>
+                          <SelectItem value="11:00">11:00 AM</SelectItem>
+                          <SelectItem value="12:00">12:00 PM</SelectItem>
+                          <SelectItem value="13:00">1:00 PM</SelectItem>
+                          <SelectItem value="14:00">2:00 PM</SelectItem>
+                          <SelectItem value="15:00">3:00 PM</SelectItem>
+                          <SelectItem value="16:00">4:00 PM</SelectItem>
+                          <SelectItem value="17:00">5:00 PM</SelectItem>
+                          <SelectItem value="18:00">6:00 PM</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -696,7 +742,8 @@ export default function ContactVeterinarianPage() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Method:</span>
                   <span className="font-medium">
-                    {contactMethods.find((m) => m.id === selectedMethod)?.name}
+                    {contactMethods.find((m) => m.id === selectedMethod)
+                      ?.name || selectedMethod}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -730,6 +777,19 @@ export default function ContactVeterinarianPage() {
                     </span>
                   </div>
                 )}
+                {selectedMethod === "phone_call" &&
+                  preferredCallDate &&
+                  preferredCallTime && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        Preferred Call Time:
+                      </span>
+                      <span className="font-medium">
+                        {format(preferredCallDate, "PPP")} at{" "}
+                        {preferredCallTime}
+                      </span>
+                    </div>
+                  )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subject:</span>
                   <span className="font-medium">{subject}</span>

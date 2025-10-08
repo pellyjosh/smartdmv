@@ -10,7 +10,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, ArrowLeft, Calendar } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/hooks/use-toast";
-import { isPracticeAdministrator, isVeterinarian, isAdmin } from '@/lib/rbac-helpers';
+import {
+  isPracticeAdministrator,
+  isVeterinarian,
+  isAdmin,
+} from "@/lib/rbac-helpers";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -46,16 +50,13 @@ import {
 } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 
-// Define the schema for adding vaccinations
+// Define the schema for adding vaccinations - simplified to match backend
 const VaccinationFormSchema = z.object({
   petId: z.number({
     required_error: "Pet is required",
   }),
   vaccineTypeId: z.number().optional(),
   vaccineName: z.string().min(1, "Vaccine name is required"),
-  vaccineType: z.enum(["core", "non_core", "optional"], {
-    required_error: "Please select a vaccine type",
-  }),
   manufacturer: z.string().optional(),
   lotNumber: z.string().optional(),
   serialNumber: z.string().optional(),
@@ -65,16 +66,16 @@ const VaccinationFormSchema = z.object({
   }),
   expirationDate: z.date().optional(),
   administrationSite: z.string().optional(),
-  route: z.enum(["subcutaneous", "intramuscular", "intranasal", "oral", "topical"]).optional(),
+  route: z
+    .enum(["subcutaneous", "intramuscular", "intranasal", "oral", "topical"])
+    .optional(),
   dose: z.string().optional(),
   nextDueDate: z.date().optional(),
   notes: z.string().optional(),
   reactions: z.string().optional(),
-  status: z.enum(["completed", "scheduled", "missed", "cancelled"], {
-    required_error: "Please select a status",
-  }).default("completed"),
-  practiceId: z.number(),
-  createdById: z.number(),
+  status: z
+    .enum(["completed", "scheduled", "missed", "cancelled"])
+    .default("completed"),
 });
 
 type VaccinationFormValues = z.infer<typeof VaccinationFormSchema>;
@@ -114,14 +115,14 @@ const AddVaccinationPage = () => {
     defaultValues: {
       petId: petId ? parseInt(petId) : undefined,
       vaccineName: "",
-      vaccineType: "core",
       administrationDate: new Date(),
       status: "completed",
       // Set current user as administering vet if they are a veterinarian
-      administeringVetId: user && isVeterinarian(user as any) ? user.id : undefined,
+      administeringVetId:
+        user && isVeterinarian(user as any) ? Number(user.id) : undefined,
     },
   });
-  
+
   const { setValue, getValues } = form;
 
   // Fetch pets, vaccine types, and vets
@@ -138,7 +139,9 @@ const AddVaccinationPage = () => {
   const { data: vaccineTypes, isLoading: isLoadingVaccineTypes } = useQuery({
     queryKey: ["vaccineTypes", userPracticeId],
     queryFn: async () => {
-      const response = await fetch(`/api/vaccinations/types?practiceId=${userPracticeId}`);
+      const response = await fetch(
+        `/api/vaccinations/types?practiceId=${userPracticeId}&isActive=true`
+      );
       if (!response.ok) throw new Error("Failed to fetch vaccine types");
       return response.json();
     },
@@ -148,7 +151,9 @@ const AddVaccinationPage = () => {
   const { data: vets, isLoading: isLoadingVets } = useQuery({
     queryKey: ["vets", userPracticeId],
     queryFn: async () => {
-      const response = await fetch(`/api/users/vets?practiceId=${userPracticeId}`);
+      const response = await fetch(
+        `/api/users/vets?practiceId=${userPracticeId}`
+      );
       if (!response.ok) throw new Error("Failed to fetch veterinarians");
       return response.json();
     },
@@ -157,33 +162,11 @@ const AddVaccinationPage = () => {
 
   // Create vaccination mutation
   const createVaccinationMutation = useMutation({
-    mutationFn: async (data: VaccinationFormValues) => {
-      // Transform the data to match API expectations
-      const apiData = {
-        petId: data.petId,
-        vaccineTypeId: data.vaccineTypeId,
-        vaccineName: data.vaccineName,
-        manufacturer: data.manufacturer,
-        lotNumber: data.lotNumber,
-        serialNumber: data.serialNumber,
-        administeringVetId: data.administeringVetId,
-        administrationSite: data.administrationSite,
-        route: data.route,
-        dose: data.dose,
-        notes: data.notes,
-        reactions: data.reactions,
-        status: data.status,
-        practiceId: data.practiceId,
-        // Convert dates to ISO strings for API
-        administrationDate: data.administrationDate instanceof Date ? data.administrationDate.toISOString() : data.administrationDate,
-        expirationDate: data.expirationDate instanceof Date ? data.expirationDate.toISOString() : data.expirationDate,
-        nextDueDate: data.nextDueDate instanceof Date ? data.nextDueDate.toISOString() : data.nextDueDate,
-      };
-      
+    mutationFn: async (data: any) => {
       const response = await fetch("/api/vaccinations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apiData),
+        body: JSON.stringify(data),
       });
       if (!response.ok) {
         const error = await response.json();
@@ -201,7 +184,9 @@ const AddVaccinationPage = () => {
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to create vaccination record. Please try again.",
+        description:
+          error.message ||
+          "Failed to create vaccination record. Please try again.",
         variant: "destructive",
       });
     },
@@ -210,41 +195,68 @@ const AddVaccinationPage = () => {
   // Handle form submission
   const onSubmit = (data: VaccinationFormValues) => {
     if (!user || !userPracticeId) {
-      toast({ title: "Error", description: "User or practice not found.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "User or practice not found.",
+        variant: "destructive",
+      });
       return;
     }
-    
-    const completeData = {
-      ...data,
-      practiceId: Number(userPracticeId),
-      createdById: user.id,
+
+    // Add backend required fields and remove frontend-only fields
+    const backendData = {
+      petId: data.petId,
+      vaccineTypeId: data.vaccineTypeId,
+      vaccineName: data.vaccineName,
+      manufacturer: data.manufacturer,
+      lotNumber: data.lotNumber,
+      serialNumber: data.serialNumber,
+      administeringVetId: data.administeringVetId,
+      administrationDate:
+        data.administrationDate instanceof Date
+          ? data.administrationDate.toISOString()
+          : data.administrationDate,
+      expirationDate:
+        data.expirationDate instanceof Date
+          ? data.expirationDate.toISOString()
+          : data.expirationDate,
+      administrationSite: data.administrationSite,
+      route: data.route,
+      dose: data.dose,
+      nextDueDate:
+        data.nextDueDate instanceof Date
+          ? data.nextDueDate.toISOString()
+          : data.nextDueDate,
+      notes: data.notes,
+      reactions: data.reactions,
+      status: data.status,
     };
-    
-    createVaccinationMutation.mutate(completeData);
+
+    createVaccinationMutation.mutate(backendData);
   };
 
   // Effect to update form values when a vaccine type is selected
   useEffect(() => {
     if (selectedVaccineType) {
-      setValue('vaccineName', selectedVaccineType.name);
-      setValue('vaccineType', selectedVaccineType.type);
-      setValue('manufacturer', selectedVaccineType.manufacturer || '');
-      
+      setValue("vaccineName", selectedVaccineType.name);
+      setValue("manufacturer", selectedVaccineType.manufacturer || "");
+
       if (selectedVaccineType.durationOfImmunity) {
-        const administrationDate = getValues('administrationDate');
+        const administrationDate = getValues("administrationDate");
         if (administrationDate) {
           let expirationDate = new Date(administrationDate);
-          const durationStr = selectedVaccineType.durationOfImmunity.toLowerCase();
-          
-          if (durationStr.includes('year')) {
-            const years = parseInt(durationStr.match(/\d+/)?.[0] || '1');
+          const durationStr =
+            selectedVaccineType.durationOfImmunity.toLowerCase();
+
+          if (durationStr.includes("year")) {
+            const years = parseInt(durationStr.match(/\d+/)?.[0] || "1");
             expirationDate.setFullYear(expirationDate.getFullYear() + years);
-          } else if (durationStr.includes('month')) {
-            const months = parseInt(durationStr.match(/\d+/)?.[0] || '1');
+          } else if (durationStr.includes("month")) {
+            const months = parseInt(durationStr.match(/\d+/)?.[0] || "1");
             expirationDate.setMonth(expirationDate.getMonth() + months);
           }
-          setValue('expirationDate', expirationDate);
-          setValue('nextDueDate', new Date(expirationDate));
+          setValue("expirationDate", expirationDate);
+          setValue("nextDueDate", new Date(expirationDate));
         }
       }
     }
@@ -256,24 +268,36 @@ const AddVaccinationPage = () => {
       const pet = pets.find((p: any) => p.id === parseInt(petId));
       if (pet) {
         setSelectedPet(pet);
-        setValue('petId', pet.id);
+        setValue("petId", pet.id);
       }
     }
   }, [petId, pets, setValue]);
 
   // Effect to set current user as administering vet if they are a veterinarian
   useEffect(() => {
-    if (user && isVeterinarian(user as any) && !form.getValues('administeringVetId')) {
-      setValue('administeringVetId', user.id);
+    if (
+      user &&
+      isVeterinarian(user as any) &&
+      !form.getValues("administeringVetId")
+    ) {
+      setValue("administeringVetId", Number(user.id));
     }
   }, [user, setValue, form]);
 
-  // Filter vaccine types by the selected pet's species
-  const filteredVaccineTypes = vaccineTypes?.filter((vt: any) => 
-    !selectedPet || vt.species.toLowerCase() === selectedPet.species.toLowerCase()
+  // Filter vaccine types by the selected pet's species and active status
+  const filteredVaccineTypes = vaccineTypes?.filter(
+    (vt: any) =>
+      (!selectedPet ||
+        vt.species.toLowerCase() === selectedPet.species.toLowerCase()) &&
+      vt.isActive === true
   );
 
-  if (isUserLoading || isLoadingPets || isLoadingVaccineTypes || isLoadingVets) {
+  if (
+    isUserLoading ||
+    isLoadingPets ||
+    isLoadingVaccineTypes ||
+    isLoadingVets
+  ) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -285,15 +309,17 @@ const AddVaccinationPage = () => {
     <>
       <div className="container mx-auto py-6 space-y-6">
         <div className="flex items-center">
-          <Button 
-            variant="ghost" 
-            className="mr-2" 
-            onClick={() => router.push(petId ? `/pets/${petId}` : '/admin/vaccinations')}
+          <Button
+            variant="ghost"
+            className="mr-2"
+            onClick={() =>
+              router.push(petId ? `/pets/${petId}` : "/admin/vaccinations")
+            }
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>
-          
+
           <div>
             <h1 className="text-3xl font-bold">Add Vaccination Record</h1>
             <p className="text-muted-foreground">
@@ -306,12 +332,23 @@ const AddVaccinationPage = () => {
           <CardHeader>
             <CardTitle>Vaccination Details</CardTitle>
             <CardDescription>
-              Enter the details of the vaccination administered to the pet. Fields marked with * are required.
+              Enter the details of the vaccination administered to the pet.
+              Fields marked with * are required.
             </CardDescription>
           </CardHeader>
-          
+
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)}>
+            <form
+              onSubmit={form.handleSubmit(onSubmit, (errors) => {
+                console.log("Form validation errors:", errors);
+                toast({
+                  title: "Form Validation Error",
+                  description:
+                    "Please check all required fields are filled correctly.",
+                  variant: "destructive",
+                });
+              })}
+            >
               <CardContent className="space-y-6">
                 {/* Pet Selection */}
                 <FormField
@@ -324,7 +361,9 @@ const AddVaccinationPage = () => {
                         disabled={!!petId}
                         onValueChange={(value) => {
                           field.onChange(parseInt(value));
-                          const pet = pets.find((p: any) => p.id === parseInt(value));
+                          const pet = pets.find(
+                            (p: any) => p.id === parseInt(value)
+                          );
                           setSelectedPet(pet);
                         }}
                         defaultValue={field.value?.toString()}
@@ -360,7 +399,9 @@ const AddVaccinationPage = () => {
                           onValueChange={(value) => {
                             if (value) {
                               field.onChange(parseInt(value));
-                              const vaccineType = vaccineTypes.find((vt: any) => vt.id === parseInt(value));
+                              const vaccineType = vaccineTypes.find(
+                                (vt: any) => vt.id === parseInt(value)
+                              );
                               setSelectedVaccineType(vaccineType);
                             } else {
                               field.onChange(undefined);
@@ -387,14 +428,18 @@ const AddVaccinationPage = () => {
                               </p>
                             )}
                             {filteredVaccineTypes?.map((vaccineType: any) => (
-                              <SelectItem key={vaccineType.id} value={vaccineType.id.toString()}>
+                              <SelectItem
+                                key={vaccineType.id}
+                                value={vaccineType.id.toString()}
+                              >
                                 {vaccineType.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                         <FormDescription>
-                          Optional: Select from pre-defined vaccine types or enter manually below
+                          Optional: Select from pre-defined vaccine types or
+                          enter manually below
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -409,7 +454,10 @@ const AddVaccinationPage = () => {
                       <FormItem>
                         <FormLabel>Vaccine Name *</FormLabel>
                         <FormControl>
-                          <Input placeholder="E.g., Rabies Vaccine" {...field} />
+                          <Input
+                            placeholder="E.g., Rabies Vaccine"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -455,7 +503,11 @@ const AddVaccinationPage = () => {
                       <FormItem>
                         <FormLabel>Manufacturer</FormLabel>
                         <FormControl>
-                          <Input placeholder="Manufacturer name" {...field} value={field.value || ""} />
+                          <Input
+                            placeholder="Manufacturer name"
+                            {...field}
+                            value={field.value || ""}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -470,7 +522,11 @@ const AddVaccinationPage = () => {
                       <FormItem>
                         <FormLabel>Lot Number</FormLabel>
                         <FormControl>
-                          <Input placeholder="Lot #" {...field} value={field.value || ""} />
+                          <Input
+                            placeholder="Lot #"
+                            {...field}
+                            value={field.value || ""}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -485,7 +541,11 @@ const AddVaccinationPage = () => {
                       <FormItem>
                         <FormLabel>Serial Number</FormLabel>
                         <FormControl>
-                          <Input placeholder="Serial #" {...field} value={field.value || ""} />
+                          <Input
+                            placeholder="Serial #"
+                            {...field}
+                            value={field.value || ""}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -500,7 +560,9 @@ const AddVaccinationPage = () => {
                       <FormItem>
                         <FormLabel>Administering Veterinarian</FormLabel>
                         <Select
-                          onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
+                          onValueChange={(value) =>
+                            field.onChange(value ? parseInt(value) : undefined)
+                          }
                           defaultValue={field.value?.toString()}
                           value={field.value?.toString()}
                         >
@@ -511,7 +573,10 @@ const AddVaccinationPage = () => {
                           </FormControl>
                           <SelectContent>
                             {vets?.map((vet: any) => (
-                              <SelectItem key={vet.id} value={vet.id.toString()}>
+                              <SelectItem
+                                key={vet.id}
+                                value={vet.id.toString()}
+                              >
                                 {vet.name}
                               </SelectItem>
                             ))}
@@ -534,9 +599,7 @@ const AddVaccinationPage = () => {
                             <FormControl>
                               <Button
                                 variant={"outline"}
-                                className={
-                                  "w-full pl-3 text-left font-normal"
-                                }
+                                className={"w-full pl-3 text-left font-normal"}
                               >
                                 {field.value ? (
                                   format(field.value, "PPP")
@@ -573,9 +636,7 @@ const AddVaccinationPage = () => {
                             <FormControl>
                               <Button
                                 variant={"outline"}
-                                className={
-                                  "w-full pl-3 text-left font-normal"
-                                }
+                                className={"w-full pl-3 text-left font-normal"}
                               >
                                 {field.value ? (
                                   format(field.value, "PPP")
@@ -615,9 +676,7 @@ const AddVaccinationPage = () => {
                             <FormControl>
                               <Button
                                 variant={"outline"}
-                                className={
-                                  "w-full pl-3 text-left font-normal"
-                                }
+                                className={"w-full pl-3 text-left font-normal"}
                               >
                                 {field.value ? (
                                   format(field.value, "PPP")
@@ -653,7 +712,11 @@ const AddVaccinationPage = () => {
                       <FormItem>
                         <FormLabel>Administration Site</FormLabel>
                         <FormControl>
-                          <Input placeholder="E.g., Right hind leg" {...field} value={field.value || ""} />
+                          <Input
+                            placeholder="E.g., Right hind leg"
+                            {...field}
+                            value={field.value || ""}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -678,9 +741,15 @@ const AddVaccinationPage = () => {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="subcutaneous">Subcutaneous</SelectItem>
-                            <SelectItem value="intramuscular">Intramuscular</SelectItem>
-                            <SelectItem value="intranasal">Intranasal</SelectItem>
+                            <SelectItem value="subcutaneous">
+                              Subcutaneous
+                            </SelectItem>
+                            <SelectItem value="intramuscular">
+                              Intramuscular
+                            </SelectItem>
+                            <SelectItem value="intranasal">
+                              Intranasal
+                            </SelectItem>
                             <SelectItem value="oral">Oral</SelectItem>
                             <SelectItem value="topical">Topical</SelectItem>
                           </SelectContent>
@@ -698,7 +767,11 @@ const AddVaccinationPage = () => {
                       <FormItem>
                         <FormLabel>Dose</FormLabel>
                         <FormControl>
-                          <Input placeholder="E.g., 1 mL" {...field} value={field.value || ""} />
+                          <Input
+                            placeholder="E.g., 1 mL"
+                            {...field}
+                            value={field.value || ""}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -742,7 +815,7 @@ const AddVaccinationPage = () => {
                     <FormItem>
                       <FormLabel>Notes</FormLabel>
                       <FormControl>
-                        <Textarea 
+                        <Textarea
                           placeholder="Additional notes about this vaccination"
                           className="min-h-24"
                           {...field}
@@ -762,7 +835,7 @@ const AddVaccinationPage = () => {
                     <FormItem>
                       <FormLabel>Adverse Reactions</FormLabel>
                       <FormControl>
-                        <Textarea 
+                        <Textarea
                           placeholder="Any adverse reactions noted after administration"
                           className="min-h-24"
                           {...field}
@@ -773,20 +846,24 @@ const AddVaccinationPage = () => {
                     </FormItem>
                   )}
                 />
-
-                <input type="hidden" {...form.register("practiceId", { value: Number(userPracticeId) })} />
-                <input type="hidden" {...form.register("createdById", { value: user?.id })} />
               </CardContent>
-              
+
               <CardFooter className="flex justify-between">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => router.push(petId ? `/pets/${petId}` : '/admin/vaccinations')}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    router.push(
+                      petId ? `/pets/${petId}` : "/admin/vaccinations"
+                    )
+                  }
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createVaccinationMutation.isPending}>
+                <Button
+                  type="submit"
+                  disabled={createVaccinationMutation.isPending}
+                >
                   {createVaccinationMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}

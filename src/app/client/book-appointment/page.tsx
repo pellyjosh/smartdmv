@@ -286,16 +286,20 @@ export default function BookAppointmentPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Clear previous errors
-    setFormErrors({});
+    // Always validate form and show errors
+    const isValid = validateForm();
 
-    // Validate form
-    if (!validateForm()) {
+    if (!isValid) {
       toast({
-        title: "Validation Error",
-        description: "Please fix the errors below and try again.",
+        title: "Please Complete All Required Fields",
+        description: "Check the highlighted fields below and try again.",
         variant: "destructive",
       });
+      return;
+    }
+
+    // Only proceed if not already submitting
+    if (isSubmitting || bookAppointmentMutation.isPending) {
       return;
     }
 
@@ -603,7 +607,10 @@ export default function BookAppointmentPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {practitioners?.map((practitioner: any) => (
-                      <SelectItem key={practitioner.id} value={practitioner.id}>
+                      <SelectItem
+                        key={practitioner.id}
+                        value={practitioner.id.toString()}
+                      >
                         Dr. {practitioner.name}
                       </SelectItem>
                     ))}
@@ -639,19 +646,7 @@ export default function BookAppointmentPage() {
           >
             Cancel
           </Button>
-          <Button
-            type="submit"
-            disabled={
-              isSubmitting ||
-              bookAppointmentMutation.isPending ||
-              !selectedPet ||
-              !selectedType ||
-              !selectedDate ||
-              !selectedTime ||
-              !appointmentTitle.trim()
-            }
-            className="flex-1"
-          >
+          <Button type="submit" className="flex-1">
             {isSubmitting || bookAppointmentMutation.isPending ? (
               <>
                 <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -674,7 +669,11 @@ export default function BookAppointmentPage() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Pet:</span>
                   <span className="font-medium">
-                    {pets?.find((pet: any) => pet.id === selectedPet)?.name}
+                    {
+                      pets?.find(
+                        (pet: any) => pet.id.toString() === selectedPet
+                      )?.name
+                    }
                   </span>
                 </div>
                 <div className="flex justify-between">

@@ -78,7 +78,18 @@ import {
   Receipt,
 } from "lucide-react";
 import { ExpenseStatus, Expense } from "@/shared/expense-schema";
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, BarChart, Bar, XAxis, YAxis, Legend } from 'recharts';
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip as RechartsTooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Legend,
+} from "recharts";
 
 type TabName = "expenses" | "budgets" | "reports";
 
@@ -123,6 +134,8 @@ export default function ExpensesPage() {
   const [activeTab, setActiveTab] = useState<TabName>("expenses");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [showUpdateStatusDialog, setShowUpdateStatusDialog] = useState(false);
+  const [newStatus, setNewStatus] = useState<string>("");
   const [filters, setFilters] = useState<ExpenseFilters>({
     search: "",
     category: "",
@@ -135,16 +148,31 @@ export default function ExpensesPage() {
     taxDeductible: null,
   });
 
+  // Generate invoice number
+  const generateInvoiceNumber = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const time = String(now.getTime()).slice(-6); // Last 6 digits of timestamp
+    return `EXP-${year}${month}${day}-${time}`;
+  };
+
   // Derived base URL
   const base = practiceId ? `/api/practices/${practiceId}/expenses` : undefined;
-  const budgetBase = practiceId ? `/api/practices/${practiceId}/budgets` : undefined;
+  const budgetBase = practiceId
+    ? `/api/practices/${practiceId}/budgets`
+    : undefined;
 
   // Budgets state
   const [showBudgetDialog, setShowBudgetDialog] = useState(false);
   const budgetFormSchema = z.object({
     name: z.string().min(2),
     category: z.string().optional(),
-    amountAllocated: z.string().min(1).transform(v => parseFloat(v)),
+    amountAllocated: z
+      .string()
+      .min(1)
+      .transform((v) => parseFloat(v)),
     periodStart: z.date(),
     periodEnd: z.date(),
     notes: z.string().optional(),
@@ -153,63 +181,98 @@ export default function ExpensesPage() {
   const budgetForm = useForm<BudgetFormValues>({
     resolver: zodResolver(budgetFormSchema),
     defaultValues: {
-      name: '',
-      category: '',
+      name: "",
+      category: "",
       amountAllocated: 0 as any,
       periodStart: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-      periodEnd: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0),
-      notes: '',
-    }
+      periodEnd: new Date(
+        new Date().getFullYear(),
+        new Date().getMonth() + 1,
+        0
+      ),
+      notes: "",
+    },
   });
 
-  const { data: budgetsList, refetch: refetchBudgets, isLoading: loadingBudgets } = useQuery({
+  const {
+    data: budgetsList,
+    refetch: refetchBudgets,
+    isLoading: loadingBudgets,
+  } = useQuery({
     queryKey: [budgetBase],
     enabled: !!budgetBase,
     queryFn: async () => {
-      const res = await apiRequest('GET', budgetBase!);
+      const res = await apiRequest("GET", budgetBase!);
       return res.json();
-    }
+    },
   });
 
   const createBudgetMutation = useMutation({
     mutationFn: async (data: BudgetFormValues) => {
-      if (!budgetBase) throw new Error('No practice context');
-      const res = await apiRequest('POST', budgetBase, { ...data, periodStart: data.periodStart.toISOString(), periodEnd: data.periodEnd.toISOString() });
+      if (!budgetBase) throw new Error("No practice context");
+      const res = await apiRequest("POST", budgetBase, {
+        ...data,
+        periodStart: data.periodStart.toISOString(),
+        periodEnd: data.periodEnd.toISOString(),
+      });
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: 'Budget created' });
+      toast({ title: "Budget created" });
       setShowBudgetDialog(false);
       refetchBudgets();
     },
-    onError: (e: any) => toast({ title: 'Failed to create budget', description: e.message, variant: 'destructive' })
+    onError: (e: any) =>
+      toast({
+        title: "Failed to create budget",
+        description: e.message,
+        variant: "destructive",
+      }),
   });
 
   const deleteBudgetMutation = useMutation({
     mutationFn: async (id: number) => {
-      if (!budgetBase) throw new Error('No practice context');
-      const res = await apiRequest('DELETE', `${budgetBase}?id=${id}`);
+      if (!budgetBase) throw new Error("No practice context");
+      const res = await apiRequest("DELETE", `${budgetBase}?id=${id}`);
       return res.json();
     },
-    onSuccess: () => { toast({ title: 'Budget deleted' }); refetchBudgets(); },
-    onError: (e: any) => toast({ title: 'Failed to delete budget', description: e.message, variant: 'destructive' })
+    onSuccess: () => {
+      toast({ title: "Budget deleted" });
+      refetchBudgets();
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Failed to delete budget",
+        description: e.message,
+        variant: "destructive",
+      }),
   });
 
   // Reports state
-  const [reportRange, setReportRange] = useState<{ start: Date | null; end: Date | null }>({ start: null, end: null });
-  const [groupBy, setGroupBy] = useState<'category' | 'month'>('category');
-  const reportBase = practiceId ? `/api/practices/${practiceId}/expenses/reports/summary` : undefined;
-  const { data: reportSummary, refetch: refetchReport, isLoading: loadingReport } = useQuery({
+  const [reportRange, setReportRange] = useState<{
+    start: Date | null;
+    end: Date | null;
+  }>({ start: null, end: null });
+  const [groupBy, setGroupBy] = useState<"category" | "month">("category");
+  const reportBase = practiceId
+    ? `/api/practices/${practiceId}/expenses/reports/summary`
+    : undefined;
+  const {
+    data: reportSummary,
+    refetch: refetchReport,
+    isLoading: loadingReport,
+  } = useQuery({
     queryKey: [reportBase, groupBy, reportRange],
     enabled: !!reportBase,
     queryFn: async () => {
       const params = new URLSearchParams();
-      params.append('groupBy', groupBy);
-      if (reportRange.start) params.append('start', reportRange.start.toISOString());
-      if (reportRange.end) params.append('end', reportRange.end.toISOString());
-      const res = await apiRequest('GET', `${reportBase}?${params}`);
+      params.append("groupBy", groupBy);
+      if (reportRange.start)
+        params.append("start", reportRange.start.toISOString());
+      if (reportRange.end) params.append("end", reportRange.end.toISOString());
+      const res = await apiRequest("GET", `${reportBase}?${params}`);
       return res.json();
-    }
+    },
   });
 
   const {
@@ -300,6 +363,29 @@ export default function ExpensesPage() {
     },
   });
 
+  const updateExpenseStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      if (!base) throw new Error("No practice context");
+      const res = await apiRequest("PATCH", `${base}/${id}`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Expense updated",
+        description: "The expense status has been updated successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: [base] });
+      setSelectedExpense(null);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Failed to update expense",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const form = useForm<CreateExpenseFormValues>({
     resolver: zodResolver(createExpenseSchema),
     defaultValues: {
@@ -311,7 +397,7 @@ export default function ExpensesPage() {
       category: "",
       subcategory: "",
       vendorName: "",
-      invoiceNumber: "",
+      invoiceNumber: generateInvoiceNumber(), // Auto-generate invoice number
       paymentMethod: "",
       isRecurring: false,
       recurrenceType: "none",
@@ -324,6 +410,26 @@ export default function ExpensesPage() {
   function onSubmit(data: CreateExpenseFormValues) {
     createExpenseMutation.mutate(data);
   }
+
+  const handleOpenCreateDialog = () => {
+    form.reset({
+      title: "",
+      description: "",
+      amount: 0,
+      date: new Date(),
+      category: "",
+      subcategory: "",
+      vendorName: "",
+      invoiceNumber: generateInvoiceNumber(), // Generate new invoice number
+      paymentMethod: "",
+      isRecurring: false,
+      recurrenceType: "none",
+      recurrenceEndDate: null,
+      taxDeductible: false,
+      status: ExpenseStatus.DRAFT,
+    });
+    setShowCreateDialog(true);
+  };
 
   const resetFilters = () =>
     setFilters({
@@ -374,10 +480,7 @@ export default function ExpensesPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            onClick={() => setShowCreateDialog(true)}
-            disabled={!practiceId}
-          >
+          <Button onClick={handleOpenCreateDialog} disabled={!practiceId}>
             <Plus className="mr-2 h-4 w-4" /> New Expense
           </Button>
         </div>
@@ -470,6 +573,7 @@ export default function ExpensesPage() {
                         <TableHead>Category</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>Vendor</TableHead>
+                        <TableHead>Frequency</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
@@ -496,6 +600,25 @@ export default function ExpensesPage() {
                               {(exp as any).vendorName || "-"}
                             </TableCell>
                             <TableCell>
+                              {(exp as any).isRecurring ? (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-blue-50 text-blue-700 border-blue-200"
+                                >
+                                  {(exp as any).recurrenceType
+                                    ?.charAt(0)
+                                    .toUpperCase() +
+                                    (exp as any).recurrenceType
+                                      ?.slice(1)
+                                      .toLowerCase() || "Recurring"}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  One-time
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell>
                               <Badge
                                 className={getStatusColor(exp.status)}
                                 variant="secondary"
@@ -510,8 +633,21 @@ export default function ExpensesPage() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => setSelectedExpense(exp)}
+                                  title="View details"
                                 >
                                   <FileText className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setSelectedExpense(exp);
+                                    setNewStatus(exp.status);
+                                    setShowUpdateStatusDialog(true);
+                                  }}
+                                  title="Update status"
+                                >
+                                  <Receipt className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -519,6 +655,7 @@ export default function ExpensesPage() {
                                   onClick={() =>
                                     deleteExpenseMutation.mutate(exp.id)
                                   }
+                                  title="Delete expense"
                                 >
                                   <XCircle className="h-4 w-4" />
                                 </Button>
@@ -576,40 +713,91 @@ export default function ExpensesPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <CardTitle>Budgets</CardTitle>
-                  <CardDescription>Track allocated vs spent per category or overall.</CardDescription>
+                  <CardDescription>
+                    Track allocated vs spent per category or overall.
+                  </CardDescription>
                 </div>
-                <Button onClick={() => setShowBudgetDialog(true)} disabled={!practiceId}>
+                <Button
+                  onClick={() => setShowBudgetDialog(true)}
+                  disabled={!practiceId}
+                >
                   <Plus className="mr-2 h-4 w-4" /> New Budget
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
               {loadingBudgets ? (
-                <div className="flex justify-center items-center h-48"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div>
+                <div className="flex justify-center items-center h-48">
+                  <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+                </div>
               ) : budgetsList?.length ? (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {budgetsList.map((b: any) => {
                     const utilizationPct = (b.utilization * 100).toFixed(1);
                     const over = b.remaining < 0;
                     return (
-                      <div key={b.id} className="border rounded-md p-4 space-y-3 bg-white shadow-sm">
+                      <div
+                        key={b.id}
+                        className="border rounded-md p-4 space-y-3 bg-white shadow-sm"
+                      >
                         <div className="flex justify-between items-start">
                           <div>
                             <h4 className="font-semibold">{b.name}</h4>
-                            <p className="text-xs text-gray-500">{format(new Date(b.periodStart), 'MMM d')} - {format(new Date(b.periodEnd), 'MMM d, yyyy')}</p>
+                            <p className="text-xs text-gray-500">
+                              {format(new Date(b.periodStart), "MMM d")} -{" "}
+                              {format(new Date(b.periodEnd), "MMM d, yyyy")}
+                            </p>
                           </div>
-                          <Button variant="ghost" size="sm" onClick={() => deleteBudgetMutation.mutate(b.id)}>✕</Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteBudgetMutation.mutate(b.id)}
+                          >
+                            ✕
+                          </Button>
                         </div>
                         <div className="text-sm">
-                          <p><span className="text-gray-500">Category:</span> {b.category || 'All'}</p>
-                          <p><span className="text-gray-500">Allocated:</span> ${Number(b.amountAllocated).toFixed(2)}</p>
-                          <p><span className="text-gray-500">Spent:</span> ${Number(b.spent).toFixed(2)}</p>
-                          <p><span className="text-gray-500">Remaining:</span> <span className={over ? 'text-red-600 font-medium' : ''}>${Number(b.remaining).toFixed(2)}</span></p>
+                          <p>
+                            <span className="text-gray-500">Category:</span>{" "}
+                            {b.category || "All"}
+                          </p>
+                          <p>
+                            <span className="text-gray-500">Allocated:</span> $
+                            {Number(b.amountAllocated).toFixed(2)}
+                          </p>
+                          <p>
+                            <span className="text-gray-500">Spent:</span> $
+                            {Number(b.spent).toFixed(2)}
+                          </p>
+                          <p>
+                            <span className="text-gray-500">Remaining:</span>{" "}
+                            <span
+                              className={over ? "text-red-600 font-medium" : ""}
+                            >
+                              ${Number(b.remaining).toFixed(2)}
+                            </span>
+                          </p>
                         </div>
                         <div className="w-full bg-gray-100 h-2 rounded overflow-hidden">
-                          <div className={`h-2 ${over ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${Math.min(100, Math.abs(Number(utilizationPct))) }%` }} />
+                          <div
+                            className={`h-2 ${
+                              over ? "bg-red-500" : "bg-green-500"
+                            }`}
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                Math.abs(Number(utilizationPct))
+                              )}%`,
+                            }}
+                          />
                         </div>
-                        <p className={`text-xs ${over ? 'text-red-600' : 'text-gray-600'}`}>{utilizationPct}% utilized</p>
+                        <p
+                          className={`text-xs ${
+                            over ? "text-red-600" : "text-gray-600"
+                          }`}
+                        >
+                          {utilizationPct}% utilized
+                        </p>
                       </div>
                     );
                   })}
@@ -618,7 +806,9 @@ export default function ExpensesPage() {
                 <div className="flex flex-col items-center h-48 justify-center space-y-3">
                   <CircleDollarSign className="h-12 w-12 text-gray-300" />
                   <p className="text-gray-500">No budgets yet.</p>
-                  <Button onClick={() => setShowBudgetDialog(true)}>Create your first budget</Button>
+                  <Button onClick={() => setShowBudgetDialog(true)}>
+                    Create your first budget
+                  </Button>
                 </div>
               )}
             </CardContent>
@@ -628,12 +818,21 @@ export default function ExpensesPage() {
           <Card>
             <CardHeader className="space-y-4">
               <CardTitle>Financial Reports</CardTitle>
-              <CardDescription>Visual summaries of expenses by {groupBy}.</CardDescription>
+              <CardDescription>
+                Visual summaries of expenses by {groupBy}.
+              </CardDescription>
               <div className="flex flex-wrap gap-2 items-end">
                 <div>
-                  <label className="block text-xs font-medium mb-1">Group By</label>
-                  <Select value={groupBy} onValueChange={(v: any) => setGroupBy(v)}>
-                    <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                  <label className="block text-xs font-medium mb-1">
+                    Group By
+                  </label>
+                  <Select
+                    value={groupBy}
+                    onValueChange={(v: any) => setGroupBy(v)}
+                  >
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="category">Category</SelectItem>
                       <SelectItem value="month">Month</SelectItem>
@@ -641,55 +840,118 @@ export default function ExpensesPage() {
                   </Select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">Start</label>
+                  <label className="block text-xs font-medium mb-1">
+                    Start
+                  </label>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-[140px] justify-start">
-                        {reportRange.start ? format(reportRange.start, 'MMM d, yyyy') : 'Pick'}
+                      <Button
+                        variant="outline"
+                        className="w-[140px] justify-start"
+                      >
+                        {reportRange.start
+                          ? format(reportRange.start, "MMM d, yyyy")
+                          : "Pick"}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="p-0"><Calendar mode="single" selected={reportRange.start ?? undefined} onSelect={(d) => setReportRange(r => ({ ...r, start: d || null }))} /></PopoverContent>
+                    <PopoverContent className="p-0">
+                      <Calendar
+                        mode="single"
+                        selected={reportRange.start ?? undefined}
+                        onSelect={(d) =>
+                          setReportRange((r) => ({ ...r, start: d || null }))
+                        }
+                      />
+                    </PopoverContent>
                   </Popover>
                 </div>
                 <div>
                   <label className="block text-xs font-medium mb-1">End</label>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-[140px] justify-start">
-                        {reportRange.end ? format(reportRange.end, 'MMM d, yyyy') : 'Pick'}
+                      <Button
+                        variant="outline"
+                        className="w-[140px] justify-start"
+                      >
+                        {reportRange.end
+                          ? format(reportRange.end, "MMM d, yyyy")
+                          : "Pick"}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="p-0"><Calendar mode="single" selected={reportRange.end ?? undefined} onSelect={(d) => setReportRange(r => ({ ...r, end: d || null }))} /></PopoverContent>
+                    <PopoverContent className="p-0">
+                      <Calendar
+                        mode="single"
+                        selected={reportRange.end ?? undefined}
+                        onSelect={(d) =>
+                          setReportRange((r) => ({ ...r, end: d || null }))
+                        }
+                      />
+                    </PopoverContent>
                   </Popover>
                 </div>
-                <Button variant="outline" onClick={() => refetchReport()} disabled={!practiceId}><RefreshCw className="mr-2 h-4 w-4" /> Refresh</Button>
+                <Button
+                  variant="outline"
+                  onClick={() => refetchReport()}
+                  disabled={!practiceId}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
               {loadingReport ? (
-                <div className="flex justify-center items-center h-64"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div>
+                <div className="flex justify-center items-center h-64">
+                  <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+                </div>
               ) : reportSummary?.length ? (
                 <div className="grid md:grid-cols-2 gap-8">
                   <div className="h-72">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={reportSummary} dataKey="total" nameKey="label" label>
+                        <Pie
+                          data={reportSummary}
+                          dataKey="total"
+                          nameKey="label"
+                          label
+                        >
                           {reportSummary.map((_: any, idx: number) => (
-                            <Cell key={idx} fill={["#6366F1","#22C55E","#F59E0B","#EF4444","#06B6D4","#8B5CF6","#10B981"][idx % 7]} />
+                            <Cell
+                              key={idx}
+                              fill={
+                                [
+                                  "#6366F1",
+                                  "#22C55E",
+                                  "#F59E0B",
+                                  "#EF4444",
+                                  "#06B6D4",
+                                  "#8B5CF6",
+                                  "#10B981",
+                                ][idx % 7]
+                              }
+                            />
                           ))}
                         </Pie>
-                        <RechartsTooltip formatter={(v: any) => `$${Number(v).toFixed(2)}`} />
+                        <RechartsTooltip
+                          formatter={(v: any) => `$${Number(v).toFixed(2)}`}
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="h-72">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={reportSummary}>
-                        <XAxis dataKey="label" hide={groupBy === 'month'} />
-                        <YAxis tickFormatter={(v) => `$${v}`}/>
-                        <RechartsTooltip content={({ active, payload }: any) => active && payload?.length ? (
-                          <div className="bg-white border shadow px-3 py-2 text-xs">{payload[0].payload.label}: ${Number(payload[0].value).toFixed(2)}</div>
-                        ) : null } />
+                        <XAxis dataKey="label" hide={groupBy === "month"} />
+                        <YAxis tickFormatter={(v) => `$${v}`} />
+                        <RechartsTooltip
+                          content={({ active, payload }: any) =>
+                            active && payload?.length ? (
+                              <div className="bg-white border shadow px-3 py-2 text-xs">
+                                {payload[0].payload.label}: $
+                                {Number(payload[0].value).toFixed(2)}
+                              </div>
+                            ) : null
+                          }
+                        />
                         <Legend />
                         <Bar dataKey="total" name="Total" fill="#6366F1" />
                       </BarChart>
@@ -707,7 +969,15 @@ export default function ExpensesPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      <Dialog
+        open={showCreateDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            form.reset();
+          }
+          setShowCreateDialog(open);
+        }}
+      >
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Create New Expense</DialogTitle>
@@ -856,10 +1126,25 @@ export default function ExpensesPage() {
                     <FormItem>
                       <FormLabel>Invoice Number</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="Invoice or receipt number"
-                          {...field}
-                        />
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Auto-generated"
+                            readOnly
+                            className="bg-muted"
+                            {...field}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() =>
+                              field.onChange(generateInvoiceNumber())
+                            }
+                            title="Regenerate invoice number"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -990,7 +1275,10 @@ export default function ExpensesPage() {
               <DialogFooter>
                 <Button
                   variant="outline"
-                  onClick={() => setShowCreateDialog(false)}
+                  onClick={() => {
+                    form.reset();
+                    setShowCreateDialog(false);
+                  }}
                 >
                   Cancel
                 </Button>
@@ -1019,71 +1307,155 @@ export default function ExpensesPage() {
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Create Budget</DialogTitle>
-            <DialogDescription>Define a spending allocation for a date range.</DialogDescription>
+            <DialogDescription>
+              Define a spending allocation for a date range.
+            </DialogDescription>
           </DialogHeader>
           <Form {...budgetForm}>
-            <form onSubmit={budgetForm.handleSubmit((d) => createBudgetMutation.mutate(d))} className="space-y-6">
+            <form
+              onSubmit={budgetForm.handleSubmit((d) =>
+                createBudgetMutation.mutate(d)
+              )}
+              className="space-y-6"
+            >
               <div className="grid grid-cols-2 gap-4">
-                <FormField control={budgetForm.control} name="name" render={({ field }) => (
-                  <FormItem className="col-span-2">
-                    <FormLabel>Name*</FormLabel>
-                    <FormControl><Input placeholder="Q1 Supplies" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={budgetForm.control} name="category" render={({ field }) => (
-                  <FormItem className="col-span-2">
-                    <FormLabel>Category (optional)</FormLabel>
-                    <FormControl><Input placeholder="Leave blank for all categories" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={budgetForm.control} name="amountAllocated" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Amount*</FormLabel>
-                    <FormControl><Input type="number" step="0.01" placeholder="0.00" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={budgetForm.control} name="periodStart" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Start*</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button variant="outline" className="w-full justify-start">{field.value ? format(field.value, 'PPP') : 'Pick date'}</Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="p-0"><Calendar mode="single" selected={field.value} onSelect={field.onChange} /></PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={budgetForm.control} name="periodEnd" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>End*</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button variant="outline" className="w-full justify-start">{field.value ? format(field.value, 'PPP') : 'Pick date'}</Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="p-0"><Calendar mode="single" selected={field.value} onSelect={field.onChange} /></PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={budgetForm.control} name="notes" render={({ field }) => (
-                  <FormItem className="col-span-2">
-                    <FormLabel>Notes</FormLabel>
-                    <FormControl><textarea className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Optional notes" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
+                <FormField
+                  control={budgetForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2">
+                      <FormLabel>Name*</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Q1 Supplies" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={budgetForm.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2">
+                      <FormLabel>Category (optional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Leave blank for all categories"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={budgetForm.control}
+                  name="amountAllocated"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Amount*</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={budgetForm.control}
+                  name="periodStart"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Start*</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start"
+                            >
+                              {field.value
+                                ? format(field.value, "PPP")
+                                : "Pick date"}
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="p-0">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={budgetForm.control}
+                  name="periodEnd"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>End*</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start"
+                            >
+                              {field.value
+                                ? format(field.value, "PPP")
+                                : "Pick date"}
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="p-0">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={budgetForm.control}
+                  name="notes"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2">
+                      <FormLabel>Notes</FormLabel>
+                      <FormControl>
+                        <textarea
+                          className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          placeholder="Optional notes"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setShowBudgetDialog(false)}>Cancel</Button>
-                <Button type="submit" disabled={createBudgetMutation.isPending}>{createBudgetMutation.isPending ? 'Saving...' : 'Save Budget'}</Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowBudgetDialog(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={createBudgetMutation.isPending}>
+                  {createBudgetMutation.isPending ? "Saving..." : "Save Budget"}
+                </Button>
               </DialogFooter>
             </form>
           </Form>
@@ -1158,6 +1530,32 @@ export default function ExpensesPage() {
                     {(selectedExpense as any).invoiceNumber || "Not specified"}
                   </p>
                 </div>
+                <div>
+                  <h4 className="text-sm font-medium">Payment Frequency</h4>
+                  <p className="mt-1 text-gray-700">
+                    {(selectedExpense as any).isRecurring ? (
+                      <Badge
+                        variant="outline"
+                        className="bg-blue-50 text-blue-700 border-blue-200"
+                      >
+                        {(selectedExpense as any).recurrenceType
+                          ?.charAt(0)
+                          .toUpperCase() +
+                          (selectedExpense as any).recurrenceType
+                            ?.slice(1)
+                            .toLowerCase() || "Recurring"}
+                      </Badge>
+                    ) : (
+                      "One-time expense"
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium">Tax Deductible</h4>
+                  <p className="mt-1 text-gray-700">
+                    {(selectedExpense as any).taxDeductible ? "Yes" : "No"}
+                  </p>
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -1177,6 +1575,83 @@ export default function ExpensesPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Status Update Dialog */}
+      <Dialog
+        open={showUpdateStatusDialog}
+        onOpenChange={setShowUpdateStatusDialog}
+      >
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Update Expense Status</DialogTitle>
+            <DialogDescription>
+              Change the status of "{selectedExpense?.title}"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Current Status</label>
+              <p className="mt-1">
+                <Badge
+                  className={getStatusColor(selectedExpense?.status || "")}
+                >
+                  {selectedExpense?.status
+                    ? selectedExpense.status.charAt(0).toUpperCase() +
+                      selectedExpense.status.slice(1).toLowerCase()
+                    : "No status"}
+                </Badge>
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">New Status</label>
+              <Select value={newStatus} onValueChange={setNewStatus}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select new status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statuses?.map((s: string) => (
+                    <SelectItem key={s} value={s}>
+                      {s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowUpdateStatusDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedExpense && newStatus) {
+                  updateExpenseStatusMutation.mutate({
+                    id: selectedExpense.id,
+                    status: newStatus,
+                  });
+                }
+              }}
+              disabled={
+                !newStatus ||
+                newStatus === selectedExpense?.status ||
+                updateExpenseStatusMutation.isPending
+              }
+            >
+              {updateExpenseStatusMutation.isPending ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                "Update Status"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

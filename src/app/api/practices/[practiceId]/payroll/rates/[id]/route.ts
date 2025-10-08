@@ -22,7 +22,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ pract
       rateType: rateType || existing.rateType,
       rate: rate != null ? rate.toString() : existing.rate,
       effectiveDate: effectiveDate ? new Date(effectiveDate) : existing.effectiveDate,
-      description: description !== undefined ? (description || null) : existing.description
+      description: description !== undefined ? (description || null) : existing.description,
+      updatedAt: new Date()
     }).where(eq(payRates.id, id)).returning();
     return NextResponse.json(updated);
   } catch (e) {

@@ -82,6 +82,9 @@ import {
   Plus,
   Heart,
   Eye,
+  Send,
+  MoreVertical,
+  Search,
 } from "lucide-react";
 
 // Resource card component for health resources
@@ -1315,7 +1318,7 @@ export default function ClientPortalPage() {
       "appointments",
       "health-plans",
       "resources",
-      // "messages",
+      "messages",
       "notifications",
     ];
     if (tab && validTabs.includes(tab)) {
@@ -1479,6 +1482,24 @@ export default function ClientPortalPage() {
     (resource: any) => resource.featured
   );
 
+  // Fetch messages
+  const {
+    data: messages = [],
+    isLoading: isLoadingMessages,
+    error: messagesError,
+  } = useQuery({
+    queryKey: ["/api/messages/client"],
+    queryFn: async () => {
+      const res = await fetch("/api/messages/client");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to fetch messages");
+      }
+      return await res.json();
+    },
+    enabled: user?.role === "CLIENT",
+  });
+
   // Fetch notifications
   // Notifications are now handled by the notification context
   // const {
@@ -1594,7 +1615,7 @@ export default function ClientPortalPage() {
         onValueChange={handleTabChange}
         className="w-full"
       >
-        <TabsList className="grid grid-cols-6 mb-8">
+        <TabsList className="grid grid-cols-7 mb-8">
           <TabsTrigger value="dashboard">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
@@ -1625,12 +1646,12 @@ export default function ClientPortalPage() {
               Resources
             </div>
           </TabsTrigger>
-          {/* <TabsTrigger value="messages">
+          <TabsTrigger value="messages">
             <div className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
               Messages
             </div>
-          </TabsTrigger> */}
+          </TabsTrigger>
           <TabsTrigger value="notifications" className="relative">
             <div className="flex items-center gap-2">
               <Bell className="h-4 w-4" />
@@ -2601,43 +2622,500 @@ export default function ClientPortalPage() {
           )}
         </TabsContent>
 
-        {/* <TabsContent value="messages">
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold">Messages</h2>
-                <p className="text-muted-foreground">
-                  View and respond to messages from your veterinary team
-                </p>
+        <TabsContent value="messages">
+          <div className="h-[700px] flex bg-background border rounded-lg overflow-hidden">
+            {/* Left Sidebar - Chat List */}
+            <div className="w-80 border-r bg-card flex flex-col">
+              {/* Sidebar Header */}
+              <div className="p-4 border-b bg-card">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-lg">Messages</h3>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/client/contact-veterinarian">
+                      <Plus className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search conversations..."
+                    className="pl-10 h-9"
+                  />
+                </div>
               </div>
-              <Button asChild>
-                <Link href="/client/contact-veterinarian">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Message
-                </Link>
-              </Button>
+
+              {/* Chat List */}
+              <div className="flex-1 overflow-y-auto">
+                {isLoadingMessages ? (
+                  <div className="p-2">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="p-3 border-b">
+                        <div className="flex gap-3">
+                          <Skeleton className="h-12 w-12 rounded-full" />
+                          <div className="flex-1 space-y-2">
+                            <div className="flex justify-between">
+                              <Skeleton className="h-4 w-24" />
+                              <Skeleton className="h-3 w-12" />
+                            </div>
+                            <Skeleton className="h-3 w-32" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : messagesError ? (
+                  <div className="p-6 text-center">
+                    <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+                    <p className="text-sm text-red-600">
+                      Failed to load conversations
+                    </p>
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div className="p-6 text-center">
+                    <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground mb-3">
+                      No conversations yet
+                    </p>
+                    <Button asChild size="sm">
+                      <Link href="/client/contact-veterinarian">
+                        Start a conversation
+                      </Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <div>
+                    {/* Group messages by conversation/day */}
+                    {(() => {
+                      // Create a "conversation" for now - in a real app, this would be grouped by actual conversation threads
+                      const latestMessage =
+                        messages.length > 0
+                          ? messages[messages.length - 1]
+                          : null;
+                      const conversations = [
+                        {
+                          id: "vet-team",
+                          name: "Veterinary Team",
+                          avatar: "VT",
+                          lastMessage:
+                            latestMessage?.message || "No messages yet",
+                          lastMessageTime:
+                            latestMessage?.created_at ||
+                            new Date().toISOString(),
+                          unreadCount: messages.filter(
+                            (m: any) =>
+                              !m.read &&
+                              (m.user?.role === "VETERINARIAN" ||
+                                m.user?.role === "STAFF")
+                          ).length,
+                          isActive: true, // For now, always show as active conversation
+                        },
+                      ];
+
+                      return conversations.map((conversation) => (
+                        <div
+                          key={conversation.id}
+                          className={`p-3 border-b cursor-pointer hover:bg-muted/50 transition-colors ${
+                            conversation.isActive
+                              ? "bg-primary/5 border-l-4 border-l-primary"
+                              : ""
+                          }`}
+                        >
+                          <div className="flex gap-3">
+                            <div className="relative">
+                              <Avatar className="h-12 w-12">
+                                <AvatarFallback className="bg-blue-100 text-blue-700 font-semibold">
+                                  {conversation.avatar}
+                                </AvatarFallback>
+                              </Avatar>
+                              {/* Show online indicator only during business hours */}
+                              {(() => {
+                                const now = new Date();
+                                const hour = now.getHours();
+                                const isBusinessHours = hour >= 8 && hour < 18; // 8 AM to 6 PM
+                                const isWeekday =
+                                  now.getDay() >= 1 && now.getDay() <= 5; // Monday to Friday
+                                return isBusinessHours && isWeekday ? (
+                                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
+                                ) : null;
+                              })()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex justify-between items-start mb-1">
+                                <h4 className="font-medium text-sm truncate">
+                                  {conversation.name}
+                                </h4>
+                                <span className="text-xs text-muted-foreground">
+                                  {(() => {
+                                    try {
+                                      const date = new Date(
+                                        conversation.lastMessageTime
+                                      );
+                                      return isNaN(date.getTime())
+                                        ? "Now"
+                                        : format(date, "h:mm A");
+                                    } catch {
+                                      return "Now";
+                                    }
+                                  })()}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <p className="text-xs text-muted-foreground truncate flex-1">
+                                  {conversation.lastMessage}
+                                </p>
+                                {conversation.unreadCount > 0 && (
+                                  <Badge className="ml-2 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                                    {conversation.unreadCount}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
             </div>
 
-            <Card>
-              <CardContent className="py-12 text-center">
-                <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">
-                  Messages Coming Soon
-                </h3>
-                <p className="text-muted-foreground mb-6">
-                  The messaging feature is being enhanced. For now, you can
-                  contact your veterinarian directly.
-                </p>
-                <Button asChild>
-                  <Link href="/client/contact-veterinarian">
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    Contact Veterinarian
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
+            {/* Right Chat Area */}
+            <div className="flex-1 flex flex-col">
+              {messages.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center max-w-md">
+                    <div className="bg-muted/20 rounded-full p-8 w-32 h-32 mx-auto mb-6 flex items-center justify-center">
+                      <MessageSquare className="h-16 w-16 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-xl font-semibold mb-2">
+                      Welcome to Messages
+                    </h3>
+                    <p className="text-muted-foreground mb-6">
+                      Start a conversation with your veterinary team. They're
+                      here to help with any questions or concerns about your
+                      pets.
+                    </p>
+                    <Button asChild>
+                      <Link href="/client/contact-veterinarian">
+                        <MessageSquare className="h-4 w-4 mr-2" />
+                        Start Your First Conversation
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Chat Header */}
+                  <div className="border-b px-6 py-4 bg-card">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarFallback className="bg-blue-100 text-blue-700 font-semibold">
+                            VT
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <h3 className="font-semibold">Veterinary Team</h3>
+                          {(() => {
+                            const now = new Date();
+                            const hour = now.getHours();
+                            const isBusinessHours = hour >= 8 && hour < 18; // 8 AM to 6 PM
+                            const isWeekday =
+                              now.getDay() >= 1 && now.getDay() <= 5; // Monday to Friday
+                            const isOnline = isBusinessHours && isWeekday;
+
+                            return (
+                              <p
+                                className={`text-xs flex items-center gap-1 ${
+                                  isOnline
+                                    ? "text-green-600"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
+                                <div
+                                  className={`w-2 h-2 rounded-full ${
+                                    isOnline ? "bg-green-500" : "bg-gray-400"
+                                  }`}
+                                ></div>
+                                {isOnline
+                                  ? "Online"
+                                  : "Offline • Usually replies within a few hours"}
+                              </p>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm">
+                          <Search className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Messages Area */}
+                  <div className="flex-1 overflow-y-auto p-6 bg-muted/10">
+                    <div className="space-y-4 max-w-4xl mx-auto">
+                      {/* Date Separator */}
+                      <div className="flex items-center justify-center py-2">
+                        <div className="bg-muted px-3 py-1 rounded-full">
+                          <p className="text-xs text-muted-foreground font-medium">
+                            {format(new Date(), "dddd, MMMM D, YYYY")}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Messages */}
+                      {messages.map((message: any, index: number) => {
+                        const isFromVet =
+                          message.user?.role === "VETERINARIAN" ||
+                          message.user?.role === "STAFF";
+                        const showAvatar =
+                          index === 0 ||
+                          messages[index - 1]?.user?.id !== message.user?.id;
+                        const isConsecutive =
+                          index > 0 &&
+                          messages[index - 1]?.user?.id === message.user?.id;
+
+                        return (
+                          <div
+                            key={message.id}
+                            className={`flex gap-3 ${
+                              !isFromVet ? "flex-row-reverse" : ""
+                            } ${isConsecutive ? "mt-1" : "mt-4"}`}
+                          >
+                            {/* Avatar */}
+                            <div className="flex-shrink-0">
+                              {showAvatar ? (
+                                <Avatar className="h-8 w-8">
+                                  <AvatarFallback
+                                    className={
+                                      isFromVet
+                                        ? "bg-blue-100 text-blue-700"
+                                        : "bg-green-100 text-green-700"
+                                    }
+                                  >
+                                    {isFromVet
+                                      ? message.user?.name
+                                          ?.substring(0, 2)
+                                          .toUpperCase() || "VT"
+                                      : "ME"}
+                                  </AvatarFallback>
+                                </Avatar>
+                              ) : (
+                                <div className="w-8" />
+                              )}
+                            </div>
+
+                            {/* Message Content */}
+                            <div
+                              className={`flex-1 max-w-[65%] ${
+                                !isFromVet ? "flex flex-col items-end" : ""
+                              }`}
+                            >
+                              {/* Sender Name & Time - only show for first message in sequence */}
+                              {showAvatar && (
+                                <div
+                                  className={`flex items-center gap-2 mb-1 ${
+                                    !isFromVet ? "flex-row-reverse" : ""
+                                  }`}
+                                >
+                                  <p className="text-xs font-medium text-foreground">
+                                    {isFromVet
+                                      ? message.user?.name || "Veterinary Team"
+                                      : "You"}
+                                  </p>
+                                  {message.user?.role === "VETERINARIAN" && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs py-0 px-1 h-4"
+                                    >
+                                      Doctor
+                                    </Badge>
+                                  )}
+                                  <p className="text-xs text-muted-foreground">
+                                    {(() => {
+                                      try {
+                                        const date = new Date(
+                                          message.created_at
+                                        );
+                                        return isNaN(date.getTime())
+                                          ? "Now"
+                                          : format(date, "h:mm A");
+                                      } catch {
+                                        return "Now";
+                                      }
+                                    })()}
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Message Bubble */}
+                              <div
+                                className={`group relative max-w-full ${
+                                  !isFromVet ? "ml-auto" : ""
+                                }`}
+                              >
+                                <div
+                                  className={`rounded-2xl px-4 py-2 shadow-sm ${
+                                    isFromVet
+                                      ? "bg-white border text-foreground"
+                                      : "bg-blue-500 text-white"
+                                  } ${
+                                    showAvatar
+                                      ? isFromVet
+                                        ? "rounded-tl-md"
+                                        : "rounded-tr-md"
+                                      : ""
+                                  }`}
+                                >
+                                  {message.title &&
+                                    message.title !== message.message && (
+                                      <p className="font-medium text-sm mb-1">
+                                        {message.title}
+                                      </p>
+                                    )}
+                                  <p className="text-sm whitespace-pre-wrap break-words">
+                                    {message.message}
+                                  </p>
+                                </div>
+
+                                {/* Message time on hover */}
+                                {!showAvatar && (
+                                  <div
+                                    className={`absolute top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity ${
+                                      isFromVet ? "-right-16" : "-left-16"
+                                    }`}
+                                  >
+                                    <p className="text-xs text-muted-foreground bg-background px-2 py-1 rounded shadow-sm border">
+                                      {(() => {
+                                        try {
+                                          const date = new Date(
+                                            message.created_at
+                                          );
+                                          return isNaN(date.getTime())
+                                            ? "Now"
+                                            : format(date, "h:mm A");
+                                        } catch {
+                                          return "Now";
+                                        }
+                                      })()}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Related Info */}
+                              {message.relatedType && (
+                                <div
+                                  className={`mt-2 ${
+                                    !isFromVet ? "ml-auto" : ""
+                                  }`}
+                                >
+                                  <div
+                                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/80 text-xs`}
+                                  >
+                                    <span className="text-muted-foreground">
+                                      📎 Related to: {message.relatedType}
+                                    </span>
+                                    {message.link && (
+                                      <Button
+                                        asChild
+                                        variant="link"
+                                        size="sm"
+                                        className="h-auto p-0 text-xs"
+                                      >
+                                        <Link
+                                          href={message.link}
+                                          className="text-primary"
+                                        >
+                                          View
+                                        </Link>
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* New Badge - only show for unread messages from vet team */}
+                              {!message.read && isFromVet && (
+                                <div className="mt-1">
+                                  <Badge
+                                    variant="default"
+                                    className="text-xs h-5"
+                                  >
+                                    New
+                                  </Badge>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Message Input */}
+                  <div className="border-t p-4 bg-card">
+                    <div className="flex items-end gap-3 max-w-4xl mx-auto">
+                      <Button variant="ghost" size="sm" className="mb-2">
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                      <div className="flex-1 relative">
+                        <Textarea
+                          placeholder="Type a message..."
+                          className="min-h-[48px] max-h-32 resize-none pr-12 border-2 focus:border-primary rounded-xl"
+                          rows={1}
+                          style={{
+                            height: "auto",
+                            minHeight: "48px",
+                          }}
+                          onInput={(e) => {
+                            const target = e.target as HTMLTextAreaElement;
+                            target.style.height = "auto";
+                            target.style.height =
+                              Math.min(target.scrollHeight, 128) + "px";
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              // TODO: Send message
+                              toast({
+                                title: "Feature Coming Soon",
+                                description:
+                                  "Direct messaging will be available soon. Use the contact form for now.",
+                              });
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          className="absolute right-2 bottom-2 h-8 w-8 p-0 rounded-full"
+                          onClick={() => {
+                            toast({
+                              title: "Feature Coming Soon",
+                              description:
+                                "Direct messaging will be available soon. Use the contact form for now.",
+                            });
+                          }}
+                        >
+                          <Send className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      Press Enter to send, Shift+Enter for new line
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </TabsContent> */}
+        </TabsContent>
 
         <TabsContent value="resources">
           <div className="space-y-6">

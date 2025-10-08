@@ -77,9 +77,11 @@ const invoiceFormSchema = z.object({
 
 type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
 interface InvoiceItem {
+  itemType?: string;
   description: string;
   quantity: string;
   serviceCode?: string;
+  productId?: string;
   unitPrice: string;
   taxable: boolean;
   discount?: string;
@@ -137,6 +139,17 @@ const NewInvoicePage = () => {
       enabled: !!practiceId,
     });
 
+  // Fetch inventory items (products)
+  const { data: inventoryItems, isLoading: isLoadingInventory } = useQuery({
+    queryKey: ["/api/inventory"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/inventory");
+      if (!res.ok) throw new Error("Failed to fetch inventory");
+      return res.json();
+    },
+    enabled: !!practiceId,
+  });
+
   const [selectedClient, setSelectedClient] = useState<number | null>(null);
   const [pets, setPets] = useState<any[]>([]);
 
@@ -170,9 +183,11 @@ const NewInvoicePage = () => {
       notes: "",
       items: [
         {
+          itemType: "manual",
           description: "",
           quantity: "1",
           serviceCode: "",
+          productId: "",
           unitPrice: "0.00",
           taxable: true,
           discount: "0.00",
@@ -244,13 +259,15 @@ const NewInvoicePage = () => {
 
   const addItem = () => {
     append({
+      itemType: "manual",
       description: "",
       quantity: "1",
       serviceCode: "",
+      productId: "",
       unitPrice: "0.00",
       taxable: true,
       discount: "0.00",
-    });
+    } as any);
   };
   const removeItem = (index: number) => {
     if (fields.length === 1) {
@@ -281,8 +298,28 @@ const NewInvoicePage = () => {
       ...items[index],
       description: code.description,
       unitPrice: code.defaultPrice,
-      taxable: code.taxable,
+      taxable: code.taxable === "yes",
       serviceCode: code.code,
+    } as InvoiceItem;
+    form.setValue("items", items as any);
+  };
+
+  const applyInventoryItem = (index: number, itemId: string) => {
+    const inventoryItem = (inventoryItems as any[])?.find(
+      (item: any) => item.id.toString() === itemId
+    );
+    if (!inventoryItem) return;
+    const items = [
+      ...((form.getValues("items") as InvoiceItem[]) || []),
+    ] as InvoiceItem[];
+    items[index] = {
+      ...items[index],
+      description:
+        inventoryItem.name +
+        (inventoryItem.description ? ` - ${inventoryItem.description}` : ""),
+      unitPrice: inventoryItem.price || "0.00",
+      taxable: true, // Most products are taxable
+      serviceCode: inventoryItem.sku || "",
     } as InvoiceItem;
     form.setValue("items", items as any);
   };
@@ -317,7 +354,10 @@ const NewInvoicePage = () => {
   const { subtotal, taxAmount, total } = calculateTotals();
 
   const isLoading =
-    isLoadingClients || isLoadingTaxRates || isLoadingServiceCodes;
+    isLoadingClients ||
+    isLoadingTaxRates ||
+    isLoadingServiceCodes ||
+    isLoadingInventory;
   const isSaving = createInvoiceMutation.isPending;
 
   if (isLoading) {
@@ -602,10 +642,10 @@ const NewInvoicePage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[300px]">Description</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Service Code</TableHead>
-                    <TableHead>Unit Price</TableHead>
+                    <TableHead className="w-[180px]">Item Type</TableHead>
+                    <TableHead className="w-[250px]">Description</TableHead>
+                    <TableHead>Qty</TableHead>
+                    <TableHead>Price</TableHead>
                     <TableHead>Taxable</TableHead>
                     <TableHead>Discount</TableHead>
                     <TableHead>Total</TableHead>
@@ -613,185 +653,307 @@ const NewInvoicePage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {fields.map((field, index: number) => (
-                    <TableRow key={field.id} className="transition-opacity">
-                      <TableCell>
-                        <FormField
-                          control={form.control}
-                          name={`items.${index}.description`}
-                          render={({ field }) => (
-                            <FormItem className="space-y-0">
-                              <FormControl>
-                                <Input
-                                  placeholder="Item description"
-                                  {...field}
+                  {fields.map((field, index: number) => {
+                    const currentItem = watchedItems[index];
+                    const itemTotal = (
+                      parseFloat(currentItem?.quantity || "0") *
+                        parseFloat(currentItem?.unitPrice || "0") -
+                      parseFloat(currentItem?.discount || "0")
+                    ).toFixed(2);
+
+                    return (
+                      <TableRow key={field.id} className="transition-opacity">
+                        <TableCell>
+                          <FormField
+                            control={form.control}
+                            name={`items.${index}.itemType`}
+                            render={({ field }) => (
+                              <FormItem className="space-y-0">
+                                <Select
+                                  value={field.value || "manual"}
+                                  onValueChange={(value) => {
+                                    field.onChange(value);
+                                    if (value === "manual") {
+                                      // Clear the item when switching to manual
+                                      const items = [
+                                        ...(form.getValues(
+                                          "items"
+                                        ) as InvoiceItem[]),
+                                      ];
+                                      items[index] = {
+                                        ...items[index],
+                                        description: "",
+                                        unitPrice: "0.00",
+                                        serviceCode: "",
+                                        productId: "",
+                                        taxable: true,
+                                      };
+                                      form.setValue("items", items as any);
+                                    }
+                                  }}
                                   disabled={isSaving}
-                                />
-                              </FormControl>
-                            </FormItem>
-                          )}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <FormField
-                          control={form.control}
-                          name={`items.${index}.quantity`}
-                          render={({ field }) => (
-                            <FormItem className="space-y-0">
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  min="0.01"
-                                  step="0.01"
-                                  placeholder="Qty"
-                                  {...field}
-                                  disabled={isSaving}
-                                  className="w-20"
-                                />
-                              </FormControl>
-                            </FormItem>
-                          )}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <FormField
-                          control={form.control}
-                          name={`items.${index}.serviceCode`}
-                          render={({ field }) => (
-                            <FormItem className="space-y-0">
-                              <Select
-                                value={field.value || "none"}
-                                onValueChange={(v) => {
-                                  field.onChange(v === "none" ? "" : v);
-                                  if (v !== "none") applyServiceCode(index, v);
-                                }}
-                                disabled={isSaving}
-                              >
-                                <FormControl>
-                                  <SelectTrigger className="w-36">
-                                    <SelectValue placeholder="Select code" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="none">None</SelectItem>
-                                  {(serviceCodes as any[])?.map((code) => (
-                                    <SelectItem
-                                      key={code.id}
-                                      value={code.id.toString()}
-                                    >
-                                      {code.code} - $
-                                      {parseFloat(code.defaultPrice).toFixed(2)}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Type" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="manual">
+                                      Manual
                                     </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </FormItem>
+                                    <SelectItem value="service">
+                                      Service
+                                    </SelectItem>
+                                    <SelectItem value="product">
+                                      Product
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </FormItem>
+                            )}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {currentItem?.itemType === "service" ? (
+                            <FormField
+                              control={form.control}
+                              name={`items.${index}.serviceCode`}
+                              render={({ field }) => (
+                                <FormItem className="space-y-0">
+                                  <Select
+                                    value={field.value || "none"}
+                                    onValueChange={(v) => {
+                                      field.onChange(v === "none" ? "" : v);
+                                      if (v !== "none")
+                                        applyServiceCode(index, v);
+                                    }}
+                                    disabled={isSaving}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select service" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="none">
+                                        Select service
+                                      </SelectItem>
+                                      {(serviceCodes as any[])?.map((code) => (
+                                        <SelectItem
+                                          key={code.id}
+                                          value={code.id.toString()}
+                                        >
+                                          <div className="flex flex-col text-left">
+                                            <span className="font-medium">
+                                              {code.code}
+                                            </span>
+                                            <span className="text-sm text-muted-foreground">
+                                              {code.description} - $
+                                              {parseFloat(
+                                                code.defaultPrice
+                                              ).toFixed(2)}
+                                            </span>
+                                          </div>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </FormItem>
+                              )}
+                            />
+                          ) : currentItem?.itemType === "product" ? (
+                            <FormField
+                              control={form.control}
+                              name={`items.${index}.productId`}
+                              render={({ field }) => (
+                                <FormItem className="space-y-0">
+                                  <Select
+                                    value={field.value || "none"}
+                                    onValueChange={(v) => {
+                                      field.onChange(v === "none" ? "" : v);
+                                      if (v !== "none")
+                                        applyInventoryItem(index, v);
+                                    }}
+                                    disabled={isSaving}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select product" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="none">
+                                        Select product
+                                      </SelectItem>
+                                      {(inventoryItems as any[])
+                                        ?.filter(
+                                          (item: any) =>
+                                            parseFloat(item.quantity || "0") > 0
+                                        )
+                                        .map((item) => (
+                                          <SelectItem
+                                            key={item.id}
+                                            value={item.id.toString()}
+                                          >
+                                            <div className="flex flex-col text-left">
+                                              <span className="font-medium">
+                                                {item.name}
+                                              </span>
+                                              <span className="text-sm text-muted-foreground">
+                                                {item.sku && `${item.sku} - `}
+                                                Stock: {item.quantity}{" "}
+                                                {item.unit} - $
+                                                {parseFloat(
+                                                  item.price || "0"
+                                                ).toFixed(2)}
+                                              </span>
+                                            </div>
+                                          </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                  </Select>
+                                </FormItem>
+                              )}
+                            />
+                          ) : (
+                            <FormField
+                              control={form.control}
+                              name={`items.${index}.description`}
+                              render={({ field }) => (
+                                <FormItem className="space-y-0">
+                                  <FormControl>
+                                    <Input
+                                      placeholder="Enter description"
+                                      {...field}
+                                      disabled={isSaving}
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
                           )}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <FormField
-                          control={form.control}
-                          name={`items.${index}.unitPrice`}
-                          render={({ field }) => (
-                            <FormItem className="space-y-0">
-                              <FormControl>
-                                <div className="relative">
-                                  <span className="absolute left-3 top-2.5">
-                                    $
-                                  </span>
+                        </TableCell>
+                        <TableCell>
+                          <FormField
+                            control={form.control}
+                            name={`items.${index}.quantity`}
+                            render={({ field }) => (
+                              <FormItem className="space-y-0">
+                                <FormControl>
                                   <Input
                                     type="number"
                                     min="0.01"
                                     step="0.01"
-                                    placeholder="0.00"
+                                    placeholder="1"
                                     {...field}
                                     disabled={isSaving}
-                                    className="pl-7 w-24"
+                                    className="w-20"
                                   />
-                                </div>
-                              </FormControl>
-                            </FormItem>
-                          )}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <FormField
-                          control={form.control}
-                          name={`items.${index}.taxable`}
-                          render={({ field }) => (
-                            <FormItem className="space-y-0">
-                              <FormControl>
-                                <Select
-                                  value={field.value ? "yes" : "no"}
-                                  onValueChange={(v) =>
-                                    field.onChange(v === "yes")
-                                  }
-                                  disabled={isSaving}
-                                >
-                                  <SelectTrigger className="w-20">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="yes">Yes</SelectItem>
-                                    <SelectItem value="no">No</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </FormControl>
-                            </FormItem>
-                          )}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <FormField
-                          control={form.control}
-                          name={`items.${index}.discount`}
-                          render={({ field }) => (
-                            <FormItem className="space-y-0">
-                              <FormControl>
-                                <div className="relative">
-                                  <span className="absolute left-3 top-2.5">
-                                    $
-                                  </span>
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="0.00"
-                                    {...field}
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <FormField
+                            control={form.control}
+                            name={`items.${index}.unitPrice`}
+                            render={({ field }) => (
+                              <FormItem className="space-y-0">
+                                <FormControl>
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-2.5">
+                                      $
+                                    </span>
+                                    <Input
+                                      type="number"
+                                      min="0.01"
+                                      step="0.01"
+                                      placeholder="0.00"
+                                      {...field}
+                                      disabled={isSaving}
+                                      className="pl-7 w-24"
+                                    />
+                                  </div>
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <FormField
+                            control={form.control}
+                            name={`items.${index}.taxable`}
+                            render={({ field }) => (
+                              <FormItem className="space-y-0">
+                                <FormControl>
+                                  <Select
+                                    value={field.value ? "yes" : "no"}
+                                    onValueChange={(v) =>
+                                      field.onChange(v === "yes")
+                                    }
                                     disabled={isSaving}
-                                    className="pl-7 w-24"
-                                  />
-                                </div>
-                              </FormControl>
-                            </FormItem>
+                                  >
+                                    <SelectTrigger className="w-20">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="yes">Yes</SelectItem>
+                                      <SelectItem value="no">No</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <FormField
+                            control={form.control}
+                            name={`items.${index}.discount`}
+                            render={({ field }) => (
+                              <FormItem className="space-y-0">
+                                <FormControl>
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-2.5">
+                                      $
+                                    </span>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      placeholder="0.00"
+                                      {...field}
+                                      disabled={isSaving}
+                                      className="pl-7 w-24"
+                                    />
+                                  </div>
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          ${itemTotal}
+                        </TableCell>
+                        <TableCell>
+                          {fields.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => remove(index)}
+                              disabled={isSaving}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              ×
+                            </Button>
                           )}
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {(() => {
-                          const item = (watchedItems as InvoiceItem[])[index];
-                          const line =
-                            (parseFloat(item?.quantity || "0") || 0) *
-                            (parseFloat(item?.unitPrice || "0") || 0);
-                          const discount =
-                            parseFloat(item?.discount || "0") || 0;
-                          return `$${(line - discount).toFixed(2)}`;
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeItem(index)}
-                          disabled={isSaving}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
               <div className="mt-6 space-y-2 flex flex-col items-end">

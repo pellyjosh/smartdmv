@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth-utils';
+import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-import { invoices, invoiceItems } from '@/db/schema';
+import { invoices, invoiceItems, taxRates } from '@/db/schema';
 import { and, eq, desc, count } from 'drizzle-orm';
 import { ResourceType, StandardAction } from '@/lib/rbac/types';
 import { hasPermission } from '@/lib/rbac-helpers';
@@ -94,7 +94,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const invoiceNumber = `INV-${new Date().getFullYear()}-${String((invoiceCountResult?.count || 0) + 1).padStart(3, '0')}`;
 
     // Calculate totals
-    let subtotal = 0; let taxAmount = 0; const taxRate = 0.08;
+    let subtotal = 0; 
+    let taxAmount = 0; 
+    
+    // Get the default tax rate for the practice
+    const defaultTaxRate = await tenantDb.query.taxRates.findFirst({
+      where: and(
+        eq(taxRates.practiceId, practiceId),
+        eq(taxRates.isDefault, 'yes'),
+        eq(taxRates.active, 'yes')
+      )
+    });
+    
+    const taxRate = defaultTaxRate ? parseFloat(defaultTaxRate.rate) / 100 : 0.08; // Default to 8% if no tax rate configured
+    
     items.forEach((it: any) => { const line = parseFloat(it.subtotal); subtotal += line; if (it.taxable) taxAmount += line * taxRate; });
     const totalAmount = subtotal + taxAmount;
 

@@ -43,12 +43,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    console.log('Contact veterinarian request:', body);
 
     // Validate request data
     const validationResult = contactVeterinarianSchema.safeParse(body);
     if (!validationResult.success) {
-      console.error('Validation error:', validationResult.error.errors);
       return NextResponse.json({ 
         error: 'Invalid request data',
         details: validationResult.error.errors
@@ -93,6 +91,7 @@ export async function POST(request: NextRequest) {
     switch (contactMethod) {
       case "message":
         await handleMessageContact({
+          tenantDb,
           userId: user.id,
           practiceId: user.practiceId!,
           practitionerId,
@@ -105,6 +104,7 @@ export async function POST(request: NextRequest) {
 
       case "video_call":
         const videoCallData = await handleVideoCallRequest({
+          tenantDb,
           userId: user.id,
           practiceId: user.practiceId!,
           practitionerId: practitionerId!,
@@ -118,6 +118,7 @@ export async function POST(request: NextRequest) {
 
       case "phone_call":
         await handlePhoneCallRequest({
+          tenantDb,
           userId: user.id,
           practiceId: user.practiceId!,
           practitionerId,
@@ -134,11 +135,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid contact method' }, { status: 400 });
     }
 
-    console.log('Contact request processed successfully');
     return NextResponse.json(responseData, { status: 201 });
 
   } catch (error) {
-    console.error('Error processing contact request:', error);
     return NextResponse.json({ 
       error: 'Failed to process contact request due to a server error. Please try again later.',
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -148,6 +147,7 @@ export async function POST(request: NextRequest) {
 
 // Handle message contact method
 async function handleMessageContact({
+  tenantDb,
   userId,
   practiceId,
   practitionerId,
@@ -156,6 +156,7 @@ async function handleMessageContact({
   message,
   urgency,
 }: {
+  tenantDb: any;
   userId: string;
   practiceId: string;
   practitionerId?: string | null;
@@ -192,12 +193,11 @@ async function handleMessageContact({
   };
 
   await tenantDb.insert(notifications).values(notificationData);
-  
-  console.log('Message notification created');
 }
 
 // Handle video call request
 async function handleVideoCallRequest({
+  tenantDb,
   userId,
   practiceId,
   practitionerId,
@@ -206,6 +206,7 @@ async function handleVideoCallRequest({
   message,
   urgency,
 }: {
+  tenantDb: any;
   userId: string;
   practiceId: string;
   practitionerId: string;
@@ -266,8 +267,6 @@ async function handleVideoCallRequest({
 
   await tenantDb.insert(notifications).values(notificationData);
 
-  console.log('Video call appointment created:', appointment.id, 'with room:', roomId);
-
   return {
     appointmentId: appointment.id,
     roomId,
@@ -276,6 +275,7 @@ async function handleVideoCallRequest({
 
 // Handle phone call request
 async function handlePhoneCallRequest({
+  tenantDb,
   userId,
   practiceId,
   practitionerId,
@@ -286,6 +286,7 @@ async function handlePhoneCallRequest({
   phoneNumber,
   preferredTime,
 }: {
+  tenantDb: any;
   userId: string;
   practiceId: string;
   practitionerId?: string | null;
@@ -330,7 +331,6 @@ async function handlePhoneCallRequest({
   };
 
   const [contact] = await tenantDb.insert(contacts).values(contactData).returning();
-  console.log('Contact record created:', contact.id);
 
   // Create notification for phone call request
   const notificationData = {
@@ -345,6 +345,4 @@ async function handlePhoneCallRequest({
   };
 
   await tenantDb.insert(notifications).values(notificationData);
-  
-  console.log('Phone call request notification created');
 }

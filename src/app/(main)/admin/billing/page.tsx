@@ -32,7 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { format } from "@/lib/date-utils";
+import { format } from "date-fns";
 
 interface Invoice {
   id: number;
@@ -62,6 +62,37 @@ interface Client {
   id: number;
   name: string;
   email: string;
+}
+
+interface Payment {
+  id: number;
+  paymentNumber: string;
+  amount: string;
+  paymentMethod: string;
+  status: string;
+  paymentDate: string;
+  notes?: string;
+  invoice?: {
+    invoiceNumber: string;
+    description: string;
+    client?: {
+      name: string;
+    };
+    pet?: {
+      name: string;
+    };
+  };
+}
+
+interface TaxRate {
+  id: number;
+  name: string;
+  rate: string;
+  type: "percentage" | "fixed";
+  isDefault: "yes" | "no";
+  active: "yes" | "no";
+  createdAt: string;
+  updatedAt: string;
 }
 
 const InvoiceStatusBadge = ({ status }: { status: string }) => {
@@ -152,11 +183,55 @@ const BillingPage = () => {
       staleTime: 60_000,
     });
 
+  // Fetch payments for payment history tab
+  const { data: payments = [], isLoading: isLoadingPayments } = useQuery<
+    Payment[]
+  >({
+    queryKey: ["/api/practices", practiceId, "payments"],
+    queryFn: async () => {
+      if (!practiceId) return [];
+      const res = await fetch(`/api/practices/${practiceId}/payments`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch payments");
+      return res.json();
+    },
+    enabled: !!practiceId,
+  });
+
+  // Fetch tax rates
+  const {
+    data: taxRates = [],
+    isLoading: isLoadingTaxRates,
+    refetch: refetchTaxRates,
+  } = useQuery<TaxRate[]>({
+    queryKey: ["/api/practices", practiceId, "tax-rates"],
+    queryFn: async () => {
+      if (!practiceId) return [];
+      const res = await fetch(`/api/practices/${practiceId}/tax-rates`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch tax rates");
+      return res.json();
+    },
+    enabled: !!practiceId,
+  });
+
   // Search and filter state
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [clientFilter, setClientFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>("all");
+
+  // Tax rate form state
+  const [showTaxRateForm, setShowTaxRateForm] = useState(false);
+  const [taxRateForm, setTaxRateForm] = useState({
+    name: "",
+    rate: "",
+    type: "percentage" as "percentage" | "fixed",
+    isDefault: false,
+  });
+  const [isCreatingTaxRate, setIsCreatingTaxRate] = useState(false);
 
   // Navigate helpers
   const handleNewInvoice = () => {
@@ -167,6 +242,83 @@ const BillingPage = () => {
   const handleViewInvoice = (invoiceId: number) => {
     // Future: implement dedicated invoice view page; temporary route placeholder
     router.push(`/admin/billing/invoice/${invoiceId}`);
+  };
+
+  // Tax rate handlers
+  const handleCreateTaxRate = async () => {
+    if (!practiceId || !taxRateForm.name || !taxRateForm.rate) return;
+
+    setIsCreatingTaxRate(true);
+    try {
+      const res = await fetch(`/api/practices/${practiceId}/tax-rates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: taxRateForm.name,
+          rate: parseFloat(taxRateForm.rate),
+          type: taxRateForm.type,
+          isDefault: taxRateForm.isDefault,
+        }),
+      });
+
+      if (res.ok) {
+        setShowTaxRateForm(false);
+        setTaxRateForm({
+          name: "",
+          rate: "",
+          type: "percentage",
+          isDefault: false,
+        });
+        refetchTaxRates();
+      }
+    } catch (error) {
+      console.error("Error creating tax rate:", error);
+    } finally {
+      setIsCreatingTaxRate(false);
+    }
+  };
+
+  const handleSetDefaultTaxRate = async (taxRateId: number) => {
+    if (!practiceId) return;
+
+    try {
+      const res = await fetch(
+        `/api/practices/${practiceId}/tax-rates/${taxRateId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ isDefault: true }),
+        }
+      );
+
+      if (res.ok) {
+        refetchTaxRates();
+      }
+    } catch (error) {
+      console.error("Error setting default tax rate:", error);
+    }
+  };
+
+  const handleDeleteTaxRate = async (taxRateId: number) => {
+    if (!practiceId) return;
+
+    try {
+      const res = await fetch(
+        `/api/practices/${practiceId}/tax-rates/${taxRateId}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        }
+      );
+
+      if (res.ok) {
+        refetchTaxRates();
+      }
+    } catch (error) {
+      console.error("Error deleting tax rate:", error);
+    }
   };
 
   const filteredInvoices = invoices.filter((invoice) => {
@@ -389,10 +541,12 @@ const BillingPage = () => {
                           {invoice.invoiceNumber}
                         </TableCell>
                         <TableCell>
-                          {format(new Date(invoice.date), "MMM D, YYYY")}
+                          {invoice.date
+                            ? format(new Date(invoice.date), "MMM d, yyyy")
+                            : "N/A"}
                         </TableCell>
-                        <TableCell>{invoice.clientName}</TableCell>
-                        <TableCell>{invoice.petName}</TableCell>
+                        <TableCell>{invoice.clientName || "N/A"}</TableCell>
+                        <TableCell>{invoice.petName || "N/A"}</TableCell>
                         <TableCell>
                           ${parseFloat(invoice.total).toFixed(2)}
                         </TableCell>
@@ -472,27 +626,309 @@ const BillingPage = () => {
               <CardDescription>View all payment transactions</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-center py-10 text-muted-foreground">
-                This feature will be implemented soon. The API endpoints are
-                ready!
-              </p>
+              {isLoadingPayments ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center space-x-4">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-4 w-20" />
+                    </div>
+                  ))}
+                </div>
+              ) : payments.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Payment #</TableHead>
+                      <TableHead>Invoice</TableHead>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Pet</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Method</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {payments.map((payment) => (
+                      <TableRow key={payment.id}>
+                        <TableCell className="font-medium">
+                          {payment.paymentNumber}
+                        </TableCell>
+                        <TableCell>
+                          {payment.invoice?.invoiceNumber || "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          {payment.invoice?.client?.name || "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          {payment.invoice?.pet?.name || "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          ${parseFloat(payment.amount).toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          {payment.paymentMethod
+                            .replace("_", " ")
+                            .replace(/\b\w/g, (l) => l.toUpperCase())}
+                        </TableCell>
+                        <TableCell>
+                          {payment.paymentDate
+                            ? format(
+                                new Date(payment.paymentDate),
+                                "MMM d, yyyy"
+                              )
+                            : "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              payment.status === "completed"
+                                ? "default"
+                                : "secondary"
+                            }
+                            className={
+                              payment.status === "completed"
+                                ? "bg-green-100 text-green-800"
+                                : ""
+                            }
+                          >
+                            {payment.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-10 text-muted-foreground">
+                  <CreditCard className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No payments found</p>
+                  <p className="text-sm">
+                    Payments will appear here once clients make payments
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="taxes" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Tax Rates</CardTitle>
-              <CardDescription>
-                Configure tax rates for different services
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Tax Rates</CardTitle>
+                <CardDescription>
+                  Configure general tax rate for all products and services
+                </CardDescription>
+              </div>
+              <Button
+                onClick={() => setShowTaxRateForm(true)}
+                className="gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Add Tax Rate
+              </Button>
             </CardHeader>
             <CardContent>
-              <p className="text-center py-10 text-muted-foreground">
-                This feature will be implemented soon. The API endpoints are
-                ready!
-              </p>
+              {showTaxRateForm && (
+                <Card className="mb-6">
+                  <CardHeader>
+                    <CardTitle className="text-lg">
+                      Create New Tax Rate
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">
+                          Name
+                        </label>
+                        <Input
+                          placeholder="e.g., General Sales Tax"
+                          value={taxRateForm.name}
+                          onChange={(e) =>
+                            setTaxRateForm((prev) => ({
+                              ...prev,
+                              name: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">
+                          Rate
+                        </label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="8.25"
+                            value={taxRateForm.rate}
+                            onChange={(e) =>
+                              setTaxRateForm((prev) => ({
+                                ...prev,
+                                rate: e.target.value,
+                              }))
+                            }
+                          />
+                          <Select
+                            value={taxRateForm.type}
+                            onValueChange={(value: "percentage" | "fixed") =>
+                              setTaxRateForm((prev) => ({
+                                ...prev,
+                                type: value,
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="percentage">%</SelectItem>
+                              <SelectItem value="fixed">$</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="isDefault"
+                        checked={taxRateForm.isDefault}
+                        onChange={(e) =>
+                          setTaxRateForm((prev) => ({
+                            ...prev,
+                            isDefault: e.target.checked,
+                          }))
+                        }
+                        className="rounded border-gray-300"
+                      />
+                      <label htmlFor="isDefault" className="text-sm">
+                        Set as default tax rate
+                      </label>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleCreateTaxRate}
+                        disabled={
+                          isCreatingTaxRate ||
+                          !taxRateForm.name ||
+                          !taxRateForm.rate
+                        }
+                      >
+                        {isCreatingTaxRate ? "Creating..." : "Create Tax Rate"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowTaxRateForm(false);
+                          setTaxRateForm({
+                            name: "",
+                            rate: "",
+                            type: "percentage",
+                            isDefault: false,
+                          });
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {isLoadingTaxRates ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center space-x-4">
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-4 w-16" />
+                    </div>
+                  ))}
+                </div>
+              ) : taxRates.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Rate</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Default</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {taxRates.map((taxRate) => (
+                      <TableRow key={taxRate.id}>
+                        <TableCell className="font-medium">
+                          {taxRate.name}
+                        </TableCell>
+                        <TableCell>
+                          {taxRate.rate}
+                          {taxRate.type === "percentage" ? "%" : ""}
+                        </TableCell>
+                        <TableCell>
+                          {taxRate.type === "percentage"
+                            ? "Percentage"
+                            : "Fixed Amount"}
+                        </TableCell>
+                        <TableCell>
+                          {taxRate.isDefault === "yes" ? (
+                            <Badge className="bg-blue-100 text-blue-800">
+                              Default
+                            </Badge>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                handleSetDefaultTaxRate(taxRate.id)
+                              }
+                            >
+                              Set Default
+                            </Button>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              taxRate.active === "yes" ? "default" : "secondary"
+                            }
+                          >
+                            {taxRate.active === "yes" ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteTaxRate(taxRate.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            Delete
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-10 text-muted-foreground">
+                  <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No tax rates configured</p>
+                  <p className="text-sm">
+                    Create a tax rate to apply to products and services
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

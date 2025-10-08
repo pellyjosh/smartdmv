@@ -83,11 +83,17 @@ import {
   invoiceItems,
   payments,
   paymentMethods,
+  serviceCodes,
   invoicesRelations,
   invoiceItemsRelations,
   paymentsRelations,
-  paymentMethodsRelations
+  paymentMethodsRelations,
+  serviceCodesRelations
 } from './schemas/billingSchema';
+import {
+  taxRates,
+  taxRatesRelations
+} from './schemas/taxRatesSchema';
 import {
   expenses,
   expenseAttachments,
@@ -104,7 +110,33 @@ import {
   payRates,
   payRatesRelations,
   workHours,
-  workHoursRelations
+  workHoursRelations,
+  deductionTypes,
+  deductionTypesRelations,
+  employeeDeductions,
+  employeeDeductionsRelations,
+  payrollDeductions,
+  payrollDeductionsRelations,
+  payrollTaxRates,
+  payrollTaxRatesRelations,
+  payCategories,
+  payCategoriesRelations,
+  workHoursEnhanced,
+  workHoursEnhancedRelations,
+  approvalWorkflows,
+  approvalWorkflowsRelations,
+  approvalWorkflowSteps,
+  approvalWorkflowStepsRelations,
+  approvalInstances,
+  approvalInstancesRelations,
+  approvalStepInstances,
+  approvalStepInstancesRelations,
+  approvalHistory,
+  approvalHistoryRelations,
+  managerAssignments,
+  managerAssignmentsRelations,
+  approvalNotifications,
+  approvalNotificationsRelations
 } from './schemas/financeSchema';
 import {
   healthResources,
@@ -219,6 +251,11 @@ export const schema = {
   paymentsRelations,
   paymentMethods,
   paymentMethodsRelations,
+  serviceCodes,
+  serviceCodesRelations,
+  // Tax Rates tables
+  taxRates,
+  taxRatesRelations,
   // Finance tables
   expenses,
   expensesRelations,
@@ -236,6 +273,32 @@ export const schema = {
   payRatesRelations,
   workHours,
   workHoursRelations,
+  deductionTypes,
+  deductionTypesRelations,
+  employeeDeductions,
+  employeeDeductionsRelations,
+  payrollDeductions,
+  payrollDeductionsRelations,
+  payrollTaxRates,
+  payrollTaxRatesRelations,
+  payCategories,
+  payCategoriesRelations,
+  workHoursEnhanced,
+  workHoursEnhancedRelations,
+  approvalWorkflows,
+  approvalWorkflowsRelations,
+  approvalWorkflowSteps,
+  approvalWorkflowStepsRelations,
+  approvalInstances,
+  approvalInstancesRelations,
+  approvalStepInstances,
+  approvalStepInstancesRelations,
+  approvalHistory,
+  approvalHistoryRelations,
+  managerAssignments,
+  managerAssignmentsRelations,
+  approvalNotifications,
+  approvalNotificationsRelations,
   // Health Resources tables
   healthResources,
   healthResourcesRelations,
@@ -284,6 +347,7 @@ export * from './schemas/permissionOverridesSchema';
 export * from './schemas/rolesSchema';
 export * from './schemas/userRolesSchema';
 export * from './schemas/billingSchema';
+export * from './schemas/taxRatesSchema';
 export * from './schemas/financeSchema';
 export * from './schemas/healthResourcesSchema';
 

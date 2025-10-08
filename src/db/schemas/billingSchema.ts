@@ -197,6 +197,7 @@ export const paymentMethodsRelations = relations(paymentMethods, ({ one }) => ({
 }));
 
 // Zod schemas for validation
+export const createServiceCodeSchema = createInsertSchema(serviceCodes);
 export const createInvoiceSchema = createInsertSchema(invoices);
 export const createInvoiceItemSchema = createInsertSchema(invoiceItems);
 export const createPaymentSchema = createInsertSchema(payments);

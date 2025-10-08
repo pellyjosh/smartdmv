@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-import { invoices, invoiceItems, payments } from '@/db/schema';
+import { invoices, invoiceItems, payments, taxRates } from '@/db/schema';
 import { hasPermission } from '@/lib/rbac-helpers';
 import { createAuditLog } from '@/lib/audit-logger';
 import { ResourceType, StandardAction } from '@/lib/rbac/types';
@@ -116,7 +116,17 @@ export async function POST(request: NextRequest) {
     // Calculate totals
     let subtotal = 0;
     let taxAmount = 0;
-    const taxRate = 0.08; // 8% tax rate - should be configurable per practice
+    
+    // Get the default tax rate for the practice
+    const defaultTaxRate = await tenantDb.query.taxRates.findFirst({
+      where: and(
+        eq(taxRates.practiceId, user.practiceId!),
+        eq(taxRates.isDefault, 'yes'),
+        eq(taxRates.active, 'yes')
+      )
+    });
+    
+    const taxRate = defaultTaxRate ? parseFloat(defaultTaxRate.rate) / 100 : 0.08; // Default to 8% if no tax rate configured
 
     itemsData.forEach((item: any) => {
       const itemSubtotal = (item.quantity * item.unitPrice) - item.discountAmount;
