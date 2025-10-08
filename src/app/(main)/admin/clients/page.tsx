@@ -85,6 +85,8 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { useCustomFields } from "@/hooks/use-custom-fields";
+import { useTenantInfo } from "@/hooks/use-tenant-info";
+import { getPetImageUrlClient } from "@/lib/tenant-file-utils";
 import { apiRequest } from "@/lib/queryClient";
 
 // Predefined lists for dropdowns
@@ -310,6 +312,7 @@ export default function ClientsPage() {
     useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, userPracticeId } = useUser();
+  const tenantInfo = useTenantInfo();
   const { toast } = useToast();
 
   // Use the custom fields hook to access field values from the database
@@ -1922,9 +1925,13 @@ export default function ClientsPage() {
                                       {pet.photoPath ? (
                                         <AvatarImage
                                           src={
-                                            pet.photoPath.startsWith("/")
-                                              ? pet.photoPath
-                                              : `/${pet.photoPath}`
+                                            getPetImageUrlClient(
+                                              pet.photoPath,
+                                              tenantInfo?.tenantId || "default",
+                                              userPracticeId || "unknown",
+                                              selectedClient?.id?.toString() ||
+                                                "unknown"
+                                            ) || ""
                                           }
                                           alt={pet.name}
                                         />
@@ -2162,9 +2169,13 @@ export default function ClientsPage() {
                                     {pet.photoPath ? (
                                       <AvatarImage
                                         src={
-                                          pet.photoPath.startsWith("/")
-                                            ? pet.photoPath
-                                            : `/${pet.photoPath}`
+                                          getPetImageUrlClient(
+                                            pet.photoPath,
+                                            tenantInfo?.tenantId || "default",
+                                            userPracticeId || "unknown",
+                                            selectedClient?.id?.toString() ||
+                                              "unknown"
+                                          ) || ""
                                         }
                                         alt={pet.name}
                                       />
@@ -2958,6 +2969,8 @@ interface ClientAppointmentsListProps {
 
 function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
   const { toast } = useToast();
+  const { user, userPracticeId } = useUser();
+  const tenantInfo = useTenantInfo();
   const queryClient = useQueryClient();
 
   const {
@@ -3138,9 +3151,14 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
                           {appointment.pet.photoPath ? (
                             <AvatarImage
                               src={
-                                appointment.pet.photoPath.startsWith("/")
-                                  ? appointment.pet.photoPath
-                                  : `/${appointment.pet.photoPath}`
+                                getPetImageUrlClient(
+                                  appointment.pet.photoPath,
+                                  tenantInfo?.tenantId || "default",
+                                  userPracticeId || "unknown",
+                                  appointment.clientId?.toString() ||
+                                    appointment.pet.clientId?.toString() ||
+                                    "unknown"
+                                ) || ""
                               }
                               alt={appointment.pet.name}
                             />

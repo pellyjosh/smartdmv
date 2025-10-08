@@ -80,17 +80,48 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
       const latest = [...rateRows].reverse().find((r: any) => r.effectiveDate <= period.endDate);
       if (!latest) continue;
 
-      // Calculate gross pay
+      // Calculate gross pay based on actual pay period duration
       let grossPay = 0;
+      const rate = parseFloat(latest.rate as unknown as string);
+      
+      // Calculate the actual duration of this pay period
+      const periodStart = new Date(period.startDate);
+      const periodEnd = new Date(period.endDate);
+      const periodDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const periodWeeks = periodDays / 7;
+      const periodMonths = periodDays / 30.44; // Average days per month
+      
+      console.log(`Payroll calculation for employee ${empData.userId}:`, {
+        rateType: latest.rateType,
+        rate,
+        periodStart: periodStart.toISOString().split('T')[0],
+        periodEnd: periodEnd.toISOString().split('T')[0],
+        periodDays,
+        periodWeeks,
+        periodMonths
+      });
+      
       if (latest.rateType === 'hourly') {
-        const hourlyRate = parseFloat(latest.rate as unknown as string);
-        grossPay = (empData.regularHours * hourlyRate) + (empData.overtimeHours * hourlyRate * 1.5);
+        grossPay = (empData.regularHours * rate) + (empData.overtimeHours * rate * 1.5);
+      } else if (latest.rateType === 'daily') {
+        // Calculate based on working days in the period (assuming 5 days per week)
+        const workingDays = Math.floor(periodWeeks * 5);
+        grossPay = rate * workingDays;
+      } else if (latest.rateType === 'weekly') {
+        // Calculate based on actual weeks in the period
+        grossPay = rate * periodWeeks;
+      } else if (latest.rateType === 'monthly') {
+        // Calculate based on actual months in the period
+        grossPay = rate * periodMonths;
+      } else if (latest.rateType === 'yearly') {
+        // Calculate based on actual days in the period
+        grossPay = (rate / 365) * periodDays;
       } else {
-        // Salary calculation (simplified)
-        const annualSalary = parseFloat(latest.rate as unknown as string);
-        const periodsPerYear = 26; // Bi-weekly assumption
-        grossPay = annualSalary / periodsPerYear;
+        // Default fallback - treat as yearly
+        grossPay = (rate / 365) * periodDays;
       }
+      
+      console.log(`Calculated gross pay: ${grossPay}`);
 
       // Calculate deductions
       const deductionsResult = await calculateDeductions(tenantDb, practiceId, empData.userId, grossPay, period.startDate);

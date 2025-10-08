@@ -5,7 +5,9 @@
  * when they are past their scheduled time and haven't been marked as completed.
  */
 
-import { getCurrentTenantDb } from '../lib/tenant-db-resolver';
+import { ownerDb } from '../db/owner-db.config';
+import { tenants } from '../db/owner-schema';
+import { getTenantDb, TenantConnectionConfig } from '../db/tenant-db';
 import { appointments } from '../db/schemas/appointmentsSchema';
 import { eq, and, lt, inArray } from 'drizzle-orm';
 import NotificationService from '../lib/notifications/notification-service';
@@ -14,72 +16,103 @@ export class AppointmentAutomation {
   private lastRunTime: Date = new Date();
 
   /**
+   * Get tenant database by tenant info (for background processes)
+   */
+  private async getTenantDbByInfo(tenant: any) {
+    // Create tenant config
+    const tenantConfig: TenantConnectionConfig = {
+      tenantId: tenant.subdomain,
+      databaseName: tenant.databaseName,
+      host: tenant.databaseHost,
+      port: tenant.databasePort,
+      username: tenant.databaseUser,
+      password: tenant.databasePassword,
+    };
+
+    const tenantConnection = await getTenantDb(tenantConfig);
+    return tenantConnection.db;
+  }
+
+  /**
    * Check for missed appointments and update them to no_show status
    * This runs periodically via the websocket server cleanup interval
    */
   async processOverdueAppointments(): Promise<void> {
     try {
-      // Get the tenant-specific database
-      const db = await getCurrentTenantDb();
-      
-      console.log('🔍 Checking for overdue appointments...');
+      // Get all tenants from owner database
+      const allTenants = await ownerDb.select().from(tenants);
+      console.log(`🔍 Checking for overdue appointments across ${allTenants.length} tenants...`);
       
       const currentTime = new Date();
       const gracePeriodMinutes = 15; // Allow 15 minutes grace period after scheduled time
       const cutoffTime = new Date(currentTime.getTime() - (gracePeriodMinutes * 60 * 1000));
 
-      // Find appointments that are past their scheduled time and still in 'scheduled' or 'approved' status
-      const overdueAppointments = await db
-        .select({
-          id: appointments.id,
-          title: appointments.title,
-          date: appointments.date,
-          status: appointments.status,
-          practiceId: appointments.practiceId,
-          clientId: appointments.clientId,
-          practitionerId: appointments.practitionerId,
-          petId: appointments.petId,
-        })
-        .from(appointments)
-        .where(
-          and(
-            lt(appointments.date, cutoffTime),
-            inArray(appointments.status, ['scheduled', 'approved'])
-          )
-        );
-
-      if (overdueAppointments.length === 0) {
-        console.log('✅ No overdue appointments found');
-        return;
-      }
-
-      console.log(`🚨 Found ${overdueAppointments.length} overdue appointments to mark as no-show`);
-
-      // Update each overdue appointment
-      for (const appointment of overdueAppointments) {
+      for (const tenant of allTenants) {
         try {
-          // Update appointment status to no_show
-          await db
-            .update(appointments)
-            .set({
-              status: 'no_show',
-              notes: `Automatically marked as no-show on ${currentTime.toISOString()} - appointment time passed without attendance (${gracePeriodMinutes} minute grace period)`,
-              updatedAt: currentTime
+          // Get tenant-specific database
+          const db = await this.getTenantDbByInfo(tenant);
+          
+          console.log(`🔍 Processing overdue appointments for tenant: ${tenant.subdomain}...`);
+
+          // Find appointments that are past their scheduled time and still in 'scheduled' or 'approved' status
+          const overdueAppointments = await db
+            .select({
+              id: appointments.id,
+              title: appointments.title,
+              date: appointments.date,
+              status: appointments.status,
+              practiceId: appointments.practiceId,
+              clientId: appointments.clientId,
+              practitionerId: appointments.practitionerId,
+              petId: appointments.petId,
             })
-            .where(eq(appointments.id, appointment.id));
+            .from(appointments)
+            .where(
+              and(
+                lt(appointments.date, cutoffTime),
+                inArray(appointments.status, ['scheduled', 'approved'])
+              )
+            );
 
-          console.log(`📝 Updated appointment ${appointment.id} to no-show status`);
+          if (overdueAppointments.length === 0) {
+            console.log(`✅ No overdue appointments found for tenant ${tenant.subdomain}`);
+            continue;
+          }
 
-          // Send notifications to relevant parties
-          await this.sendNoShowNotifications(appointment);
+          console.log(`🚨 Found ${overdueAppointments.length} overdue appointments to mark as no-show for tenant ${tenant.subdomain}`);
 
-        } catch (error) {
-          console.error(`❌ Failed to update appointment ${appointment.id}:`, error);
+          // Update each overdue appointment
+          for (const appointment of overdueAppointments) {
+            try {
+              // Update appointment status to no_show
+              await db
+                .update(appointments)
+                .set({
+                  status: 'no_show',
+                  notes: `Automatically marked as no-show on ${currentTime.toISOString()} - appointment time passed without attendance (${gracePeriodMinutes} minute grace period)`,
+                  updatedAt: currentTime
+                })
+                .where(eq(appointments.id, appointment.id));
+
+              console.log(`📝 Updated appointment ${appointment.id} to no-show status for tenant ${tenant.subdomain}`);
+
+              // Send notifications to relevant parties
+              await this.sendNoShowNotifications(appointment, db);
+
+            } catch (error) {
+              console.error(`❌ Failed to update appointment ${appointment.id} for tenant ${tenant.subdomain}:`, error);
+            }
+          }
+
+          console.log(`✅ Processed ${overdueAppointments.length} overdue appointments for tenant ${tenant.subdomain}`);
+        } catch (tenantError) {
+          console.error(`❌ Error processing tenant ${tenant.subdomain}:`, tenantError);
+          // Continue processing other tenants even if one fails
         }
       }
 
       this.lastRunTime = currentTime;
-      console.log(`✅ Processed ${overdueAppointments.length} overdue appointments`);
+      console.log('✅ Completed overdue appointment processing for all tenants');
 
     } catch (error) {
       console.error('❌ Error in appointment automation:', error);
@@ -89,11 +122,8 @@ export class AppointmentAutomation {
   /**
    * Send notifications for no-show appointments
    */
-  private async sendNoShowNotifications(appointment: any): Promise<void> {
+  private async sendNoShowNotifications(appointment: any, db: any): Promise<void> {
     try {
-      // Get the tenant-specific database
-      const db = await getCurrentTenantDb();
-      
       console.log(`📧 Sending no-show notifications for appointment ${appointment.id}`);
       
       // Get appointment details first

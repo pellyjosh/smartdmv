@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Test Pet Photo Upload</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+
+        .form-group {
+            margin: 20px 0;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input,
+        select {
+            padding: 8px;
+            width: 300px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+
+        .error {
+            background: #ffe6e6;
+            border-color: #ff0000;
+        }
+
+        .success {
+            background: #e6ffe6;
+            border-color: #00aa00;
+        }
+
+        .preview {
+            max-width: 200px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Test Pet Photo Upload</h1>
+    <form id="uploadForm">
+        <div class="form-group">
+            <label for="petId">Pet ID:</label>
+            <input type="number" id="petId" value="2" required>
+        </div>
+
+        <div class="form-group">
+            <label for="clientId">Client ID:</label>
+            <input type="number" id="clientId" value="2" required>
+        </div>
+
+        <div class="form-group">
+            <label for="photoFile">Photo File:</label>
+            <input type="file" id="photoFile" accept="image/*" required>
+        </div>
+
+        <div class="form-group">
+            <button type="submit">Upload Photo</button>
+        </div>
+    </form>
+
+    <div id="preview"></div>
+    <div id="result"></div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const photoFile = document.getElementById('photoFile');
+        const preview = document.getElementById('preview');
+        const result = document.getElementById('result');
+
+        // Preview selected image
+        photoFile.addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    preview.innerHTML = `<img src="${e.target.result}" class="preview" alt="Preview">`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const petId = document.getElementById('petId').value;
+            const clientId = document.getElementById('clientId').value;
+            const file = photoFile.files[0];
+
+            if (!file) {
+                result.innerHTML = '<div class="result error">Please select a file</div>';
+                return;
+            }
+
+            result.innerHTML = '<div class="result">Uploading...</div>';
+
+            try {
+                const formData = new FormData();
+                formData.append('photo', file);
+                formData.append('petId', petId);
+                formData.append('clientId', clientId);
+
+                const response = await fetch('http://smartvett.localhost:3000/api/pets/upload-photo', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    result.innerHTML = `
+                        <div class="result success">
+                            <h3>Upload Successful!</h3>
+                            <p><strong>File Path:</strong> ${data.filePath}</p>
+                            <p><strong>Photo URL:</strong> ${data.photoUrl}</p>
+                            <p><strong>Size:</strong> ${(file.size / 1024).toFixed(2)} KB</p>
+                            <img src="${data.photoUrl}" class="preview" alt="Uploaded photo">
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `
+                        <div class="result error">
+                            <h3>Upload Failed</h3>
+                            <p><strong>Error:</strong> ${data.error || 'Unknown error'}</p>
+                            <p><strong>Status:</strong> ${response.status}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                result.innerHTML = `
+                    <div class="result error">
+                        <h3>Upload Error</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { mkdir, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
+import { getTenantContext } from '@/lib/tenant-context';
 
 // Force Node.js runtime for file system operations
 export const runtime = 'nodejs';
@@ -100,9 +101,25 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Simple directory structure without tenant complexity for now
-    const uploadDir = path.join(process.cwd(), "public", "uploads", practiceId, "pets", clientId);
-    console.log("Upload directory:", uploadDir);
+    // Get tenant context for proper file storage
+    const tenantContext = await getTenantContext();
+    console.log("Tenant context:", { tenantId: tenantContext.tenantId, storagePath: tenantContext.storagePath });
+
+    // Map tenant ID to proper display name for public uploads structure
+    const getTenantDisplayName = (tenantId: string): string => {
+      const tenantMapping: Record<string, string> = {
+        'smartvett': 'Smart Vett',
+        'smartvet': 'Smart Vett', 
+        'default': 'Default',
+      };
+      return tenantMapping[tenantId.toLowerCase()] || tenantId;
+    };
+
+    const tenantDisplayName = getTenantDisplayName(tenantContext.tenantId);
+    
+    // Use existing public uploads structure: /public/uploads/{tenantName}/{practiceId}/pets/{clientId}/
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads', tenantDisplayName, practiceId, 'pets', clientId);
+    console.log("Upload directory (public structure):", uploadDir);
     
     // Create directory if it doesn't exist
     if (!existsSync(uploadDir)) {
@@ -153,9 +170,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to save file", details: String(writeError) }, { status: 500 });
     }
 
-    // Return relative path from public/
-    const relativePath = `/uploads/${practiceId}/pets/${clientId}/${filename}`;
-    console.log("Returning relative path:", relativePath);
+    // Return public uploads path that matches existing structure
+    const relativePath = `/uploads/${tenantDisplayName}/${practiceId}/pets/${clientId}/${filename}`;
+    console.log("Returning public uploads path:", relativePath);
     console.log("=== Pet Photo Upload Completed Successfully ===");
     
     return NextResponse.json({ photoPath: relativePath }, { status: 201 });
