@@ -13,6 +13,17 @@ export async function POST(request: NextRequest) {
     console.log("Content-Type:", request.headers.get('content-type'));
     console.log("Content-Length:", request.headers.get('content-length'));
     
+    // Helper function to check if value is file-like (server-compatible)
+    const isFilelike = (value: any): boolean => {
+      return value && 
+             typeof value === 'object' && 
+             value !== null &&
+             typeof value.name === 'string' &&
+             typeof value.size === 'number' &&
+             typeof value.type === 'string' &&
+             typeof value.arrayBuffer === 'function';
+    };
+    
     // Simple approach - try to parse formdata directly
     let formData: FormData;
     try {
@@ -20,15 +31,16 @@ export async function POST(request: NextRequest) {
       formData = await request.formData();
       console.log("FormData parsed successfully!");
       
-      // Log all entries
+      // Log all entries with server-compatible checking
       const entries = Array.from(formData.entries());
       console.log("Total FormData entries:", entries.length);
       
       for (const [key, value] of entries) {
-        if (value && typeof value === 'object' && 'name' in value && 'size' in value && 'type' in value) {
-          console.log(`Field '${key}': File - name: ${(value as any).name}, size: ${(value as any).size}, type: ${(value as any).type}`);
+        if (isFilelike(value)) {
+          const fileObj = value as any;
+          console.log(`Field '${key}': File - name: ${fileObj.name}, size: ${fileObj.size}, type: ${fileObj.type}`);
         } else {
-          console.log(`Field '${key}': ${value}`);
+          console.log(`Field '${key}': ${String(value)}`);
         }
       }
     } catch (formError) {
@@ -48,30 +60,22 @@ export async function POST(request: NextRequest) {
     
     console.log("Form fields:", { practiceId, clientId, petId });
     console.log("Photo field type:", typeof photo);
-    console.log("Photo has file properties?", photo && typeof photo === 'object' && 'name' in photo && 'size' in photo);
+    console.log("Photo has file properties?", isFilelike(photo));
     
-    // Validate file - use duck typing instead of instanceof File
+    // Validate file using server-compatible duck typing
     if (!photo) {
       console.error("No photo field found");
       return NextResponse.json({ error: "No photo field in form data" }, { status: 400 });
     }
     
-    // Check if it's a file-like object (duck typing)
-    const isFilelike = photo && 
-                      typeof photo === 'object' && 
-                      'name' in photo && 
-                      'size' in photo && 
-                      'type' in photo &&
-                      'arrayBuffer' in photo;
-    
-    if (!isFilelike) {
+    if (!isFilelike(photo)) {
       console.error("Photo field is not a file-like object:", photo);
       return NextResponse.json({ 
         error: "Photo field is not a file", 
         fieldType: typeof photo,
-        hasName: typeof photo === 'object' && photo !== null && 'name' in photo,
-        hasSize: typeof photo === 'object' && photo !== null && 'size' in photo,
-        hasType: typeof photo === 'object' && photo !== null && 'type' in photo
+        hasName: photo && typeof photo === 'object' && photo !== null && 'name' in photo,
+        hasSize: photo && typeof photo === 'object' && photo !== null && 'size' in photo,
+        hasType: photo && typeof photo === 'object' && photo !== null && 'type' in photo
       }, { status: 400 });
     }
     

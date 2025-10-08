@@ -367,11 +367,17 @@ function PayRatesTab({
                       <TableCell className="capitalize">{r.rateType}</TableCell>
                       <TableCell>
                         {formatCurrency(parseFloat(r.rate))}
-                        {r.rateType === "hourly" ? "/hr" : 
-                         r.rateType === "daily" ? "/day" :
-                         r.rateType === "weekly" ? "/wk" :
-                         r.rateType === "monthly" ? "/mo" :
-                         r.rateType === "yearly" ? "/yr" : ""}
+                        {r.rateType === "hourly"
+                          ? "/hr"
+                          : r.rateType === "daily"
+                          ? "/day"
+                          : r.rateType === "weekly"
+                          ? "/wk"
+                          : r.rateType === "monthly"
+                          ? "/mo"
+                          : r.rateType === "yearly"
+                          ? "/yr"
+                          : ""}
                       </TableCell>
                       <TableCell>{formatDate(r.effectiveDate)}</TableCell>
                       <TableCell>{r.description}</TableCell>
@@ -479,21 +485,27 @@ function PayRatesTab({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Rate {form.watch("rateType") && `(${form.watch("rateType")})`}
+                      Rate{" "}
+                      {form.watch("rateType") && `(${form.watch("rateType")})`}
                     </FormLabel>
                     <FormControl>
-                      <Input 
-                        type="number" 
-                        step="0.01" 
+                      <Input
+                        type="number"
+                        step="0.01"
                         placeholder={
-                          form.watch("rateType") === "hourly" ? "e.g., 25.00" :
-                          form.watch("rateType") === "daily" ? "e.g., 200.00" :
-                          form.watch("rateType") === "weekly" ? "e.g., 1000.00" :
-                          form.watch("rateType") === "monthly" ? "e.g., 4000.00" :
-                          form.watch("rateType") === "yearly" ? "e.g., 50000.00" :
-                          "Enter rate amount"
+                          form.watch("rateType") === "hourly"
+                            ? "e.g., 25.00"
+                            : form.watch("rateType") === "daily"
+                            ? "e.g., 200.00"
+                            : form.watch("rateType") === "weekly"
+                            ? "e.g., 1000.00"
+                            : form.watch("rateType") === "monthly"
+                            ? "e.g., 4000.00"
+                            : form.watch("rateType") === "yearly"
+                            ? "e.g., 50000.00"
+                            : "Enter rate amount"
                         }
-                        {...field} 
+                        {...field}
                       />
                     </FormControl>
                     <FormMessage />
@@ -920,24 +932,29 @@ function WorkHoursTab({
                       </FormControl>
                       <SelectContent>
                         {form.getValues("userId") ? (
-                          (rates || [])
-                            .filter(
-                              (r: any) => r.userId === form.getValues("userId")
-                            )
-                            .length > 0 ? (
+                          (rates || []).filter(
+                            (r: any) => r.userId === form.getValues("userId")
+                          ).length > 0 ? (
                             (rates || [])
                               .filter(
-                                (r: any) => r.userId === form.getValues("userId")
+                                (r: any) =>
+                                  r.userId === form.getValues("userId")
                               )
                               .map((r: any) => (
                                 <SelectItem key={r.id} value={r.id.toString()}>
                                   {formatCurrency(parseFloat(r.rate))}/
-                                  {r.rateType === "hourly" ? "hr" : 
-                                   r.rateType === "daily" ? "day" :
-                                   r.rateType === "weekly" ? "wk" :
-                                   r.rateType === "monthly" ? "mo" :
-                                   r.rateType === "yearly" ? "yr" : ""} -{" "}
-                                  {r.description || "Standard"}
+                                  {r.rateType === "hourly"
+                                    ? "hr"
+                                    : r.rateType === "daily"
+                                    ? "day"
+                                    : r.rateType === "weekly"
+                                    ? "wk"
+                                    : r.rateType === "monthly"
+                                    ? "mo"
+                                    : r.rateType === "yearly"
+                                    ? "yr"
+                                    : ""}{" "}
+                                  - {r.description || "Standard"}
                                 </SelectItem>
                               ))
                           ) : (
@@ -1399,9 +1416,9 @@ function PayStubsTab({
       return res.json();
     },
     onSuccess: (data, periodId) => {
-      toast({ 
-        title: "Pay slips auto-generated", 
-        description: `Generated ${data.generated} pay slips for eligible employees` 
+      toast({
+        title: "Pay slips auto-generated",
+        description: `Generated ${data.generated} pay slips for eligible employees`,
       });
       qc.invalidateQueries({ queryKey: [base, "stubs"] });
     },
@@ -1410,9 +1427,8 @@ function PayStubsTab({
   });
 
   // Check for eligible periods that could auto-generate
-  const eligiblePeriods = (periods || []).filter((p: any) => 
-    p.status === 'draft' && 
-    new Date(p.endDate) <= new Date() // Period has ended
+  const eligiblePeriods = (periods || []).filter(
+    (p: any) => p.status === "draft" && new Date(p.endDate) <= new Date() // Period has ended
   );
 
   const summary = stubs?.reduce(
@@ -1428,7 +1444,7 @@ function PayStubsTab({
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Pay Slips</h2>
       </div>
-      
+
       {/* Auto-generation suggestion */}
       {eligiblePeriods.length > 0 && (
         <Card className="border-green-200 bg-green-50">
@@ -1437,20 +1453,33 @@ function PayStubsTab({
               <div className="flex items-start space-x-3">
                 <div className="flex-shrink-0">
                   <div className="flex items-center justify-center w-8 h-8 bg-green-100 rounded-full">
-                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    <svg
+                      className="w-4 h-4 text-green-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 10V3L4 14h7v7l9-11h-7z"
+                      />
                     </svg>
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-sm font-medium text-green-800">Ready to generate pay slips!</h3>
+                  <h3 className="text-sm font-medium text-green-800">
+                    Ready to generate pay slips!
+                  </h3>
                   <p className="mt-1 text-sm text-green-700">
-                    {eligiblePeriods.length} pay period(s) have ended and are ready for pay slip generation.
+                    {eligiblePeriods.length} pay period(s) have ended and are
+                    ready for pay slip generation.
                   </p>
                 </div>
               </div>
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 onClick={() => {
                   eligiblePeriods.forEach((period: any) => {
                     autoGenerate.mutate(period.id);
@@ -1465,7 +1494,7 @@ function PayStubsTab({
           </CardContent>
         </Card>
       )}
-      
+
       {/* Quick Help Card */}
       {(!stubs || stubs.length === 0) && (
         <Card className="border-blue-200 bg-blue-50">
@@ -1473,22 +1502,36 @@ function PayStubsTab({
             <div className="flex items-start space-x-3">
               <div className="flex-shrink-0">
                 <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
-                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <svg
+                    className="w-4 h-4 text-blue-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
                   </svg>
                 </div>
               </div>
               <div>
-                <h3 className="text-sm font-medium text-blue-800">How to generate pay slips</h3>
+                <h3 className="text-sm font-medium text-blue-800">
+                  How to generate pay slips
+                </h3>
                 <p className="mt-1 text-sm text-blue-700">
-                  1. Create pay rates for employees → 2. Add work hours → 3. Create pay periods → 4. Go to "Pay Periods" tab and click "Generate Pay Slips"
+                  1. Create pay rates for employees → 2. Add work hours → 3.
+                  Create pay periods → 4. Go to "Pay Periods" tab and click
+                  "Generate Pay Slips"
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
-      
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <Card>
           <CardHeader className="pb-2">
@@ -1666,7 +1709,9 @@ function PayStubsTab({
                         <DollarSign className="h-8 w-8 text-gray-400" />
                         <p className="text-gray-500">No pay slips found</p>
                         <p className="text-sm text-gray-400">
-                          To generate pay slips: Create a pay period → Add work hours → Go to Pay Periods tab → Click "Generate Pay Slips"
+                          To generate pay slips: Create a pay period → Add work
+                          hours → Go to Pay Periods tab → Click "Generate Pay
+                          Slips"
                         </p>
                       </div>
                     </TableCell>

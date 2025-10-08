@@ -1693,29 +1693,53 @@ export default function ClientsPage() {
                                             ref={fileInputRef}
                                             className="hidden"
                                             onChange={async (e) => {
-                                              const file = e.target.files?.[0] || null;
+                                              const file =
+                                                e.target.files?.[0] || null;
                                               if (file) {
                                                 // Validate file
-                                                const validation = validateImageFile(file, 5);
+                                                const validation =
+                                                  validateImageFile(file, 5);
                                                 if (!validation.valid) {
                                                   toast({
                                                     title: "Invalid file",
-                                                    description: validation.error,
+                                                    description:
+                                                      validation.error,
                                                     variant: "destructive",
                                                   });
                                                   return;
                                                 }
-                                                
+
                                                 try {
                                                   // Compress image
-                                                  const compressedFile = await compressImage(file, 800, 600, 0.8);
+                                                  const compressedFile =
+                                                    await compressImage(
+                                                      file,
+                                                      800,
+                                                      600,
+                                                      0.8
+                                                    );
                                                   setPetPhoto(compressedFile);
                                                   toast({
                                                     title: "Photo selected",
-                                                    description: `Original: ${(file.size / 1024 / 1024).toFixed(2)}MB → Compressed: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB (Ready for upload)`,
+                                                    description: `Original: ${(
+                                                      file.size /
+                                                      1024 /
+                                                      1024
+                                                    ).toFixed(
+                                                      2
+                                                    )}MB → Compressed: ${(
+                                                      compressedFile.size /
+                                                      1024 /
+                                                      1024
+                                                    ).toFixed(
+                                                      2
+                                                    )}MB (Ready for upload)`,
                                                   });
                                                 } catch (error) {
-                                                  console.error("Image compression failed:", error);
+                                                  console.error(
+                                                    "Image compression failed:",
+                                                    error
+                                                  );
                                                   // Fall back to original file if compression fails
                                                   setPetPhoto(file);
                                                 }
@@ -1739,7 +1763,9 @@ export default function ClientsPage() {
                                       )}
                                     </div>
                                     <FormDescription>
-                                      Upload a photo of the pet (optional). Recommended: 800x600px or larger, max 5MB. Images will be automatically compressed.
+                                      Upload a photo of the pet (optional).
+                                      Recommended: 800x600px or larger, max 5MB.
+                                      Images will be automatically compressed.
                                     </FormDescription>
                                   </FormItem>
                                 </div>
@@ -2428,14 +2454,27 @@ export default function ClientsPage() {
                               });
                               return;
                             }
-                            
+
                             try {
                               // Compress image
-                              const compressedFile = await compressImage(file, 800, 600, 0.8);
+                              const compressedFile = await compressImage(
+                                file,
+                                800,
+                                600,
+                                0.8
+                              );
                               setPetPhoto(compressedFile);
                               toast({
                                 title: "Photo selected",
-                                description: `Original: ${(file.size / 1024 / 1024).toFixed(2)}MB → Compressed: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB (Ready for upload)`,
+                                description: `Original: ${(
+                                  file.size /
+                                  1024 /
+                                  1024
+                                ).toFixed(2)}MB → Compressed: ${(
+                                  compressedFile.size /
+                                  1024 /
+                                  1024
+                                ).toFixed(2)}MB (Ready for upload)`,
                               });
                             } catch (error) {
                               console.error("Image compression failed:", error);
@@ -2448,7 +2487,9 @@ export default function ClientsPage() {
                       />
                     </div>
                     <FormDescription>
-                      Upload a photo of the pet (optional). Recommended: 800x600px or larger, max 5MB. Images will be automatically compressed to optimize storage.
+                      Upload a photo of the pet (optional). Recommended:
+                      800x600px or larger, max 5MB. Images will be automatically
+                      compressed to optimize storage.
                     </FormDescription>
                   </FormItem>
                 </div>
