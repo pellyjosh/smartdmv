@@ -371,7 +371,7 @@ export default function RefundManagementPage() {
                   <TableBody>
                     {filtered.map((r: any) => (
                       <TableRow key={r.id}>
-                        <TableCell>{r.id}</TableCell>
+                        {/* <TableCell>{r.id}</TableCell> */}
                         <TableCell>{r.paymentId}</TableCell>
                         <TableCell>
                           {r.amount} {r.currency}
