@@ -97,7 +97,11 @@ const referralFormSchema = z.object({
 type ReferralFormValues = z.infer<typeof referralFormSchema>;
 
 export default function ReferralsPage() {
-  const { practice, availablePractices: practices, practicesLoading: isLoadingPractices } = usePractice();
+  const {
+    practice,
+    availablePractices: practices,
+    practicesLoading: isLoadingPractices,
+  } = usePractice();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("outbound");
   const [searchQuery, setSearchQuery] = useState("");
@@ -592,9 +596,14 @@ export default function ReferralsPage() {
                                     </div>
                                   ) : practiceOptions.length > 0 ? (
                                     practiceOptions.map((p: any) => (
-                                      <SelectItem key={p.id} value={p.id.toString()}>
+                                      <SelectItem
+                                        key={p.id}
+                                        value={p.id.toString()}
+                                      >
                                         {p.name}
-                                        {p.id === practice?.id ? " (current)" : ""}
+                                        {p.id === practice?.id
+                                          ? " (current)"
+                                          : ""}
                                       </SelectItem>
                                     ))
                                   ) : (
@@ -629,21 +638,19 @@ export default function ReferralsPage() {
                                     <div className="flex justify-center p-2">
                                       <Loader2 className="h-5 w-5 animate-spin" />
                                     </div>
-                                  ) : (
-                                    (specialists && specialists.length > 0) ? (
-                                      specialists.map((specialist: any) => (
-                                        <SelectItem
-                                          key={specialist.id}
-                                          value={specialist.id.toString()}
-                                        >
-                                          {specialist.name}
-                                        </SelectItem>
-                                      ))
-                                    ) : (
-                                      <SelectItem disabled value="">
-                                        No specialists found
+                                  ) : specialists && specialists.length > 0 ? (
+                                    specialists.map((specialist: any) => (
+                                      <SelectItem
+                                        key={specialist.id}
+                                        value={specialist.id.toString()}
+                                      >
+                                        {specialist.name}
                                       </SelectItem>
-                                    )
+                                    ))
+                                  ) : (
+                                    <SelectItem disabled value="">
+                                      No specialists found
+                                    </SelectItem>
                                   )}
                                 </SelectContent>
                               </Select>
