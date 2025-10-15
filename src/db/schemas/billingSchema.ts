@@ -2,6 +2,7 @@
 import { dbTable, text, timestamp, integer, decimal, primaryKeyId, foreignKeyInt } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { practices } from './practicesSchema';
+import { currencies } from './currencySchema';
 import { users } from './usersSchema';
 import { pets } from './petsSchema';
 import { treatments } from './treatmentsSchema';
@@ -42,6 +43,8 @@ export const invoices = dbTable('invoices', {
   // Invoice details
   invoiceNumber: text("invoice_number").notNull().unique(),
   description: text("description"),
+  // Currency for the invoice (defaults to practice defaultCurrencyId)
+  currencyId: foreignKeyInt('currency_id').notNull().default(1).references(() => currencies.id),
   subtotal: decimal("subtotal").notNull(),
   taxAmount: decimal("tax_amount").notNull().default('0.00'),
   discountAmount: decimal("discount_amount").notNull().default('0.00'),
@@ -70,6 +73,8 @@ export const invoiceItems = dbTable('invoice_items', {
   description: text("description").notNull(),
   quantity: decimal("quantity").notNull().default('1'),
   unitPrice: decimal("unit_price").notNull(),
+  // Optional currency override for the line item
+  currencyId: foreignKeyInt('currency_id').default(1).references(() => currencies.id),
   subtotal: decimal("subtotal").notNull(),
   discountAmount: decimal("discount_amount").notNull().default('0.00'),
   taxable: text("taxable", { enum: ["yes", "no"] }).notNull().default(sql`'yes'`),
@@ -87,6 +92,8 @@ export const payments = dbTable('payments', {
   // Payment details
   paymentNumber: text("payment_number").notNull().unique(),
   amount: decimal("amount").notNull(),
+  // Currency for the payment (should match invoice.currencyId)
+  currencyId: foreignKeyInt('currency_id').notNull().default(1).references(() => currencies.id),
   paymentMethod: text("payment_method", { 
     enum: ["cash", "credit_card", "debit_card", "check", "bank_transfer", "online", "other"] 
   }).notNull(),

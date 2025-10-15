@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { refunds } from '@/db/schemas/financeSchema';
+import { createAuditLogFromRequest } from '@/lib/audit-logger';
 import { and, eq } from 'drizzle-orm';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ practiceId: string; refundId: string }> }) {
@@ -16,7 +17,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pra
     const [existing] = await tenantDb.select().from(refunds).where(and(eq(refunds.id, id), eq(refunds.practiceId, practiceId)));
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (existing.status !== 'pending') return NextResponse.json({ error: 'Only pending refunds can be processed' }, { status: 400 });
-    const [updated] = await tenantDb.update(refunds).set({ status: 'processed', processedAt: new Date() }).where(eq(refunds.id, id)).returning();
+    const now = new Date();
+    const [updated] = await tenantDb
+      .update(refunds)
+      .set({ status: 'processed', processedAt: now, updatedAt: now })
+      .where(eq(refunds.id, id))
+      .returning();
 
     // Helper function to safely serialize any value that might have toISOString issues
     const safeSerialize = (obj: any): any => {
@@ -55,6 +61,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pra
     };
 
     const serializedResponse = safeSerialize(updated);
+
+    // Audit log for processing
+    try {
+      await createAuditLogFromRequest(req as unknown as Request, {
+        action: 'UPDATE',
+        recordType: 'BILLING',
+        recordId: String(id),
+        description: `Refund ${id} processed`,
+        practiceId: String(practiceId),
+        changes: { after: serializedResponse }
+      });
+    } catch (auditErr) {
+      console.error('Failed to create audit log for refund process:', auditErr);
+    }
+
     return NextResponse.json(serializedResponse);
   } catch (e) {
     console.error('Error processing refund', e);

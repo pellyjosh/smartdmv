@@ -655,7 +655,7 @@ const menuGroups: MenuGroup[] = [
       },
       {
         title: "Practice Admin",
-        href: "/practice-admin",
+        href: "/admin/practice-admin",
         icon: Building2,
         roles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN"],
       },
@@ -663,6 +663,12 @@ const menuGroups: MenuGroup[] = [
         title: "Practice Billing",
         href: "/practice-billing",
         icon: Building2,
+        roles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN"],
+      },
+      {
+        title: "Practice Settings",
+        href: "/admin/practice-settings",
+        icon: Settings2,
         roles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN"],
       },
       {

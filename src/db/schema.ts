@@ -90,6 +90,7 @@ import {
   paymentMethodsRelations,
   serviceCodesRelations
 } from './schemas/billingSchema';
+import { currencies, currenciesRelations } from './schemas/currencySchema';
 import {
   taxRates,
   taxRatesRelations
@@ -118,6 +119,14 @@ import {
   payrollDeductions,
   payrollDeductionsRelations,
   payrollTaxRates,
+  bankAccounts,
+  bankAccountsRelations,
+  employeeBankAccounts,
+  employeeBankAccountsRelations,
+  payrollPayments,
+  payrollPaymentsRelations,
+  payrollTransactions,
+  payrollTransactionsRelations,
   payrollTaxRatesRelations,
   payCategories,
   payCategoriesRelations,
@@ -253,6 +262,9 @@ export const schema = {
   paymentMethodsRelations,
   serviceCodes,
   serviceCodesRelations,
+  // Currency table
+  currencies,
+  currenciesRelations,
   // Tax Rates tables
   taxRates,
   taxRatesRelations,
@@ -285,6 +297,14 @@ export const schema = {
   payCategoriesRelations,
   workHoursEnhanced,
   workHoursEnhancedRelations,
+  bankAccounts,
+  bankAccountsRelations,
+  employeeBankAccounts,
+  employeeBankAccountsRelations,
+  payrollPayments,
+  payrollPaymentsRelations,
+  payrollTransactions,
+  payrollTransactionsRelations,
   approvalWorkflows,
   approvalWorkflowsRelations,
   approvalWorkflowSteps,
@@ -347,6 +367,7 @@ export * from './schemas/permissionOverridesSchema';
 export * from './schemas/rolesSchema';
 export * from './schemas/userRolesSchema';
 export * from './schemas/billingSchema';
+export * from './schemas/currencySchema';
 export * from './schemas/taxRatesSchema';
 export * from './schemas/financeSchema';
 export * from './schemas/healthResourcesSchema';

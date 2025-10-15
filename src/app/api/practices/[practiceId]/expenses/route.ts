@@ -109,9 +109,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
       recurrenceEndDate: isRecurring && recurrenceEndDate ? recurrenceEndDate : null,
       taxDeductible: !!taxDeductible,
     };
+  // Determine practice default currency (required)
+  const practice = await tenantDb.query.practices.findFirst({ where: (p: any, { eq }: any) => eq(p.id, practiceId) });
+  const defaultCurrencyId = (practice as any)?.defaultCurrencyId;
+  if (!defaultCurrencyId) return NextResponse.json({ error: 'Practice has no configured default currency' }, { status: 400 });
+
     const [created] = await tenantDb.insert(expenses).values({
       practiceId,
       amount: amount.toString(),
+      currencyId: defaultCurrencyId,
       category,
       subcategory: subcategory || null,
       description: title ? `${title}${description ? ' - ' + description : ''}` : (description || title || category),

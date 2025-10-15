@@ -4,8 +4,10 @@ import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { usePractice } from "@/hooks/use-practice";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
   CardContent,
@@ -14,7 +16,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -131,6 +132,7 @@ export default function ExpensesPage() {
   const { toast } = useToast();
   const { practice } = usePractice();
   const practiceId = practice?.id ? Number(practice.id) : undefined;
+  const { format: formatCurrency } = useCurrencyFormatter();
   const [activeTab, setActiveTab] = useState<TabName>("expenses");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);

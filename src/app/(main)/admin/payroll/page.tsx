@@ -81,36 +81,41 @@ import {
   TrendingUp,
   AlertCircle,
   Info,
+  FileText,
+  Printer,
+  Banknote,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePractice } from "@/hooks/use-practice";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
+import formatAmountWithCurrency from "@/lib/format/currency";
+
+// File-level safe formatter fallback. This will show a clear marker when no
+// currency is configured instead of throwing. Components may override this by
+// using the `useCurrencyFormatter` hook to get a practice-aware formatter.
+const formatCurrency = (
+  amount: number,
+  currency?: { code?: string; decimals?: number } | null
+) =>
+  formatAmountWithCurrency(
+    amount || 0,
+    currency ? { code: currency.code, decimals: currency.decimals } : undefined
+  );
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(amount || 0);
+const useFormatCurrency = (practiceId?: number) => {
+  // Wrap the shared currency hook so existing callers that call useFormatCurrency()
+  // keep working while we centralize formatting logic.
+  const { format } = useCurrencyFormatter();
+  return format;
+};
 
 const formatDate = (dateString: string) =>
   dateString ? format(new Date(dateString), "MMM dd, yyyy") : "—";
 
-const formatDeductionAmount = (deduction: any) => {
-  if (deduction.calculationType === "percentage") {
-    const pct = deduction.percentage || 0;
-    const maxAmount = deduction.maxAmount
-      ? ` (max ${formatCurrency(parseFloat(deduction.maxAmount))})`
-      : "";
-    return `${pct}%${maxAmount}`;
-  } else if (deduction.calculationType === "fixed") {
-    return formatCurrency(parseFloat(deduction.amount || "0"));
-  } else {
-    return "Tiered";
-  }
-};
+// ...existing code...
 
 // Schemas
 const payRateSchema = z.object({
@@ -163,6 +168,7 @@ export default function PayrollPage() {
   const { practice } = usePractice();
   const practiceId = practice?.id ? Number(practice.id) : undefined;
   const base = practiceId ? `/api/practices/${practiceId}/payroll` : undefined;
+  const formatCurrency = useFormatCurrency(practiceId);
 
   return (
     <div className="container mx-auto py-8">
@@ -175,9 +181,10 @@ export default function PayrollPage() {
       <PayrollSummaryCards practiceId={practiceId} base={base} />
 
       <Tabs defaultValue="payStubs" className="space-y-4">
-        <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-7">
+        <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-8">
           <TabsTrigger value="payStubs">Pay Slips</TabsTrigger>
-          {/* <TabsTrigger value="approvals">Approvals</TabsTrigger> */}
+          <TabsTrigger value="payments">Payments</TabsTrigger>
+          <TabsTrigger value="approvals">Approvals</TabsTrigger>
           <TabsTrigger value="deductions">Deductions</TabsTrigger>
           <TabsTrigger value="workHours">Work Hours</TabsTrigger>
           <TabsTrigger value="payRates">Pay Rates</TabsTrigger>
@@ -206,6 +213,9 @@ export default function PayrollPage() {
         <TabsContent value="reports">
           <ReportsTab practiceId={practiceId} base={base} />
         </TabsContent>
+        <TabsContent value="payments">
+          <PaymentProcessorTab practiceId={practiceId} base={base} />
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -218,6 +228,7 @@ function PayRatesTab({
   practiceId?: number;
   base?: string;
 }) {
+  const { format: formatCurrency } = useCurrencyFormatter();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -230,7 +241,7 @@ function PayRatesTab({
     },
   });
   useEffect(() => {
-    if (editing)
+    if (editing) {
       form.reset({
         userId: editing.userId,
         rateType: editing.rateType,
@@ -238,13 +249,14 @@ function PayRatesTab({
         effectiveDate: editing.effectiveDate.split("T")[0],
         description: editing.description || "",
       });
-    else
+    } else {
       form.reset({
         rateType: "hourly",
         rate: "",
         effectiveDate: new Date().toISOString().split("T")[0],
         description: "",
       });
+    }
   }, [editing]);
   const { data: rates, isLoading } = useQuery({
     queryKey: [base, "rates"],
@@ -607,7 +619,8 @@ function WorkHoursTab({
       });
     }
   }, [editing]);
-  const { data: rows, isLoading } = useQuery({
+  const { format: formatCurrency } = useCurrencyFormatter();
+  const { data: rows = [], isLoading } = useQuery({
     queryKey: [base, "work-hours", range.startDate, range.endDate],
     enabled: !!base,
     queryFn: async () => {
@@ -681,21 +694,69 @@ function WorkHoursTab({
       toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  // Add approval submission mutation
+  // Single work hours submission
   const submitForApproval = useMutation({
     mutationFn: async (workHoursId: number) => {
-      const res = await apiRequest("POST", `${base}/approval-instances`, {
-        workflowType: "time_approval",
-        entityType: "work_hours",
-        entityId: workHoursId,
-        priority: "normal",
-      });
+      const res = await apiRequest(
+        "POST",
+        `${base}/work-hours/submit-for-approval`,
+        {
+          workHoursIds: [workHoursId],
+          reason: `Time approval request for work hours entry`,
+          priority: "normal",
+        }
+      );
       return res.json();
     },
     onSuccess: () => {
       toast({ title: "Work hours submitted for approval" });
       qc.invalidateQueries({ queryKey: [base, "work-hours"] });
       qc.invalidateQueries({ queryKey: [base, "approval-instances"] });
+    },
+    onError: (e: any) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  // Batch submission for selected work hours
+  const [selectedHours, setSelectedHours] = useState<number[]>([]);
+  const [batchSubmissionDialog, setBatchSubmissionDialog] = useState(false);
+  const [batchReason, setBatchReason] = useState("");
+  const [batchPriority, setBatchPriority] = useState("normal");
+
+  const submitBatchForApproval = useMutation({
+    mutationFn: async ({
+      workHoursIds,
+      reason,
+      priority,
+    }: {
+      workHoursIds: number[];
+      reason: string;
+      priority: string;
+    }) => {
+      const res = await apiRequest(
+        "POST",
+        `${base}/work-hours/submit-for-approval`,
+        {
+          workHoursIds,
+          reason,
+          priority,
+        }
+      );
+      return res.json();
+    },
+    onSuccess: (data) => {
+      const submitted =
+        data.results?.filter((r: any) => r.status === "submitted").length || 0;
+      toast({
+        title: "Batch Submission Complete",
+        description: `${submitted} work hours entries submitted for approval`,
+      });
+      qc.invalidateQueries({ queryKey: [base, "work-hours"] });
+      qc.invalidateQueries({ queryKey: [base, "approval-instances"] });
+      setBatchSubmissionDialog(false);
+      setSelectedHours([]);
+      setBatchReason("");
+      setBatchPriority("normal");
     },
     onError: (e: any) =>
       toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -746,6 +807,45 @@ function WorkHoursTab({
           </div>
         </CardContent>
       </Card>
+
+      {/* Batch Actions Bar */}
+      {selectedHours.length > 0 && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">
+                  {selectedHours.length} item(s) selected
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => setBatchSubmissionDialog(true)}
+                  disabled={submitBatchForApproval.isPending}
+                >
+                  {submitBatchForApproval.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit Selected for Approval"
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelectedHours([])}
+                >
+                  Clear Selection
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {isLoading ? (
         <Card>
           <CardContent className="p-4 space-y-3">
@@ -767,6 +867,29 @@ function WorkHoursTab({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <input
+                      type="checkbox"
+                      checked={
+                        selectedHours.length ===
+                          (rows || []).filter((h: any) => !h.isApproved)
+                            .length &&
+                        (rows || []).filter((h: any) => !h.isApproved).length >
+                          0
+                      }
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedHours(
+                            (rows || [])
+                              .filter((h: any) => !h.isApproved)
+                              .map((h: any) => h.id)
+                          );
+                        } else {
+                          setSelectedHours([]);
+                        }
+                      }}
+                    />
+                  </TableHead>
                   <TableHead>Employee</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Hours</TableHead>
@@ -780,6 +903,22 @@ function WorkHoursTab({
                 {(rows || []).length ? (
                   (rows || []).map((h: any) => (
                     <TableRow key={h.id}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={selectedHours.includes(h.id)}
+                          disabled={h.isApproved}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedHours([...selectedHours, h.id]);
+                            } else {
+                              setSelectedHours(
+                                selectedHours.filter((id) => id !== h.id)
+                              );
+                            }
+                          }}
+                        />
+                      </TableCell>
                       <TableCell>{h.userName}</TableCell>
                       <TableCell>{formatDate(h.date)}</TableCell>
                       <TableCell>{h.hoursWorked}</TableCell>
@@ -844,7 +983,7 @@ function WorkHoursTab({
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-4">
+                    <TableCell colSpan={8} className="text-center py-4">
                       No hours
                     </TableCell>
                   </TableRow>
@@ -1031,6 +1170,86 @@ function WorkHoursTab({
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Batch Submission Dialog */}
+      <Dialog
+        open={batchSubmissionDialog}
+        onOpenChange={setBatchSubmissionDialog}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submit Work Hours for Approval</DialogTitle>
+            <DialogDescription>
+              Submit {selectedHours.length} work hours entries for approval
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="batchReason">Submission Reason</Label>
+              <textarea
+                id="batchReason"
+                className="w-full p-2 border rounded-md"
+                rows={3}
+                value={batchReason}
+                onChange={(e) => setBatchReason(e.target.value)}
+                placeholder="Enter reason for submitting these work hours..."
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="batchPriority">Priority Level</Label>
+              <Select value={batchPriority} onValueChange={setBatchPriority}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="urgent">Urgent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBatchSubmissionDialog(false);
+                setBatchReason("");
+                setBatchPriority("normal");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                submitBatchForApproval.isPending || selectedHours.length === 0
+              }
+              onClick={() => {
+                submitBatchForApproval.mutate({
+                  workHoursIds: selectedHours,
+                  reason:
+                    batchReason.trim() ||
+                    `Batch approval request for ${selectedHours.length} work hours entries`,
+                  priority: batchPriority,
+                });
+              }}
+            >
+              {submitBatchForApproval.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                `Submit ${selectedHours.length} Items`
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1042,6 +1261,7 @@ function PayPeriodsTab({
   practiceId?: number;
   base?: string;
 }) {
+  const { format: formatCurrency } = useCurrencyFormatter();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -1203,17 +1423,13 @@ function PayPeriodsTab({
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-2 justify-end">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={p.status === "paid"}
-                            onClick={() => {
-                              if (confirm("Generate pay slips?"))
-                                generate.mutate(p.id);
+                          <GeneratePayslipsButton
+                            period={p}
+                            onGenerate={(periodId: number, options: any) => {
+                              generate.mutate(periodId);
                             }}
-                          >
-                            Generate Pay Slips
-                          </Button>
+                            disabled={p.status === "paid"}
+                          />
                           <Button
                             size="sm"
                             variant="outline"
@@ -1383,9 +1599,12 @@ function PayStubsTab({
   practiceId?: number;
   base?: string;
 }) {
+  const { format: formatCurrency } = useCurrencyFormatter();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
+  const [selectedPaystub, setSelectedPaystub] = useState<any>(null);
+  const [paystubDetailDialog, setPaystubDetailDialog] = useState(false);
   const { data: periods } = useQuery({
     queryKey: [base, "periods"],
     enabled: !!base,
@@ -1439,6 +1658,151 @@ function PayStubsTab({
     },
     { total: 0, count: 0 }
   );
+
+  // Print function for payslips
+  const handlePrintPaystub = (payslip: any) => {
+    // Create a printable window
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Pay Stub - ${payslip.userName}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; }
+            .section { margin: 20px 0; }
+            .row { display: flex; justify-content: space-between; margin: 5px 0; }
+            .total { font-weight: bold; border-top: 1px solid #000; padding-top: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>PAY STUB</h1>
+            <h2>${payslip.userName}</h2>
+            <p>Pay Period: ${payslip.payPeriodName || "N/A"}</p>
+          </div>
+          
+          <div class="section">
+            <h3>Earnings</h3>
+            <div class="row">
+              <span>Gross Pay:</span>
+              <span>${formatCurrency(parseFloat(payslip.grossPay))}</span>
+            </div>
+          </div>
+          
+          <div class="section">
+            <h3>Deductions</h3>
+            ${
+              payslip.deductionsByCategory?.taxes
+                ?.map(
+                  (tax: any) =>
+                    `<div class="row"><span>${
+                      tax.description
+                    }:</span><span>${formatCurrency(
+                      parseFloat(tax.amount)
+                    )}</span></div>`
+                )
+                .join("") || ""
+            }
+            ${
+              payslip.deductionsByCategory?.benefits
+                ?.map(
+                  (benefit: any) =>
+                    `<div class="row"><span>${
+                      benefit.description
+                    }:</span><span>${formatCurrency(
+                      parseFloat(benefit.amount)
+                    )}</span></div>`
+                )
+                .join("") || ""
+            }
+            <div class="row total">
+              <span>Total Deductions:</span>
+              <span>${formatCurrency(payslip.totalDeductions || 0)}</span>
+            </div>
+          </div>
+          
+          <div class="section">
+            <div class="row total">
+              <span><strong>Net Pay:</strong></span>
+              <span><strong>${formatCurrency(
+                parseFloat(payslip.netPay)
+              )}</strong></span>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
+    printWindow.close();
+  };
+
+  // Regenerate payslip function
+  const handleRegeneratePaystub = useMutation({
+    mutationFn: async (payslipId: number) => {
+      const res = await apiRequest(
+        "POST",
+        `${base}/stubs/${payslipId}/regenerate`
+      );
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Payslip Regenerated",
+        description: "The payslip has been recalculated with current data.",
+      });
+      qc.invalidateQueries({ queryKey: [base, "stubs"] });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Regeneration Failed",
+        description: e.message || "Failed to regenerate payslip",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Void payslip function with reason dialog
+  const [voidingPayslip, setVoidingPayslip] = useState<number | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+
+  const handleVoidPaystub = useMutation({
+    mutationFn: async ({
+      payslipId,
+      reason,
+    }: {
+      payslipId: number;
+      reason: string;
+    }) => {
+      const res = await apiRequest("POST", `${base}/stubs/${payslipId}/void`, {
+        reason: reason.trim(),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Payslip Voided",
+        description: "The payslip has been voided successfully.",
+      });
+      qc.invalidateQueries({ queryKey: [base, "stubs"] });
+      setVoidingPayslip(null);
+      setVoidReason("");
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Void Failed",
+        description: e.message || "Failed to void payslip",
+        variant: "destructive",
+      });
+    },
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -1683,20 +2047,59 @@ function PayStubsTab({
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="sm">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedPaystub(s);
+                              setPaystubDetailDialog(true);
+                            }}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
                             View Details
                           </Button>
-                          <Button variant="ghost" size="sm">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handlePrintPaystub(s)}
+                          >
+                            <Printer className="h-4 w-4 mr-1" />
                             Print
                           </Button>
                           {s.status === "pending" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-green-600"
-                            >
-                              Approve
-                            </Button>
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-orange-600"
+                                disabled={handleRegeneratePaystub.isPending}
+                                onClick={() =>
+                                  handleRegeneratePaystub.mutate(s.id)
+                                }
+                              >
+                                {handleRegeneratePaystub.isPending ? (
+                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                ) : (
+                                  <Edit className="h-4 w-4 mr-1" />
+                                )}
+                                {handleRegeneratePaystub.isPending
+                                  ? "Regenerating..."
+                                  : "Regenerate"}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-600"
+                                disabled={handleVoidPaystub.isPending}
+                                onClick={() => {
+                                  setVoidingPayslip(s.id);
+                                  setVoidReason("");
+                                }}
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                Void
+                              </Button>
+                            </>
                           )}
                         </div>
                       </TableCell>
@@ -1722,6 +2125,351 @@ function PayStubsTab({
           </CardContent>
         </Card>
       )}
+
+      {/* Detailed Payslip Dialog */}
+      <Dialog open={paystubDetailDialog} onOpenChange={setPaystubDetailDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Pay Stub Details - {selectedPaystub?.userName}
+            </DialogTitle>
+            <DialogDescription>
+              Detailed breakdown for pay period:{" "}
+              {selectedPaystub?.payPeriodName || "N/A"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedPaystub && (
+            <div className="space-y-6">
+              {/* Employee Info Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    Employee Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">
+                        Employee Name
+                      </Label>
+                      <p className="text-lg font-semibold">
+                        {selectedPaystub.userName}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">
+                        Pay Date
+                      </Label>
+                      <p>
+                        {new Date(selectedPaystub.payDate).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">
+                        Pay Period
+                      </Label>
+                      <p>{selectedPaystub.payPeriodName || "N/A"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">
+                        Status
+                      </Label>
+                      <Badge
+                        variant={
+                          selectedPaystub.status === "paid"
+                            ? "default"
+                            : "secondary"
+                        }
+                        className={
+                          selectedPaystub.status === "paid"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }
+                      >
+                        {selectedPaystub.status.charAt(0).toUpperCase() +
+                          selectedPaystub.status.slice(1)}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Earnings Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-green-600" />
+                    Earnings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                      <span className="font-medium">Gross Pay</span>
+                      <span className="text-lg font-bold text-green-700">
+                        {formatCurrency(parseFloat(selectedPaystub.grossPay))}
+                      </span>
+                    </div>
+
+                    {/* Parse and display earnings breakdown from JSON if available */}
+                    {selectedPaystub.deductionsBreakdown && (
+                      <div className="text-sm text-muted-foreground">
+                        <p>
+                          Earnings calculation based on approved work hours and
+                          pay rates
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Deductions Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Calculator className="h-5 w-5 text-red-600" />
+                    Deductions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* Tax Deductions */}
+                    {selectedPaystub.deductionsByCategory?.taxes &&
+                      selectedPaystub.deductionsByCategory.taxes.length > 0 && (
+                        <div>
+                          <h4 className="font-medium text-red-700 mb-2">
+                            Tax Deductions
+                          </h4>
+                          <div className="space-y-2">
+                            {selectedPaystub.deductionsByCategory.taxes.map(
+                              (tax: any, index: number) => (
+                                <div
+                                  key={index}
+                                  className="flex justify-between items-center p-2 bg-red-50 rounded"
+                                >
+                                  <span className="text-sm">
+                                    {tax.description}
+                                  </span>
+                                  <span className="font-medium text-red-700">
+                                    -{formatCurrency(parseFloat(tax.amount))}
+                                  </span>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    {/* Benefits Deductions */}
+                    {selectedPaystub.deductionsByCategory?.benefits &&
+                      selectedPaystub.deductionsByCategory.benefits.length >
+                        0 && (
+                        <div>
+                          <h4 className="font-medium text-blue-700 mb-2">
+                            Benefits
+                          </h4>
+                          <div className="space-y-2">
+                            {selectedPaystub.deductionsByCategory.benefits.map(
+                              (benefit: any, index: number) => (
+                                <div
+                                  key={index}
+                                  className="flex justify-between items-center p-2 bg-blue-50 rounded"
+                                >
+                                  <span className="text-sm">
+                                    {benefit.description}
+                                  </span>
+                                  <span className="font-medium text-blue-700">
+                                    -
+                                    {formatCurrency(parseFloat(benefit.amount))}
+                                  </span>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    {/* Voluntary Deductions */}
+                    {selectedPaystub.deductionsByCategory?.voluntary &&
+                      selectedPaystub.deductionsByCategory.voluntary.length >
+                        0 && (
+                        <div>
+                          <h4 className="font-medium text-purple-700 mb-2">
+                            Voluntary Deductions
+                          </h4>
+                          <div className="space-y-2">
+                            {selectedPaystub.deductionsByCategory.voluntary.map(
+                              (voluntary: any, index: number) => (
+                                <div
+                                  key={index}
+                                  className="flex justify-between items-center p-2 bg-purple-50 rounded"
+                                >
+                                  <span className="text-sm">
+                                    {voluntary.description}
+                                  </span>
+                                  <span className="font-medium text-purple-700">
+                                    -
+                                    {formatCurrency(
+                                      parseFloat(voluntary.amount)
+                                    )}
+                                  </span>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    {/* Total Deductions */}
+                    <div className="border-t pt-3">
+                      <div className="flex justify-between items-center p-3 bg-gray-100 rounded-lg">
+                        <span className="font-medium">Total Deductions</span>
+                        <span className="text-lg font-bold text-red-600">
+                          -
+                          {formatCurrency(selectedPaystub.totalDeductions || 0)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Net Pay Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Banknote className="h-5 w-5 text-green-600" />
+                    Net Pay
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="p-4 bg-green-100 rounded-lg border-2 border-green-200">
+                    <div className="flex justify-between items-center">
+                      <span className="text-lg font-medium">Take-Home Pay</span>
+                      <span className="text-2xl font-bold text-green-700">
+                        {formatCurrency(parseFloat(selectedPaystub.netPay))}
+                      </span>
+                    </div>
+                    <div className="text-sm text-green-600 mt-2">
+                      Gross Pay (
+                      {formatCurrency(parseFloat(selectedPaystub.grossPay))}) -
+                      Deductions (
+                      {formatCurrency(selectedPaystub.totalDeductions || 0)})
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Actions */}
+              <div className="flex justify-between items-center pt-4">
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => handlePrintPaystub(selectedPaystub)}
+                    className="flex items-center gap-2"
+                  >
+                    <Printer className="h-4 w-4" />
+                    Print Pay Stub
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      // Future: Download PDF functionality
+                      toast({
+                        title: "Feature Coming Soon",
+                        description: "PDF download will be available soon.",
+                      });
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download PDF
+                  </Button>
+                </div>
+
+                <Button
+                  onClick={() => setPaystubDetailDialog(false)}
+                  variant="default"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Void Payslip Dialog */}
+      <Dialog
+        open={voidingPayslip !== null}
+        onOpenChange={() => setVoidingPayslip(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Void Payslip</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for voiding this payslip. This action
+              cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="voidReason">Void Reason *</Label>
+              <textarea
+                id="voidReason"
+                className="w-full p-2 border rounded-md"
+                rows={3}
+                value={voidReason}
+                onChange={(e) => setVoidReason(e.target.value)}
+                placeholder="Enter the reason for voiding this payslip..."
+              />
+              <p className="text-sm text-muted-foreground mt-1">
+                Minimum 5 characters required
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setVoidingPayslip(null);
+                setVoidReason("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={
+                voidReason.trim().length < 5 || handleVoidPaystub.isPending
+              }
+              onClick={() => {
+                if (voidingPayslip) {
+                  handleVoidPaystub.mutate({
+                    payslipId: voidingPayslip,
+                    reason: voidReason.trim(),
+                  });
+                }
+              }}
+            >
+              {handleVoidPaystub.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Voiding...
+                </>
+              ) : (
+                "Void Payslip"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1945,66 +2693,486 @@ function ReportsTab({
   practiceId?: number;
   base?: string;
 }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [generateDialog, setGenerateDialog] = useState(false);
+  const [selectedReportType, setSelectedReportType] = useState<string>("");
+  const [dateRange, setDateRange] = useState({
+    startDate: new Date(new Date().getFullYear(), 0, 1)
+      .toISOString()
+      .split("T")[0], // Start of year
+    endDate: new Date().toISOString().split("T")[0], // Today
+  });
+  const [exportFormat, setExportFormat] = useState<string>("pdf");
+
+  // Fetch existing reports
+  const { data: reports, isLoading: reportsLoading } = useQuery({
+    queryKey: [base, "reports"],
+    enabled: !!base,
+    queryFn: async () => {
+      const r = await apiRequest("GET", `${base}/reports`);
+      return r.json();
+    },
+  });
+
+  // Generate report mutation
+  const generateReport = useMutation({
+    mutationFn: async (reportData: any) => {
+      const res = await apiRequest("POST", `${base}/reports`, reportData);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Report Generated",
+        description: `${data.title} has been generated successfully`,
+      });
+      qc.invalidateQueries({ queryKey: [base, "reports"] });
+      setGenerateDialog(false);
+    },
+    onError: (e: any) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const downloadReport = async (report: any) => {
+    try {
+      // Create downloadable content based on report data
+      const content = formatReportForDownload(report);
+      const blob = new Blob([content], {
+        type: report.exportFormat === "csv" ? "text/csv" : "application/json",
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.style.display = "none";
+      a.href = url;
+      a.download = `${report.title.replace(/\s+/g, "_")}_${
+        new Date().toISOString().split("T")[0]
+      }.${report.exportFormat || "json"}`;
+
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Download Started",
+        description: "Report download has begun",
+      });
+    } catch (error) {
+      toast({
+        title: "Download Failed",
+        description: "Failed to download report",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const formatReportForDownload = (report: any) => {
+    const data = JSON.parse(report.reportData || "{}");
+
+    if (report.exportFormat === "csv") {
+      return convertToCSV(data, report.reportType);
+    }
+
+    // Default to formatted JSON
+    return JSON.stringify(data, null, 2);
+  };
+
+  const convertToCSV = (data: any, reportType: string) => {
+    switch (reportType) {
+      case "summary":
+        return `Type,Amount\nGross Pay,$${
+          data.summary?.totalGrossPay || 0
+        }\nDeductions,$${data.summary?.totalDeductions || 0}\nNet Pay,$${
+          data.summary?.totalNetPay || 0
+        }\nTaxes,$${data.summary?.totalTaxes || 0}`;
+
+      case "detailed":
+        if (data.details) {
+          const headers =
+            "Employee ID,Period Start,Period End,Gross Amount,Net Amount,Status,Pay Date";
+          const rows = data.details
+            .map(
+              (d: any) =>
+                `${d.employeeId},${d.periodStart},${d.periodEnd},${d.grossAmount},${d.netAmount},${d.status},${d.payDate}`
+            )
+            .join("\n");
+          return `${headers}\n${rows}`;
+        }
+        break;
+
+      case "deductions":
+        if (data.details) {
+          const headers = "Deduction Name,Category,Total Amount,Count";
+          const rows = data.details
+            .map(
+              (d: any) =>
+                `${d.deductionName},${d.category},${d.totalAmount},${d.count}`
+            )
+            .join("\n");
+          return `${headers}\n${rows}`;
+        }
+        break;
+    }
+
+    return JSON.stringify(data, null, 2);
+  };
+
+  const handleGenerateReport = () => {
+    if (!selectedReportType) {
+      toast({
+        title: "Error",
+        description: "Please select a report type",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reportData = {
+      reportType: selectedReportType,
+      title: getReportTitle(selectedReportType),
+      description: getReportDescription(selectedReportType),
+      dateRange: {
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        period: "monthly",
+      },
+      exportFormat,
+      filters: {
+        includeDeductions: true,
+        includeTaxes: true,
+      },
+    };
+
+    generateReport.mutate(reportData);
+  };
+
+  const getReportTitle = (type: string) => {
+    const titles = {
+      summary: "Payroll Summary Report",
+      detailed: "Detailed Payroll Report",
+      tax: "Tax Report",
+      deductions: "Employee Deductions Report",
+      analytics: "Payroll Analytics Report",
+    };
+    return titles[type as keyof typeof titles] || "Payroll Report";
+  };
+
+  const getReportDescription = (type: string) => {
+    const descriptions = {
+      summary: "Comprehensive payroll summary by pay period",
+      detailed: "Detailed breakdown of all payroll entries",
+      tax: "Tax withholdings and employer contributions",
+      deductions: "Detailed breakdown of all employee deductions",
+      analytics: "Payroll trends and analytics",
+    };
+    return (
+      descriptions[type as keyof typeof descriptions] ||
+      "Generated payroll report"
+    );
+  };
+
+  const reportCards = [
+    {
+      type: "summary",
+      title: "Payroll Summary Report",
+      description: "Comprehensive payroll summary by pay period",
+      icon: "📊",
+    },
+    {
+      type: "detailed",
+      title: "Detailed Payroll Report",
+      description: "Complete breakdown of all payroll entries",
+      icon: "📋",
+    },
+    {
+      type: "tax",
+      title: "Tax Report",
+      description: "Tax withholdings and employer contributions",
+      icon: "🧾",
+    },
+    {
+      type: "deductions",
+      title: "Employee Deductions Report",
+      description: "Detailed breakdown of all employee deductions",
+      icon: "💰",
+    },
+    {
+      type: "analytics",
+      title: "Payroll Analytics",
+      description: "Trends, costs, and performance metrics",
+      icon: "📈",
+    },
+  ];
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Payroll Reports</CardTitle>
-        <CardDescription>
-          Generate and view payroll reports and analytics
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="font-semibold mb-2">Payroll Summary Report</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Comprehensive payroll summary by pay period
-              </p>
-              <Button variant="outline" size="sm">
-                Generate Report
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="font-semibold mb-2">Tax Report</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Tax withholdings and employer contributions
-              </p>
-              <Button variant="outline" size="sm">
-                Generate Report
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="font-semibold mb-2">Employee Deductions</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Detailed breakdown of all employee deductions
-              </p>
-              <Button variant="outline" size="sm">
-                Generate Report
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="font-semibold mb-2">Year-End Summary</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Annual payroll summary for tax filing
-              </p>
-              <Button variant="outline" size="sm">
-                Generate Report
-              </Button>
-            </CardContent>
-          </Card>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold">Payroll Reports</h2>
+          <p className="text-muted-foreground">
+            Generate and download payroll reports
+          </p>
         </div>
-      </CardContent>
-    </Card>
+        <Button onClick={() => setGenerateDialog(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Generate Report
+        </Button>
+      </div>
+
+      {/* Quick Report Generation */}
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+        {reportCards.map((card) => (
+          <Card
+            key={card.type}
+            className="cursor-pointer hover:shadow-md transition-shadow"
+          >
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl mb-2">{card.icon}</div>
+              <h3 className="font-semibold text-sm mb-2">{card.title}</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                {card.description}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setSelectedReportType(card.type);
+                  setGenerateDialog(true);
+                }}
+              >
+                Generate
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Recent Reports */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Reports</CardTitle>
+          <CardDescription>
+            View and download previously generated reports
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {reportsLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center space-x-4">
+                  <Skeleton className="h-4 w-1/4" />
+                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-4 w-1/6" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Report Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Date Range</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Generated</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(reports || []).length ? (
+                  (reports || []).map((report: any) => (
+                    <TableRow key={report.id}>
+                      <TableCell className="font-medium">
+                        {report.title}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">
+                          {report.reportType.toUpperCase()}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {report.dateRange
+                          ? (() => {
+                              const range = JSON.parse(report.dateRange);
+                              return `${new Date(
+                                range.startDate
+                              ).toLocaleDateString()} - ${new Date(
+                                range.endDate
+                              ).toLocaleDateString()}`;
+                            })()
+                          : "N/A"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            report.status === "completed"
+                              ? "default"
+                              : report.status === "generating"
+                              ? "secondary"
+                              : "destructive"
+                          }
+                        >
+                          {report.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {new Date(report.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex gap-2 justify-end">
+                          {report.status === "completed" && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => downloadReport(report)}
+                              >
+                                <Download className="h-4 w-4 mr-1" />
+                                Download
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  // Preview report data in a modal
+                                  const data = JSON.parse(
+                                    report.reportData || "{}"
+                                  );
+                                  toast({
+                                    title: "Report Preview",
+                                    description: `${
+                                      Object.keys(data).length
+                                    } data sections available`,
+                                  });
+                                }}
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                Preview
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8">
+                      <div className="flex flex-col items-center space-y-2">
+                        <FileText className="h-8 w-8 text-gray-400" />
+                        <p className="text-gray-500">
+                          No reports generated yet
+                        </p>
+                        <Button
+                          variant="outline"
+                          onClick={() => setGenerateDialog(true)}
+                        >
+                          Generate Your First Report
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Generate Report Dialog */}
+      <Dialog open={generateDialog} onOpenChange={setGenerateDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Generate Payroll Report</DialogTitle>
+            <DialogDescription>
+              Configure your report parameters and download options
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="reportType">Report Type</Label>
+              <Select
+                value={selectedReportType}
+                onValueChange={setSelectedReportType}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select report type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="summary">Summary Report</SelectItem>
+                  <SelectItem value="detailed">Detailed Report</SelectItem>
+                  <SelectItem value="tax">Tax Report</SelectItem>
+                  <SelectItem value="deductions">Deductions Report</SelectItem>
+                  <SelectItem value="analytics">Analytics Report</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="startDate">Start Date</Label>
+                <Input
+                  type="date"
+                  value={dateRange.startDate}
+                  onChange={(e) =>
+                    setDateRange({ ...dateRange, startDate: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="endDate">End Date</Label>
+                <Input
+                  type="date"
+                  value={dateRange.endDate}
+                  onChange={(e) =>
+                    setDateRange({ ...dateRange, endDate: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="exportFormat">Export Format</Label>
+              <Select value={exportFormat} onValueChange={setExportFormat}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pdf">PDF</SelectItem>
+                  <SelectItem value="excel">Excel</SelectItem>
+                  <SelectItem value="csv">CSV</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGenerateDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleGenerateReport}
+              disabled={generateReport.isPending}
+            >
+              {generateReport.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                "Generate Report"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
@@ -2481,6 +3649,7 @@ function EmployeeDeductionsSubTab({
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
 
   const form = useForm<z.infer<typeof employeeDeductionSchema>>({
     resolver: zodResolver(employeeDeductionSchema),
@@ -2488,6 +3657,29 @@ function EmployeeDeductionsSubTab({
       startDate: new Date().toISOString().split("T")[0],
     },
   });
+
+  useEffect(() => {
+    if (editing) {
+      form.reset({
+        employeeId: editing.employeeId,
+        deductionTypeId: editing.deductionTypeId,
+        amount: editing.amount ? parseFloat(editing.amount) : undefined,
+        percentage: editing.percentage
+          ? parseFloat(editing.percentage)
+          : undefined,
+        maxAmount: editing.maxAmount
+          ? parseFloat(editing.maxAmount)
+          : undefined,
+        startDate: editing.startDate.split("T")[0],
+        endDate: editing.endDate ? editing.endDate.split("T")[0] : undefined,
+        notes: editing.notes || "",
+      });
+    } else {
+      form.reset({
+        startDate: new Date().toISOString().split("T")[0],
+      });
+    }
+  }, [editing, form]);
 
   const { data: employeeDeductions, isLoading } = useQuery({
     queryKey: [base, "employee-deductions"],
@@ -2529,6 +3721,43 @@ function EmployeeDeductionsSubTab({
     onError: (e: any) =>
       toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const update = useMutation({
+    mutationFn: async (d: any) => {
+      const res = await apiRequest(
+        "PATCH",
+        `${base}/employee-deductions/${editing.id}`,
+        d
+      );
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Employee deduction updated" });
+      qc.invalidateQueries({ queryKey: [base, "employee-deductions"] });
+      setOpen(false);
+      setEditing(null);
+    },
+    onError: (e: any) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const del = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest(
+        "DELETE",
+        `${base}/employee-deductions/${id}`
+      );
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Employee deduction removed" });
+      qc.invalidateQueries({ queryKey: [base, "employee-deductions"] });
+    },
+    onError: (e: any) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const submit = (d: any) => (editing ? update.mutate(d) : create.mutate(d));
 
   return (
     <div className="space-y-4">
@@ -2595,9 +3824,33 @@ function EmployeeDeductionsSubTab({
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm">
-                          Edit
-                        </Button>
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditing(ed);
+                              setOpen(true);
+                            }}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700"
+                            onClick={() => setDeleteConfirm(ed)}
+                            disabled={del.isPending}
+                          >
+                            {del.isPending ? (
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            ) : (
+                              <Trash className="h-4 w-4 mr-1" />
+                            )}
+                            {del.isPending ? "Removing..." : "Remove"}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -2631,16 +3884,19 @@ function EmployeeDeductionsSubTab({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Assign Employee Deduction</DialogTitle>
+            <DialogTitle>
+              {editing
+                ? "Edit Employee Deduction"
+                : "Assign Employee Deduction"}
+            </DialogTitle>
             <DialogDescription>
-              Assign a deduction type to an employee with specific parameters.
+              {editing
+                ? "Update the deduction parameters for this employee."
+                : "Assign a deduction type to an employee with specific parameters."}
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit((values) => create.mutate(values))}
-              className="space-y-4"
-            >
+            <form onSubmit={form.handleSubmit(submit)} className="space-y-4">
               <FormField
                 control={form.control}
                 name="employeeId"
@@ -2761,19 +4017,86 @@ function EmployeeDeductionsSubTab({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setOpen(false)}
+                  onClick={() => {
+                    setOpen(false);
+                    setEditing(null);
+                  }}
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={create.isPending}>
-                  {create.isPending && (
+                <Button
+                  type="submit"
+                  disabled={create.isPending || update.isPending}
+                >
+                  {(create.isPending || update.isPending) && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Assign Deduction
+                  {editing ? "Update Deduction" : "Assign Deduction"}
                 </Button>
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirm !== null}
+        onOpenChange={() => setDeleteConfirm(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove Employee Deduction</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove the deduction "
+              {deleteConfirm?.deductionName}" for {deleteConfirm?.employeeName}?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-md p-4">
+              <div className="flex">
+                <AlertCircle className="h-5 w-5 text-amber-400" />
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-amber-800">
+                    This action will deactivate the deduction
+                  </h3>
+                  <div className="mt-2 text-sm text-amber-700">
+                    <p>
+                      The deduction will be marked as inactive and will not
+                      apply to future payroll calculations. This action can be
+                      reversed by editing the deduction.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={del.isPending}
+              onClick={() => {
+                if (deleteConfirm) {
+                  del.mutate(deleteConfirm.id);
+                  setDeleteConfirm(null);
+                }
+              }}
+            >
+              {del.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Removing...
+                </>
+              ) : (
+                "Remove Deduction"
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -3148,5 +4471,486 @@ function ApprovalsTab({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// Payment Processor Tab Component
+function PaymentProcessorTab({
+  practiceId,
+  base,
+}: {
+  practiceId?: number;
+  base?: string;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const [selectedStubs, setSelectedStubs] = useState<number[]>([]);
+  const [paymentDialog, setPaymentDialog] = useState(false);
+  const [batchPaymentDialog, setBatchPaymentDialog] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
+  const [selectedBankAccount, setSelectedBankAccount] = useState("");
+  const [paymentNotes, setPaymentNotes] = useState("");
+
+  // Fetch pending payroll stubs
+  const { data: payrollStubs = [], isLoading: stubsLoading } = useQuery({
+    queryKey: [base, "stubs", "pending"],
+    enabled: !!base,
+    queryFn: async () => {
+      const response = await apiRequest("GET", `${base}/stubs`);
+      const data = await response.json();
+      return data.filter((stub: any) => stub.status === "pending");
+    },
+  });
+
+  // Fetch bank accounts
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: [base, "bank-accounts"],
+    enabled: !!base,
+    queryFn: async () => {
+      const response = await apiRequest("GET", `${base}/bank-accounts`);
+      return response.json();
+    },
+  });
+
+  if (stubsLoading) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-72" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center space-x-4">
+                  <Skeleton className="h-4 w-4" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment Processing</CardTitle>
+          <CardDescription>
+            Process payroll payments for employees
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3 mb-6">
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {payrollStubs.length}
+                  </div>
+                  <div className="text-sm text-gray-600">Pending Payments</div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {formatCurrency(
+                      payrollStubs.reduce(
+                        (sum: number, stub: any) =>
+                          sum + parseFloat(stub.netPay || "0"),
+                        0
+                      )
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-600">Total Amount</div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-600">
+                    {bankAccounts.length}
+                  </div>
+                  <div className="text-sm text-gray-600">Bank Accounts</div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="flex gap-2 mb-4">
+            <Button
+              onClick={() => setBatchPaymentDialog(true)}
+              disabled={selectedStubs.length === 0}
+              className="flex items-center gap-2"
+            >
+              <DollarSign className="h-4 w-4" />
+              Process Batch Payment ({selectedStubs.length})
+            </Button>
+          </div>
+
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={
+                      selectedStubs.length === payrollStubs.length &&
+                      payrollStubs.length > 0
+                    }
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedStubs(
+                          payrollStubs.map((stub: any) => stub.id)
+                        );
+                      } else {
+                        setSelectedStubs([]);
+                      }
+                    }}
+                  />
+                </TableHead>
+                <TableHead>Employee</TableHead>
+                <TableHead>Net Pay</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {payrollStubs.length > 0 ? (
+                payrollStubs.map((stub: any) => (
+                  <TableRow key={stub.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedStubs.includes(stub.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedStubs([...selectedStubs, stub.id]);
+                          } else {
+                            setSelectedStubs(
+                              selectedStubs.filter((id) => id !== stub.id)
+                            );
+                          }
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {stub.employeeName || stub.userName}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {formatCurrency(parseFloat(stub.netPay))}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          stub.status === "paid" ? "default" : "secondary"
+                        }
+                        className={
+                          stub.status === "paid"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }
+                      >
+                        {stub.status.charAt(0).toUpperCase() +
+                          stub.status.slice(1)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          // Individual payment processing would go here
+                          toast({
+                            title: "Feature Coming Soon",
+                            description:
+                              "Individual payment processing will be available soon.",
+                          });
+                        }}
+                      >
+                        Process Payment
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8">
+                    <div className="flex flex-col items-center space-y-2">
+                      <FileText className="h-8 w-8 text-gray-400" />
+                      <p className="text-gray-500">
+                        No pending payroll payments
+                      </p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Enhanced Generation Controls Component
+function GeneratePayslipsButton({
+  period,
+  onGenerate,
+  disabled,
+}: {
+  period: any;
+  onGenerate: (periodId: number, options: any) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
+  const [includeHourlyWithoutHours, setIncludeHourlyWithoutHours] =
+    useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
+  const { toast } = useToast();
+
+  // Get employees for this practice
+  const { data: employees } = useQuery({
+    queryKey: [`/api/practices/${period.practiceId}/payroll/rates`],
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/practices/${period.practiceId}/payroll/rates`
+      );
+      return res.json();
+    },
+    enabled: open,
+  });
+
+  // Get work hours for preview
+  const { data: workHours } = useQuery({
+    queryKey: [
+      `/api/practices/${period.practiceId}/payroll/work-hours`,
+      period.startDate,
+      period.endDate,
+    ],
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/practices/${period.practiceId}/payroll/work-hours?startDate=${period.startDate}&endDate=${period.endDate}`
+      );
+      return res.json();
+    },
+    enabled: open && previewMode,
+  });
+
+  const handleGenerate = () => {
+    const options = {
+      selectedEmployees:
+        selectedEmployees.length > 0 ? selectedEmployees : undefined,
+      includeHourlyWithoutHours,
+      previewMode,
+    };
+
+    if (previewMode) {
+      toast({
+        title: "Generation Preview",
+        description: `Would generate ${
+          selectedEmployees.length || "all eligible"
+        } payslips`,
+      });
+    } else {
+      onGenerate(period.id, options);
+      setOpen(false);
+    }
+  };
+
+  const employeeHoursMap =
+    workHours?.reduce((acc: any, wh: any) => {
+      acc[wh.userId] =
+        (acc[wh.userId] || 0) + parseFloat(wh.hoursWorked || "0");
+      return acc;
+    }, {}) || {};
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        Generate Pay Slips
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Generate Payslips</DialogTitle>
+            <DialogDescription>
+              Generate payslips for {period.name} (
+              {format(new Date(period.startDate), "MMM dd")} -{" "}
+              {format(new Date(period.endDate), "MMM dd, yyyy")})
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Employee Selection */}
+            <div>
+              <h4 className="font-medium mb-2">Employee Selection</h4>
+              <div className="border rounded-lg p-3 max-h-60 overflow-y-auto">
+                {employees?.map((emp: any) => {
+                  const hours = employeeHoursMap[emp.userId] || 0;
+                  const isHourly = emp.rateType === "hourly";
+                  const hasHours = hours > 0;
+
+                  return (
+                    <div
+                      key={emp.userId}
+                      className="flex items-center justify-between py-2"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedEmployees.includes(emp.userId)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedEmployees([
+                                ...selectedEmployees,
+                                emp.userId,
+                              ]);
+                            } else {
+                              setSelectedEmployees(
+                                selectedEmployees.filter(
+                                  (id) => id !== emp.userId
+                                )
+                              );
+                            }
+                          }}
+                        />
+                        <div>
+                          <div className="font-medium">
+                            {emp.userName || `Employee ${emp.userId}`}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {emp.rateType} - ${emp.rate}{" "}
+                            {emp.rateType === "hourly"
+                              ? "/hour"
+                              : `/${emp.rateType}`}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right text-sm">
+                        {isHourly && (
+                          <div
+                            className={
+                              hasHours ? "text-green-600" : "text-orange-600"
+                            }
+                          >
+                            {hours.toFixed(1)}h {!hasHours && "(No Hours)"}
+                          </div>
+                        )}
+                        {!isHourly && (
+                          <div className="text-blue-600">Salaried</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-2 flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setSelectedEmployees(
+                      employees?.map((e: any) => e.userId) || []
+                    )
+                  }
+                >
+                  Select All
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelectedEmployees([])}
+                >
+                  Clear All
+                </Button>
+              </div>
+            </div>
+
+            {/* Generation Options */}
+            <div>
+              <h4 className="font-medium mb-2">Generation Options</h4>
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="includeHourlyWithoutHours"
+                    checked={includeHourlyWithoutHours}
+                    onChange={(e) =>
+                      setIncludeHourlyWithoutHours(e.target.checked)
+                    }
+                  />
+                  <label
+                    htmlFor="includeHourlyWithoutHours"
+                    className="text-sm"
+                  >
+                    Include hourly employees with no tracked hours (0 pay)
+                  </label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="previewMode"
+                    checked={previewMode}
+                    onChange={(e) => setPreviewMode(e.target.checked)}
+                  />
+                  <label htmlFor="previewMode" className="text-sm">
+                    Preview mode (don't actually generate)
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div className="bg-muted p-3 rounded-lg">
+              <h4 className="font-medium mb-1">Generation Summary</h4>
+              <div className="text-sm text-muted-foreground">
+                <div>
+                  Selected Employees: {selectedEmployees.length || "All"}{" "}
+                  employee(s)
+                </div>
+                <div>
+                  Hourly w/o Hours:{" "}
+                  {includeHourlyWithoutHours ? "Included" : "Excluded"}
+                </div>
+                <div>
+                  Mode:{" "}
+                  {previewMode ? "Preview Only" : "Generate Actual Payslips"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleGenerate}>
+              {previewMode ? "Preview Generation" : "Generate Payslips"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -193,7 +193,8 @@ export async function getUserPractice(request: NextRequest): Promise<UserPractic
         email: userRecord.email,
         name: userRecord.name,
         role: 'CLIENT',
-        practiceId: userRecord.currentPracticeId || '',
+        // Clients should use their assigned practiceId first, fallback to currentPracticeId
+        practiceId: (userRecord as any).practiceId || (userRecord as any).currentPracticeId || '',
         // Populate a minimal roles array for compatibility with new RBAC
         // helpers that expect `user.roles`.
         // Permissions will be resolved elsewhere if dynamic role data exists.
@@ -217,7 +218,7 @@ export async function getUserPractice(request: NextRequest): Promise<UserPractic
         email: userRecord.email,
         name: userRecord.name,
         role: 'PRACTICE_ADMINISTRATOR',
-        practiceId: userRecord.currentPracticeId || '',
+        practiceId: (userRecord as any).practiceId || (userRecord as any).currentPracticeId || '',
         roles: [
           { 
             id: `legacy-PRACTICE_ADMINISTRATOR`, 
@@ -238,7 +239,7 @@ export async function getUserPractice(request: NextRequest): Promise<UserPractic
         email: userRecord.email,
         name: userRecord.name,
         role: 'VETERINARIAN',
-        practiceId: userRecord.currentPracticeId || '',
+        practiceId: (userRecord as any).practiceId || (userRecord as any).currentPracticeId || '',
         roles: [
           { 
             id: `legacy-VETERINARIAN`, 
@@ -259,7 +260,7 @@ export async function getUserPractice(request: NextRequest): Promise<UserPractic
         email: userRecord.email,
         name: userRecord.name,
         role: 'PRACTICE_MANAGER',
-        practiceId: userRecord.currentPracticeId || '',
+        practiceId: (userRecord as any).practiceId || (userRecord as any).currentPracticeId || '',
         roles: [
           { 
             id: `legacy-PRACTICE_MANAGER`, 
@@ -281,7 +282,7 @@ export async function getUserPractice(request: NextRequest): Promise<UserPractic
         name: userRecord.name,
         role: 'ADMINISTRATOR',
         accessiblePracticeIds: [], // Would need to query admin practices table
-        currentPracticeId: userRecord.currentPracticeId || '',
+        currentPracticeId: (userRecord as any).currentPracticeId || '',
         roles: [
           { 
             id: `legacy-ADMINISTRATOR`, 
@@ -303,7 +304,7 @@ export async function getUserPractice(request: NextRequest): Promise<UserPractic
         name: userRecord.name,
         role: 'SUPER_ADMIN',
         accessiblePracticeIds: [], // Would need to query admin practices table
-        currentPracticeId: userRecord.currentPracticeId || '',
+        currentPracticeId: (userRecord as any).currentPracticeId || '',
         roles: [
           { 
             id: `legacy-SUPER_ADMIN`, 

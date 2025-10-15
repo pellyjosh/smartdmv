@@ -67,7 +67,7 @@ export const billingApi = {
   // Get invoices
   getInvoices: async (status?: string): Promise<Invoice[]> => {
     const url = status ? `/api/billing/invoices?status=${status}` : '/api/billing/invoices';
-    const response = await fetch(url);
+  const response = await fetch(url, { credentials: 'include' });
     if (!response.ok) {
       throw new Error('Failed to fetch invoices');
     }
@@ -77,7 +77,7 @@ export const billingApi = {
   // Get payments
   getPayments: async (status?: string): Promise<Payment[]> => {
     const url = status ? `/api/billing/payments?status=${status}` : '/api/billing/payments';
-    const response = await fetch(url);
+  const response = await fetch(url, { credentials: 'include' });
     if (!response.ok) {
       throw new Error('Failed to fetch payments');
     }
@@ -86,7 +86,7 @@ export const billingApi = {
 
   // Get payment methods
   getPaymentMethods: async (): Promise<PaymentMethod[]> => {
-    const response = await fetch('/api/billing/payment-methods');
+  const response = await fetch('/api/billing/payment-methods', { credentials: 'include' });
     if (!response.ok) {
       throw new Error('Failed to fetch payment methods');
     }
@@ -98,6 +98,8 @@ export const billingApi = {
     invoiceId: number;
     amount: number;
     paymentMethod: string;
+    provider?: 'stripe' | 'paystack';
+    paymentIntentId?: string;
     cardDetails?: {
       cardNumber: string;
       expiryDate: string;
@@ -111,6 +113,7 @@ export const billingApi = {
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include',
       body: JSON.stringify(paymentData),
     });
     if (!response.ok) {
@@ -140,6 +143,7 @@ export const billingApi = {
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include',
       body: JSON.stringify(paymentMethodData),
     });
     if (!response.ok) {
@@ -153,6 +157,7 @@ export const billingApi = {
   deletePaymentMethod: async (paymentMethodId: number) => {
     const response = await fetch(`/api/billing/payment-methods?id=${paymentMethodId}`, {
       method: 'DELETE',
+      credentials: 'include',
     });
     if (!response.ok) {
       const error = await response.json();
@@ -168,6 +173,7 @@ export const billingApi = {
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include',
       body: JSON.stringify({ isDefault: true }),
     });
     if (!response.ok) {

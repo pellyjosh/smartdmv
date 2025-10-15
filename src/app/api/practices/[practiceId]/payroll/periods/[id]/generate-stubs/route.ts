@@ -10,6 +10,7 @@ import {
   deductionTypes,
   payrollDeductions 
 } from '@/db/schemas/financeSchema';
+import { currencies } from '@/db/schemas/currencySchema';
 import { users } from '@/db/schemas/usersSchema';
 import { and, eq } from 'drizzle-orm';
 
@@ -27,7 +28,29 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
     const [period] = await tenantDb.select().from(payPeriods).where(and(eq(payPeriods.id, periodId), eq(payPeriods.practiceId, practiceId)));
     if (!period) return NextResponse.json({ error: 'Pay period not found' }, { status: 404 });
 
-    // Fetch approved hours within range
+    // Get all employees with active pay rates for this practice
+    const allEmployeeRates = await tenantDb.select({
+      userId: payRates.userId,
+      rateType: payRates.rateType,
+      rate: payRates.rate,
+      effectiveDate: payRates.effectiveDate,
+      userName: users.name,
+      userEmail: users.email
+    })
+    .from(payRates)
+    .leftJoin(users, eq(users.id, payRates.userId))
+    .where(eq(payRates.practiceId, practiceId))
+    .orderBy(payRates.effectiveDate);
+
+    // Get unique employees and their latest rates
+    const employeeRatesMap = new Map<number, any>();
+    allEmployeeRates.forEach((rate: any) => {
+      if (rate.effectiveDate <= period.endDate) {
+        employeeRatesMap.set(rate.userId, rate);
+      }
+    });
+
+    // Fetch approved hours within range for hourly employees
     const hoursRows = await tenantDb.select({
       userId: workHours.userId,
       hoursWorked: workHours.hoursWorked,
@@ -71,13 +94,16 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
 
     const created: any[] = [];
     
-    for (const [, empData] of employeeHours) {
-      // Fetch latest rate for user before or on period end
-      const rateRows = await tenantDb.select().from(payRates)
-        .where(and(eq(payRates.userId, empData.userId), eq(payRates.practiceId, practiceId)))
-        .orderBy(payRates.effectiveDate);
-      
-      const latest = [...rateRows].reverse().find((r: any) => r.effectiveDate <= period.endDate);
+    // Process all employees with active pay rates
+    for (const [userId, rateInfo] of employeeRatesMap) {
+      const empData = employeeHours.get(userId) || { 
+        totalHours: 0, 
+        regularHours: 0, 
+        overtimeHours: 0, 
+        userId 
+      };
+      // Use the already fetched rate info
+      const latest = rateInfo;
       if (!latest) continue;
 
       // Calculate gross pay based on actual pay period duration
@@ -102,7 +128,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
       });
       
       if (latest.rateType === 'hourly') {
-        grossPay = (empData.regularHours * rate) + (empData.overtimeHours * rate * 1.5);
+        // For hourly employees, require approved hours OR allow manual override
+        if (empData.totalHours > 0) {
+          grossPay = (empData.regularHours * rate) + (empData.overtimeHours * rate * 1.5);
+        } else {
+          // Hourly employee with no tracked hours - calculate 0 pay or skip
+          console.log(`Hourly employee ${empData.userId} (${latest.userName}) has no approved hours for this period`);
+          grossPay = 0; // You might want to skip these employees instead
+        }
       } else if (latest.rateType === 'daily') {
         // Calculate based on working days in the period (assuming 5 days per week)
         const workingDays = Math.floor(periodWeeks * 5);
@@ -129,7 +162,18 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
       const netPay = grossPay - totalDeductions;
 
       // Create payroll record
-      const [stub] = await tenantDb.insert(payroll).values({
+        // Determine practice default currency
+        const practiceRec = await tenantDb.query.practices.findFirst({ where: (p: any, { eq }: any) => eq(p.id, practiceId) });
+        const defaultCurrencyId = (practiceRec as any)?.defaultCurrencyId || undefined;
+
+        // Resolve currency code for legacy `currency` text field
+        let currencyText = 'USD';
+        if (defaultCurrencyId) {
+          const currencyRow = await tenantDb.query.currencies.findFirst({ where: (c: any, { eq }: any) => eq(c.id, defaultCurrencyId) }).catch(() => null);
+          if (currencyRow && (currencyRow as any).code) currencyText = (currencyRow as any).code;
+        }
+
+        const [stub] = await tenantDb.insert(payroll).values({
         practiceId,
         employeeId: empData.userId,
         payPeriodId: period.id,
@@ -138,7 +182,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
         payDate: period.payDate,
         grossAmount: grossPay.toFixed(2),
         netAmount: netPay.toFixed(2),
-        currency: 'USD',
+    currency: currencyText,
+          currencyId: defaultCurrencyId,
         deductions: JSON.stringify(deductionsResult.breakdown),
         taxes: JSON.stringify(deductionsResult.taxes),
         status: 'pending'

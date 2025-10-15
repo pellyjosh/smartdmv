@@ -142,6 +142,10 @@ export async function POST(request: NextRequest) {
     const [invoiceCountResult] = await tenantDb.select({ count: count() }).from(invoices).where(eq(invoices.practiceId, user.practiceId!));
     const invoiceNumber = `INV-${new Date().getFullYear()}-${String((invoiceCountResult?.count || 0) + 1).padStart(3, '0')}`;
 
+    // Determine practice default currency
+    const practice = await tenantDb.query.practices.findFirst({ where: (p: any, { eq }: any) => eq(p.id, user.practiceId) });
+    const defaultCurrencyId = (practice as any)?.defaultCurrencyId || undefined;
+
     // Create invoice
     const [newInvoice] = await tenantDb.insert(invoices).values({
       practiceId: user.practiceId!,
@@ -150,6 +154,7 @@ export async function POST(request: NextRequest) {
       appointmentId: invoiceInfo.appointmentId as number || null,
       description: invoiceInfo.description as string || null,
       invoiceNumber,
+      currencyId: defaultCurrencyId,
       subtotal: subtotal.toFixed(2),
       taxAmount: taxAmount.toFixed(2),
       totalAmount: totalAmount.toFixed(2),

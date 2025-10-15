@@ -72,11 +72,16 @@ export async function GET(req: NextRequest, context: { params: Promise<{ practic
     const mapped = rows.map((r: RefundRow) => {
       const rawStatus = Array.isArray(r.status) ? r.status[0] : r.status;
 
-      return {
-        id: r.id,
-        paymentId: r.externalReference || `PAY-${r.id}`,
+    return {
+      id: r.id,
+      // Prefer any stored external/payment identifier. Some legacy rows may have
+      // different field names depending on how they were inserted; try multiple
+      // possibilities before falling back to a generated PAY-<id> value.
+      paymentId:
+        (r as any).externalReference || (r as any).paymentId || `PAY-${r.id}`,
         amount: r.amount,
         currency: r.currency,
+        currencyId: (r as any).currencyId || null,
         gatewayType: 'STRIPE', // placeholder until gateway integration
         status: String(rawStatus).toUpperCase(),
         requestedAt: r.issuedAt instanceof Date ? r.issuedAt.toISOString() :
@@ -117,10 +122,16 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
     const tenantDb = await getCurrentTenantDb();
     // (Optional) Validate client exists in this practice
     // const clientExists = await tenantDb.select({ id: users.id }).from(users).where(and(eq(users.id, Number(clientId)), eq(users.practiceId, practiceId)));
+  // Determine practice default currency
+  const practice = await tenantDb.query.practices.findFirst({ where: (p: any, { eq }: any) => eq(p.id, practiceId) });
+  const defaultCurrencyId = (practice as any)?.defaultCurrencyId;
+  if (!defaultCurrencyId) return NextResponse.json({ error: 'Practice has no configured default currency' }, { status: 400 });
+
     const [created] = await tenantDb.insert(refunds).values({
       practiceId,
       amount: amount.toString(),
-      currency,
+      currency: undefined, // use FK currencyId as single source
+      currencyId: defaultCurrencyId,
       reason: reason || 'Refund requested',
       notes: notes || null,
       externalReference: paymentId,

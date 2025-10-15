@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { UserProvider } from "@/context/UserContext";
 import { OwnerProvider } from "@/context/OwnerContext";
 import { TenantProvider, useTenant } from "@/context/TenantContext";
+import { PracticeProvider } from "@/hooks/use-practice";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { NotificationWrapper } from "@/components/notifications/notification-wrapper";
 import { MobileBlocker } from "@/components/ui/mobile-blocker";
@@ -95,19 +96,21 @@ export default function ConditionalProviders({
     <TenantProvider>
       <TenantErrorBoundary>
         <UserProvider>
-          <ThemeProvider>
-            <NotificationWrapper>
-              <MobileBlocker allowTablets={false}>
-                <ClientOnlyWrapper>
-                  <GlobalLoader />
-                  {children}
-                </ClientOnlyWrapper>
-              </MobileBlocker>
-            </NotificationWrapper>
-            <Toaster />
-            <NetworkStatus />
-            <ThemeSwitcherWidget />
-          </ThemeProvider>
+          <PracticeProvider>
+            <ThemeProvider>
+              <NotificationWrapper>
+                <MobileBlocker allowTablets={false}>
+                  <ClientOnlyWrapper>
+                    <GlobalLoader />
+                    {children}
+                  </ClientOnlyWrapper>
+                </MobileBlocker>
+              </NotificationWrapper>
+              <Toaster />
+              <NetworkStatus />
+              <ThemeSwitcherWidget />
+            </ThemeProvider>
+          </PracticeProvider>
         </UserProvider>
       </TenantErrorBoundary>
     </TenantProvider>

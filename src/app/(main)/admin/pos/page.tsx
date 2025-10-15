@@ -1,64 +1,81 @@
-'use client';
+"use client";
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useFeatureAccess } from "@/hooks/use-feature-access";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  PlusCircle, 
-  Search, 
-  ShoppingCart, 
-  CreditCard, 
-  DollarSign, 
-  Check, 
-  Trash2, 
-  Printer, 
-  Mail, 
+  PlusCircle,
+  Search,
+  ShoppingCart,
+  CreditCard,
+  DollarSign,
+  Check,
+  Trash2,
+  Printer,
+  Mail,
   BarChart4,
   Tag,
   User,
-  Package
+  Package,
 } from "lucide-react";
 import { PawPrint } from "@/components/icons/custom-icons";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { 
-  Sheet, 
-  SheetContent, 
-  SheetDescription, 
-  SheetHeader, 
-  SheetTitle, 
-  SheetTrigger, 
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
   SheetFooter,
-  SheetClose
+  SheetClose,
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogFooter, 
-  DialogHeader, 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-  DialogTrigger 
+  DialogTrigger,
 } from "@/components/ui/dialog";
-import { MarketplaceFeatureMessage, MarketplaceFeatureContainer } from "@/components/features/marketplace-feature-message";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  MarketplaceFeatureMessage,
+  MarketplaceFeatureContainer,
+} from "@/components/features/marketplace-feature-message";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePractice } from "@/hooks/use-practice";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 
 // Define types for POS entities
 interface POSTransaction {
@@ -187,10 +204,10 @@ interface TransactionData {
 
 // Payment methods available in the system
 const PAYMENT_METHODS = [
-  { id: 'cash', name: 'Cash', icon: DollarSign },
-  { id: 'credit_card', name: 'Credit Card', icon: CreditCard },
-  { id: 'debit_card', name: 'Debit Card', icon: CreditCard },
-  { id: 'check', name: 'Check', icon: Check },
+  { id: "cash", name: "Cash", icon: DollarSign },
+  { id: "credit_card", name: "Credit Card", icon: CreditCard },
+  { id: "debit_card", name: "Debit Card", icon: CreditCard },
+  { id: "check", name: "Check", icon: Check },
 ];
 
 export default function POSPage() {
@@ -198,11 +215,12 @@ export default function POSPage() {
   const { practice } = usePractice();
   const queryClient = useQueryClient();
   const featureAccess = useFeatureAccess();
-  const availableFeatures = 'availableFeatures' in featureAccess ? featureAccess.availableFeatures : [];
-  
+  const availableFeatures =
+    "availableFeatures" in featureAccess ? featureAccess.availableFeatures : [];
+
   // Check if user has access to point of sale feature
-  const hasPointOfSaleAccess = availableFeatures?.includes('point_of_sale');
-  
+  const hasPointOfSaleAccess = availableFeatures?.includes("point_of_sale");
+
   // State for cart management
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -215,66 +233,72 @@ export default function POSPage() {
   const [customProductSku, setCustomProductSku] = useState("");
   const [customProductTaxRate, setCustomProductTaxRate] = useState("8.5");
   const [isPaymentSheetOpen, setIsPaymentSheetOpen] = useState(false);
-  
+
   // Cart calculations
   const subtotal = cart.reduce((sum, item) => sum + item.subtotal, 0);
   const taxTotal = cart.reduce((sum, item) => sum + item.taxAmount, 0);
   const total = subtotal + taxTotal;
-  
+
   // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', { 
-      style: 'currency', 
-      currency: 'USD' 
-    }).format(amount);
-  };
-  
+  const { format: formatCurrency } = useCurrencyFormatter();
+
   // Fetch inventory items
-  const { data: inventoryItems = [], isLoading: inventoryLoading } = useQuery<InventoryItem[]>({
-    queryKey: ['/api/inventory'],
+  const { data: inventoryItems = [], isLoading: inventoryLoading } = useQuery<
+    InventoryItem[]
+  >({
+    queryKey: ["/api/inventory"],
     queryFn: async () => {
-      const res = await apiRequest('GET', '/api/inventory');
+      const res = await apiRequest("GET", "/api/inventory");
       return res.json();
     },
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
-  
+
   // Fetch clients for search
   const { data: clients = [], isLoading: clientsLoading } = useQuery<Client[]>({
-    queryKey: ['/api/users/clients'],
+    queryKey: ["/api/users/clients"],
     queryFn: async () => {
-      const res = await apiRequest('GET', '/api/users/clients');
+      const res = await apiRequest("GET", "/api/users/clients");
       return res.json();
     },
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
-  
+
   // Fetch pets for the selected client
   const { data: pets = [], isLoading: petsLoading } = useQuery<Pet[]>({
-    queryKey: ['/api/pets', selectedClient?.id],
+    queryKey: ["/api/pets", selectedClient?.id],
     queryFn: async () => {
       if (!selectedClient) return [] as Pet[];
-      const res = await apiRequest('GET', `/api/pets?clientId=${selectedClient.id}`);
+      const res = await apiRequest(
+        "GET",
+        `/api/pets?clientId=${selectedClient.id}`
+      );
       return res.json();
     },
     enabled: !!selectedClient,
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
-  
+
   // Fetch transactions for history tab
-  const { data: transactions = [], isLoading: transactionsLoading } = useQuery<POSTransaction[]>({
-    queryKey: ['/api/pos/transactions'],
+  const { data: transactions = [], isLoading: transactionsLoading } = useQuery<
+    POSTransaction[]
+  >({
+    queryKey: ["/api/pos/transactions"],
     queryFn: async () => {
-      const res = await apiRequest('GET', '/api/pos/transactions');
+      const res = await apiRequest("GET", "/api/pos/transactions");
       return res.json();
     },
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
-  
+
   // Create transaction mutation
   const createTransactionMutation = useMutation({
     mutationFn: async (transactionData: TransactionData) => {
-      const res = await apiRequest("POST", "/api/pos/transactions", transactionData);
+      const res = await apiRequest(
+        "POST",
+        "/api/pos/transactions",
+        transactionData
+      );
       return await res.json();
     },
     onSuccess: (data) => {
@@ -283,21 +307,21 @@ export default function POSPage() {
         description: `Transaction #${data.transactionNumber} has been created.`,
         variant: "default",
       });
-      
+
       // Add items to transaction
       addItemsToTransaction(data.transaction.id);
-      
+
       // Reset the cart
       setCart([]);
       setSelectedClient(null);
       setSelectedPet(null);
       setNotes("");
-      
+
       // Close payment sheet
       setIsPaymentSheetOpen(false);
-      
+
       // Invalidate related queries
-      queryClient.invalidateQueries({ queryKey: ['/api/pos/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pos/transactions"] });
     },
     onError: (error: Error) => {
       toast({
@@ -305,13 +329,19 @@ export default function POSPage() {
         description: error.message,
         variant: "destructive",
       });
-    }
+    },
   });
-  
+
   // Create transaction items mutation
   const addItemsToTransactionMutation = useMutation({
-    mutationFn: async ({ transactionId, items }: { transactionId: number, items: CartItem[] }) => {
-      const promises = items.map(item => {
+    mutationFn: async ({
+      transactionId,
+      items,
+    }: {
+      transactionId: number;
+      items: CartItem[];
+    }) => {
+      const promises = items.map((item) => {
         return apiRequest("POST", "/api/pos/transaction-items", {
           transactionId,
           inventoryId: item.inventoryId,
@@ -324,10 +354,10 @@ export default function POSPage() {
           subtotal: item.subtotal.toString(),
           total: item.total.toString(),
           isCustomProduct: item.isCustomProduct,
-          notes: item.notes
+          notes: item.notes,
         });
       });
-      
+
       return Promise.all(promises);
     },
     onSuccess: () => {
@@ -340,17 +370,25 @@ export default function POSPage() {
         description: error.message,
         variant: "destructive",
       });
-    }
+    },
   });
-  
+
   // Create payment mutation
   const createPaymentMutation = useMutation({
-    mutationFn: async ({ transactionId, paymentMethod, amount }: { transactionId: number, paymentMethod: string, amount: number }) => {
+    mutationFn: async ({
+      transactionId,
+      paymentMethod,
+      amount,
+    }: {
+      transactionId: number;
+      paymentMethod: string;
+      amount: number;
+    }) => {
       const res = await apiRequest("POST", "/api/pos/payments", {
         transactionId,
         paymentMethod,
         amount: amount.toString(),
-        referenceNumber: `REF-${Date.now()}`
+        referenceNumber: `REF-${Date.now()}`,
       });
       return await res.json();
     },
@@ -367,15 +405,16 @@ export default function POSPage() {
         description: error.message,
         variant: "destructive",
       });
-    }
+    },
   });
-  
+
   // Helper function to add a product to the cart
   const addToCart = (item: InventoryItem) => {
-    const existingItemIndex = cart.findIndex(cartItem => 
-      cartItem.inventoryId === item.id && !cartItem.isCustomProduct
+    const existingItemIndex = cart.findIndex(
+      (cartItem) =>
+        cartItem.inventoryId === item.id && !cartItem.isCustomProduct
     );
-    
+
     if (existingItemIndex >= 0) {
       // If item already exists in cart, increase quantity
       const updatedCart = [...cart];
@@ -383,15 +422,15 @@ export default function POSPage() {
       const newQuantity = existingItem.quantity + 1;
       const newSubtotal = newQuantity * existingItem.unitPrice;
       const newTaxAmount = newSubtotal * (existingItem.taxRate / 100);
-      
+
       updatedCart[existingItemIndex] = {
         ...existingItem,
         quantity: newQuantity,
         subtotal: newSubtotal,
         taxAmount: newTaxAmount,
-        total: newSubtotal + newTaxAmount
+        total: newSubtotal + newTaxAmount,
       };
-      
+
       setCart(updatedCart);
     } else {
       // Add new item to cart
@@ -399,29 +438,32 @@ export default function POSPage() {
       const taxRate = parseFloat(item.taxRate || "0");
       const subtotal = unitPrice;
       const taxAmount = subtotal * (taxRate / 100);
-      
-      setCart([...cart, {
-        id: null,
-        inventoryId: item.id,
-        productName: item.name,
-        productSku: item.sku,
-        quantity: 1,
-        unitPrice,
-        taxRate,
-        taxAmount,
-        subtotal,
-        total: subtotal + taxAmount,
-        isCustomProduct: false,
-        notes: null
-      }]);
+
+      setCart([
+        ...cart,
+        {
+          id: null,
+          inventoryId: item.id,
+          productName: item.name,
+          productSku: item.sku,
+          quantity: 1,
+          unitPrice,
+          taxRate,
+          taxAmount,
+          subtotal,
+          total: subtotal + taxAmount,
+          isCustomProduct: false,
+          notes: null,
+        },
+      ]);
     }
-    
+
     toast({
       title: "Added to cart",
       description: `${item.name} has been added to the cart.`,
     });
   };
-  
+
   // Add custom product to cart
   const addCustomProductToCart = () => {
     if (!customProductName || !customProductPrice) {
@@ -432,66 +474,69 @@ export default function POSPage() {
       });
       return;
     }
-    
+
     const unitPrice = parseFloat(customProductPrice);
     const taxRate = parseFloat(customProductTaxRate);
     const subtotal = unitPrice;
     const taxAmount = subtotal * (taxRate / 100);
-    
-    setCart([...cart, {
-      id: null,
-      inventoryId: null,
-      productName: customProductName,
-      productSku: customProductSku || `CUSTOM-${Date.now()}`,
-      quantity: 1,
-      unitPrice,
-      taxRate,
-      taxAmount,
-      subtotal,
-      total: subtotal + taxAmount,
-      isCustomProduct: true,
-      notes: "Custom product"
-    }]);
-    
+
+    setCart([
+      ...cart,
+      {
+        id: null,
+        inventoryId: null,
+        productName: customProductName,
+        productSku: customProductSku || `CUSTOM-${Date.now()}`,
+        quantity: 1,
+        unitPrice,
+        taxRate,
+        taxAmount,
+        subtotal,
+        total: subtotal + taxAmount,
+        isCustomProduct: true,
+        notes: "Custom product",
+      },
+    ]);
+
     // Reset custom product fields
     setCustomProductName("");
     setCustomProductPrice("");
     setCustomProductSku("");
     setCustomProductTaxRate("8.5");
-    
+
     toast({
       title: "Custom product added",
       description: `${customProductName} has been added to the cart.`,
     });
   };
-  
+
   // Remove item from cart
   const removeFromCart = (index: number) => {
     const updatedCart = [...cart];
     updatedCart.splice(index, 1);
     setCart(updatedCart);
   };
-  
+
   // Update item quantity in cart
   const updateCartItemQuantity = (index: number, newQuantity: number) => {
     if (newQuantity < 1) return; // Don't allow quantity less than 1
-    
+
     const updatedCart = [...cart];
     const item = updatedCart[index];
     const newSubtotal = newQuantity * item.unitPrice;
     const newTaxAmount = newSubtotal * (item.taxRate / 100);
-    
+
     updatedCart[index] = {
       ...item,
       quantity: newQuantity,
       subtotal: newSubtotal,
       taxAmount: newTaxAmount,
-      total: newSubtotal + newTaxAmount
+      total: newSubtotal + newTaxAmount,
     };
-    
+
     setCart(updatedCart);
   };
-  
+
   // Clear the entire cart
   const clearCart = () => {
     setCart([]);
@@ -499,7 +544,7 @@ export default function POSPage() {
     setSelectedPet(null);
     setNotes("");
   };
-  
+
   // Process the transaction
   const processTransaction = () => {
     if (cart.length === 0) {
@@ -510,10 +555,10 @@ export default function POSPage() {
       });
       return;
     }
-    
+
     setIsPaymentSheetOpen(true);
   };
-  
+
   // Complete the transaction
   const completeTransaction = () => {
     if (!practice) {
@@ -524,7 +569,7 @@ export default function POSPage() {
       });
       return;
     }
-    
+
     const transactionData: TransactionData = {
       practiceId: practice.id,
       clientId: selectedClient?.id || null,
@@ -535,48 +580,53 @@ export default function POSPage() {
       taxAmount: taxTotal,
       discountAmount: 0,
       totalAmount: total,
-      notes: notes || null
+      notes: notes || null,
     };
-    
+
     createTransactionMutation.mutate(transactionData);
   };
-  
+
   // Add items to a created transaction
   const addItemsToTransaction = (transactionId: number) => {
-    addItemsToTransactionMutation.mutate({ 
-      transactionId, 
-      items: cart 
+    addItemsToTransactionMutation.mutate({
+      transactionId,
+      items: cart,
     });
   };
-  
+
   // Create payment for a transaction
   const createPayment = () => {
     if (!createTransactionMutation.data) return;
-    
+
     const transactionId = createTransactionMutation.data.transaction.id;
-    
+
     createPaymentMutation.mutate({
       transactionId,
       paymentMethod,
-      amount: total
+      amount: total,
     });
   };
-  
+
   // Filter inventory items based on search query
-  const filteredInventoryItems = searchQuery 
-    ? inventoryItems.filter((item: InventoryItem) => 
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.sku && item.sku.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredInventoryItems = searchQuery
+    ? inventoryItems.filter(
+        (item: InventoryItem) =>
+          item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (item.sku &&
+            item.sku.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.description &&
+            item.description.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     : inventoryItems;
-  
+
   // Filter clients based on search query
   const filteredClients = searchQuery
-    ? clients.filter((client: Client) =>
-        client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (client.email && client.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (client.phone && client.phone.includes(searchQuery))
+    ? clients.filter(
+        (client: Client) =>
+          client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (client.email &&
+            client.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (client.phone && client.phone.includes(searchQuery))
       )
     : clients;
 
@@ -587,23 +637,27 @@ export default function POSPage() {
       <div className="container mx-auto py-6">
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Point of Sale</h1>
-          <p className="text-gray-500">Manage sales, process payments, and track inventory</p>
+          <p className="text-gray-500">
+            Manage sales, process payments, and track inventory
+          </p>
         </div>
-        
+
         <Tabs defaultValue="new" className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-8">
             <TabsTrigger value="new">New Sale</TabsTrigger>
             <TabsTrigger value="history">Transaction History</TabsTrigger>
             <TabsTrigger value="reports">Sales Reports</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="new" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="md:col-span-2 space-y-6">
                 <Card>
                   <CardHeader>
                     <CardTitle>Product Search</CardTitle>
-                    <CardDescription>Search for products to add to the cart</CardDescription>
+                    <CardDescription>
+                      Search for products to add to the cart
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center space-x-2">
@@ -620,17 +674,30 @@ export default function POSPage() {
                         Categories
                       </Button>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                       {/* Sample product cards */}
                       {[1, 2, 3, 4, 5, 6].map((item) => (
-                        <Card key={item} className="cursor-pointer hover:bg-gray-50">
+                        <Card
+                          key={item}
+                          className="cursor-pointer hover:bg-gray-50"
+                        >
                           <CardContent className="p-4">
-                            <div className="text-sm font-medium">Sample Product {item}</div>
-                            <div className="text-sm text-gray-500">SKU: PRD-{item}</div>
+                            <div className="text-sm font-medium">
+                              Sample Product {item}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              SKU: PRD-{item}
+                            </div>
                             <div className="flex justify-between items-center mt-2">
-                              <div className="font-semibold">${(19.99 * item).toFixed(2)}</div>
-                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                              <div className="font-semibold">
+                                ${(19.99 * item).toFixed(2)}
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                              >
                                 <PlusCircle className="h-4 w-4" />
                               </Button>
                             </div>
@@ -640,11 +707,13 @@ export default function POSPage() {
                     </div>
                   </CardContent>
                 </Card>
-                
+
                 <Card>
                   <CardHeader>
                     <CardTitle>Client & Patient</CardTitle>
-                    <CardDescription>Attach this sale to a client and patient</CardDescription>
+                    <CardDescription>
+                      Attach this sale to a client and patient
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="flex flex-col md:flex-row gap-4">
@@ -678,7 +747,7 @@ export default function POSPage() {
                   </CardContent>
                 </Card>
               </div>
-              
+
               <div className="space-y-6">
                 <Card>
                   <CardHeader>
@@ -687,14 +756,18 @@ export default function POSPage() {
                         <ShoppingCart className="h-5 w-5" />
                         <span>Cart</span>
                       </CardTitle>
-                      <Badge variant="outline" className="ml-2 font-normal">0 items</Badge>
+                      <Badge variant="outline" className="ml-2 font-normal">
+                        0 items
+                      </Badge>
                     </div>
                   </CardHeader>
                   <CardContent>
                     <div className="min-h-[200px] flex items-center justify-center border border-dashed rounded-md p-8">
                       <div className="text-center">
                         <ShoppingCart className="mx-auto h-8 w-8 text-gray-400" />
-                        <h3 className="mt-2 text-sm font-medium text-gray-900">No items in cart</h3>
+                        <h3 className="mt-2 text-sm font-medium text-gray-900">
+                          No items in cart
+                        </h3>
                         <p className="mt-1 text-sm text-gray-500">
                           Start by adding products from the list on the left
                         </p>
@@ -720,7 +793,7 @@ export default function POSPage() {
                     </Button>
                   </CardFooter>
                 </Card>
-                
+
                 <Card>
                   <CardHeader>
                     <CardTitle>Quick Actions</CardTitle>
@@ -747,12 +820,14 @@ export default function POSPage() {
               </div>
             </div>
           </TabsContent>
-          
+
           <TabsContent value="history">
             <Card>
               <CardHeader>
                 <CardTitle>Recent Transactions</CardTitle>
-                <CardDescription>View and manage your recent sales</CardDescription>
+                <CardDescription>
+                  View and manage your recent sales
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -770,21 +845,36 @@ export default function POSPage() {
                   <TableBody>
                     {[1, 2, 3].map((i) => (
                       <TableRow key={i}>
-                        <TableCell className="font-medium">TX-{1000 + i}</TableCell>
+                        <TableCell className="font-medium">
+                          TX-{1000 + i}
+                        </TableCell>
                         <TableCell>{new Date().toLocaleDateString()}</TableCell>
                         <TableCell>Client {i}</TableCell>
                         <TableCell>{i + 1}</TableCell>
-                        <TableCell className="text-right">${(49.99 * i).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">
+                          ${(49.99 * i).toFixed(2)}
+                        </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          <Badge
+                            variant="outline"
+                            className="bg-green-50 text-green-700 border-green-200"
+                          >
                             Completed
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                          >
                             <Printer className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                          >
                             <Mail className="h-4 w-4" />
                           </Button>
                         </TableCell>
@@ -795,20 +885,25 @@ export default function POSPage() {
               </CardContent>
             </Card>
           </TabsContent>
-          
+
           <TabsContent value="reports">
             <Card>
               <CardHeader>
                 <CardTitle>Sales Reports</CardTitle>
-                <CardDescription>Analyze your sales performance</CardDescription>
+                <CardDescription>
+                  Analyze your sales performance
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-[300px] flex items-center justify-center border border-dashed rounded-md">
                   <div className="text-center p-6">
                     <BarChart4 className="mx-auto h-10 w-10 text-gray-400" />
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">Sales Performance</h3>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">
+                      Sales Performance
+                    </h3>
                     <p className="mt-1 text-sm text-gray-500">
-                      Sales reporting and analytics would appear here for paid subscribers
+                      Sales reporting and analytics would appear here for paid
+                      subscribers
                     </p>
                   </div>
                 </div>
@@ -818,7 +913,7 @@ export default function POSPage() {
         </Tabs>
       </div>
     );
-    
+
     return (
       <MarketplaceFeatureContainer
         featureName="Point of Sale"
@@ -830,29 +925,33 @@ export default function POSPage() {
       </MarketplaceFeatureContainer>
     );
   }
-  
+
   return (
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Point of Sale</h1>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/pos/transactions'] })}
+            onClick={() =>
+              queryClient.invalidateQueries({
+                queryKey: ["/api/pos/transactions"],
+              })
+            }
           >
             <BarChart4 className="h-4 w-4 mr-2" />
             Refresh Transactions
           </Button>
         </div>
       </div>
-      
+
       <Tabs defaultValue="pos" className="w-full">
         <TabsList className="grid w-full md:w-[400px] grid-cols-2">
           <TabsTrigger value="pos">POS Terminal</TabsTrigger>
           <TabsTrigger value="history">Transaction History</TabsTrigger>
         </TabsList>
-        
+
         {/* POS Terminal Tab */}
         <TabsContent value="pos" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -863,31 +962,32 @@ export default function POSPage() {
                   <CardTitle className="flex justify-between items-center">
                     <span>Shopping Cart</span>
                     {cart.length > 0 && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={clearCart}
-                      >
+                      <Button variant="outline" size="sm" onClick={clearCart}>
                         <Trash2 className="h-4 w-4 mr-2" />
                         Clear
                       </Button>
                     )}
                   </CardTitle>
                   <CardDescription>
-                    {cart.length === 0 ? (
-                      "Your cart is empty"
-                    ) : (
-                      `${cart.length} item${cart.length > 1 ? 's' : ''} in cart`
-                    )}
+                    {cart.length === 0
+                      ? "Your cart is empty"
+                      : `${cart.length} item${
+                          cart.length > 1 ? "s" : ""
+                        } in cart`}
                   </CardDescription>
-                  
+
                   {/* Client and Pet Selection */}
                   <div className="mt-4 space-y-2">
                     <Sheet>
                       <SheetTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start">
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start"
+                        >
                           <User className="h-4 w-4 mr-2" />
-                          {selectedClient ? selectedClient.name : "Select Client"}
+                          {selectedClient
+                            ? selectedClient.name
+                            : "Select Client"}
                         </Button>
                       </SheetTrigger>
                       <SheetContent side="right">
@@ -907,9 +1007,13 @@ export default function POSPage() {
                           <ScrollArea className="h-[60vh]">
                             <div className="space-y-2">
                               {clientsLoading ? (
-                                <p className="text-center text-muted-foreground">Loading clients...</p>
+                                <p className="text-center text-muted-foreground">
+                                  Loading clients...
+                                </p>
                               ) : filteredClients.length === 0 ? (
-                                <p className="text-center text-muted-foreground">No clients found</p>
+                                <p className="text-center text-muted-foreground">
+                                  No clients found
+                                </p>
                               ) : (
                                 filteredClients.map((client: Client) => (
                                   <SheetClose key={client.id} asChild>
@@ -924,12 +1028,18 @@ export default function POSPage() {
                                     >
                                       <div className="flex items-center">
                                         <Avatar className="h-6 w-6 mr-2">
-                                          <AvatarFallback>{client.name.charAt(0)}</AvatarFallback>
+                                          <AvatarFallback>
+                                            {client.name.charAt(0)}
+                                          </AvatarFallback>
                                         </Avatar>
                                         <div className="text-left">
-                                          <p className="text-sm font-medium">{client.name}</p>
+                                          <p className="text-sm font-medium">
+                                            {client.name}
+                                          </p>
                                           <p className="text-xs text-muted-foreground">
-                                            {client.email || client.phone || "No contact info"}
+                                            {client.email ||
+                                              client.phone ||
+                                              "No contact info"}
                                           </p>
                                         </div>
                                       </div>
@@ -945,13 +1055,18 @@ export default function POSPage() {
                         </div>
                       </SheetContent>
                     </Sheet>
-                    
+
                     {selectedClient && (
-            <Select
-                        value={selectedPet ? selectedPet.id.toString() : 'NONE'}
+                      <Select
+                        value={selectedPet ? selectedPet.id.toString() : "NONE"}
                         onValueChange={(value) => {
-                          if (value === 'NONE') { setSelectedPet(null); return; }
-              const pet = (Array.isArray(pets) ? pets : []).find((p: Pet) => p.id.toString() === value);
+                          if (value === "NONE") {
+                            setSelectedPet(null);
+                            return;
+                          }
+                          const pet = (Array.isArray(pets) ? pets : []).find(
+                            (p: Pet) => p.id.toString() === value
+                          );
                           setSelectedPet(pet || null);
                         }}
                       >
@@ -964,40 +1079,56 @@ export default function POSPage() {
                         <SelectContent>
                           <SelectItem value="NONE">No pet selected</SelectItem>
                           {petsLoading ? (
-                            <SelectItem value="LOADING" disabled>Loading pets...</SelectItem>
-                          ) : (!Array.isArray(pets) || pets.length === 0) ? (
-                            <SelectItem value="EMPTY" disabled>No pets found</SelectItem>
+                            <SelectItem value="LOADING" disabled>
+                              Loading pets...
+                            </SelectItem>
+                          ) : !Array.isArray(pets) || pets.length === 0 ? (
+                            <SelectItem value="EMPTY" disabled>
+                              No pets found
+                            </SelectItem>
                           ) : (
-                            (Array.isArray(pets) ? pets : []).map((pet: Pet) => (
-                              <SelectItem key={pet.id} value={pet.id.toString()}>
-                                {pet.name} ({pet.species})
-                              </SelectItem>
-                            ))
+                            (Array.isArray(pets) ? pets : []).map(
+                              (pet: Pet) => (
+                                <SelectItem
+                                  key={pet.id}
+                                  value={pet.id.toString()}
+                                >
+                                  {pet.name} ({pet.species})
+                                </SelectItem>
+                              )
+                            )
                           )}
                         </SelectContent>
                       </Select>
                     )}
                   </div>
                 </CardHeader>
-                
+
                 <CardContent>
                   {cart.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
                       <ShoppingCart className="h-12 w-12 mb-2" />
                       <p>Add products to your cart</p>
-                      <p className="text-sm">Use the product catalog or create a custom item</p>
+                      <p className="text-sm">
+                        Use the product catalog or create a custom item
+                      </p>
                     </div>
                   ) : (
                     <ScrollArea className="h-[300px]">
                       <div className="space-y-4">
                         {cart.map((item, index) => (
-                          <div key={index} className="flex justify-between items-start border-b pb-2">
+                          <div
+                            key={index}
+                            className="flex justify-between items-start border-b pb-2"
+                          >
                             <div className="flex-1">
                               <div className="flex justify-between">
-                                <p className="font-medium">{item.productName}</p>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
+                                <p className="font-medium">
+                                  {item.productName}
+                                </p>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   className="h-6 w-6 p-0"
                                   onClick={() => removeFromCart(index)}
                                 >
@@ -1005,14 +1136,22 @@ export default function POSPage() {
                                 </Button>
                               </div>
                               <div className="text-sm text-muted-foreground">
-                                {item.productSku} {item.isCustomProduct && <Badge variant="outline">Custom</Badge>}
+                                {item.productSku}{" "}
+                                {item.isCustomProduct && (
+                                  <Badge variant="outline">Custom</Badge>
+                                )}
                               </div>
                               <div className="flex items-center mt-1">
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   className="h-6 w-6 p-0"
-                                  onClick={() => updateCartItemQuantity(index, item.quantity - 1)}
+                                  onClick={() =>
+                                    updateCartItemQuantity(
+                                      index,
+                                      item.quantity - 1
+                                    )
+                                  }
                                 >
                                   -
                                 </Button>
@@ -1021,7 +1160,12 @@ export default function POSPage() {
                                   variant="outline"
                                   size="sm"
                                   className="h-6 w-6 p-0"
-                                  onClick={() => updateCartItemQuantity(index, item.quantity + 1)}
+                                  onClick={() =>
+                                    updateCartItemQuantity(
+                                      index,
+                                      item.quantity + 1
+                                    )
+                                  }
                                 >
                                   +
                                 </Button>
@@ -1031,7 +1175,9 @@ export default function POSPage() {
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className="font-medium">{formatCurrency(item.total)}</p>
+                              <p className="font-medium">
+                                {formatCurrency(item.total)}
+                              </p>
                               <p className="text-xs text-muted-foreground">
                                 Tax: {formatCurrency(item.taxAmount)}
                               </p>
@@ -1041,7 +1187,7 @@ export default function POSPage() {
                       </div>
                     </ScrollArea>
                   )}
-                  
+
                   <div className="mt-4 space-y-2">
                     <div className="flex justify-between">
                       <span>Subtotal</span>
@@ -1058,15 +1204,15 @@ export default function POSPage() {
                     </div>
                   </div>
                 </CardContent>
-                
+
                 <CardFooter className="flex-col space-y-4">
                   <Input
                     placeholder="Add notes to this transaction"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                   />
-                  <Button 
-                    className="w-full" 
+                  <Button
+                    className="w-full"
                     size="lg"
                     disabled={cart.length === 0}
                     onClick={processTransaction}
@@ -1077,7 +1223,7 @@ export default function POSPage() {
                 </CardFooter>
               </Card>
             </div>
-            
+
             {/* Right Column - Product Catalog */}
             <div className="lg:col-span-2">
               <Card>
@@ -1086,7 +1232,7 @@ export default function POSPage() {
                   <CardDescription>
                     Search for products to add to the cart
                   </CardDescription>
-                  
+
                   <div className="flex gap-2 mt-2">
                     <div className="relative flex-1">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1097,7 +1243,7 @@ export default function POSPage() {
                         className="pl-8"
                       />
                     </div>
-                    
+
                     <Dialog>
                       <DialogTrigger asChild>
                         <Button>
@@ -1112,7 +1258,7 @@ export default function POSPage() {
                             Create a custom product that's not in your inventory
                           </DialogDescription>
                         </DialogHeader>
-                        
+
                         <div className="space-y-4 py-4">
                           <div className="space-y-2">
                             <Label htmlFor="name">Product Name</Label>
@@ -1120,20 +1266,24 @@ export default function POSPage() {
                               id="name"
                               placeholder="Enter product name"
                               value={customProductName}
-                              onChange={(e) => setCustomProductName(e.target.value)}
+                              onChange={(e) =>
+                                setCustomProductName(e.target.value)
+                              }
                             />
                           </div>
-                          
+
                           <div className="space-y-2">
                             <Label htmlFor="sku">Product SKU (Optional)</Label>
                             <Input
                               id="sku"
                               placeholder="Enter product SKU"
                               value={customProductSku}
-                              onChange={(e) => setCustomProductSku(e.target.value)}
+                              onChange={(e) =>
+                                setCustomProductSku(e.target.value)
+                              }
                             />
                           </div>
-                          
+
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <Label htmlFor="price">Price</Label>
@@ -1141,20 +1291,24 @@ export default function POSPage() {
                                 id="price"
                                 placeholder="0.00"
                                 value={customProductPrice}
-                                onChange={(e) => setCustomProductPrice(e.target.value)}
+                                onChange={(e) =>
+                                  setCustomProductPrice(e.target.value)
+                                }
                                 type="number"
                                 min="0"
                                 step="0.01"
                               />
                             </div>
-                            
+
                             <div className="space-y-2">
                               <Label htmlFor="tax">Tax Rate %</Label>
                               <Input
                                 id="tax"
                                 placeholder="8.5"
                                 value={customProductTaxRate}
-                                onChange={(e) => setCustomProductTaxRate(e.target.value)}
+                                onChange={(e) =>
+                                  setCustomProductTaxRate(e.target.value)
+                                }
                                 type="number"
                                 min="0"
                                 step="0.1"
@@ -1162,17 +1316,24 @@ export default function POSPage() {
                             </div>
                           </div>
                         </div>
-                        
+
                         <DialogFooter>
-                          <Button variant="outline" type="button" onClick={() => {
-                            setCustomProductName("");
-                            setCustomProductPrice("");
-                            setCustomProductSku("");
-                            setCustomProductTaxRate("8.5");
-                          }}>
+                          <Button
+                            variant="outline"
+                            type="button"
+                            onClick={() => {
+                              setCustomProductName("");
+                              setCustomProductPrice("");
+                              setCustomProductSku("");
+                              setCustomProductTaxRate("8.5");
+                            }}
+                          >
                             Cancel
                           </Button>
-                          <Button type="button" onClick={addCustomProductToCart}>
+                          <Button
+                            type="button"
+                            onClick={addCustomProductToCart}
+                          >
                             Add to Cart
                           </Button>
                         </DialogFooter>
@@ -1180,7 +1341,7 @@ export default function POSPage() {
                     </Dialog>
                   </div>
                 </CardHeader>
-                
+
                 <CardContent>
                   {inventoryLoading ? (
                     <div className="flex justify-center items-center h-[400px]">
@@ -1199,14 +1360,18 @@ export default function POSPage() {
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {filteredInventoryItems.map((item: InventoryItem) => (
-                        <Card key={item.id} className="cursor-pointer hover:bg-accent/50 transition-colors"
+                        <Card
+                          key={item.id}
+                          className="cursor-pointer hover:bg-accent/50 transition-colors"
                           onClick={() => addToCart(item)}
                         >
                           <CardContent className="p-4">
                             <div className="flex justify-between">
                               <div>
                                 <h3 className="font-medium">{item.name}</h3>
-                                <p className="text-xs text-muted-foreground">{item.sku}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {item.sku}
+                                </p>
                                 {item.category && (
                                   <Badge variant="outline" className="mt-1">
                                     <Tag className="h-3 w-3 mr-1" />
@@ -1215,7 +1380,9 @@ export default function POSPage() {
                                 )}
                               </div>
                               <div className="text-right">
-                                <p className="font-bold">{formatCurrency(parseFloat(item.unitPrice))}</p>
+                                <p className="font-bold">
+                                  {formatCurrency(parseFloat(item.unitPrice))}
+                                </p>
                                 {item.taxRate && (
                                   <p className="text-xs text-muted-foreground">
                                     +{item.taxRate}% tax
@@ -1238,7 +1405,7 @@ export default function POSPage() {
             </div>
           </div>
         </TabsContent>
-        
+
         {/* Transaction History Tab */}
         <TabsContent value="history">
           <Card>
@@ -1283,14 +1450,22 @@ export default function POSPage() {
                         <TableCell className="font-medium">
                           {transaction.transactionNumber}
                         </TableCell>
-                        <TableCell>{transaction.clientId || "Walk-in"}</TableCell>
+                        <TableCell>
+                          {transaction.clientId || "Walk-in"}
+                        </TableCell>
                         <TableCell>Item count will go here</TableCell>
-                        <TableCell>{formatCurrency(parseFloat(transaction.totalAmount))}</TableCell>
+                        <TableCell>
+                          {formatCurrency(parseFloat(transaction.totalAmount))}
+                        </TableCell>
                         <TableCell>
                           <Badge
-                            variant={transaction.status === "COMPLETED" ? "default" : 
-                                    transaction.status === "VOIDED" ? "destructive" : 
-                                    "secondary"}
+                            variant={
+                              transaction.status === "COMPLETED"
+                                ? "default"
+                                : transaction.status === "VOIDED"
+                                ? "destructive"
+                                : "secondary"
+                            }
                           >
                             {transaction.status}
                           </Badge>
@@ -1314,7 +1489,7 @@ export default function POSPage() {
           </Card>
         </TabsContent>
       </Tabs>
-      
+
       {/* Payment Sheet */}
       <Sheet open={isPaymentSheetOpen} onOpenChange={setIsPaymentSheetOpen}>
         <SheetContent side="right" className="sm:max-w-md">
@@ -1324,12 +1499,12 @@ export default function POSPage() {
               Select payment method and complete the transaction
             </SheetDescription>
           </SheetHeader>
-          
+
           <div className="flex flex-col justify-between h-full py-4">
             <div>
               <div className="space-y-4 mt-4">
                 <h3 className="font-medium">Payment Summary</h3>
-                
+
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Subtotal:</span>
@@ -1344,16 +1519,18 @@ export default function POSPage() {
                     <span>{formatCurrency(total)}</span>
                   </div>
                 </div>
-                
+
                 <Separator />
-                
+
                 <div className="space-y-2">
                   <h3 className="font-medium">Payment Method</h3>
                   <div className="grid grid-cols-2 gap-2">
                     {PAYMENT_METHODS.map((method) => (
                       <Button
                         key={method.id}
-                        variant={paymentMethod === method.id ? "default" : "outline"}
+                        variant={
+                          paymentMethod === method.id ? "default" : "outline"
+                        }
                         className="justify-start"
                         onClick={() => setPaymentMethod(method.id)}
                       >
@@ -1363,23 +1540,36 @@ export default function POSPage() {
                     ))}
                   </div>
                 </div>
-                
+
                 {selectedClient && (
                   <div className="mt-4 p-4 bg-muted rounded-md">
                     <h3 className="font-medium mb-2">Customer Information</h3>
                     <div className="space-y-1 text-sm">
-                      <p><strong>Name:</strong> {selectedClient.name}</p>
-                      {selectedClient.email && <p><strong>Email:</strong> {selectedClient.email}</p>}
-                      {selectedClient.phone && <p><strong>Phone:</strong> {selectedClient.phone}</p>}
+                      <p>
+                        <strong>Name:</strong> {selectedClient.name}
+                      </p>
+                      {selectedClient.email && (
+                        <p>
+                          <strong>Email:</strong> {selectedClient.email}
+                        </p>
+                      )}
+                      {selectedClient.phone && (
+                        <p>
+                          <strong>Phone:</strong> {selectedClient.phone}
+                        </p>
+                      )}
                       {selectedPet && (
-                        <p><strong>Pet:</strong> {selectedPet.name} ({selectedPet.species})</p>
+                        <p>
+                          <strong>Pet:</strong> {selectedPet.name} (
+                          {selectedPet.species})
+                        </p>
                       )}
                     </div>
                   </div>
                 )}
               </div>
             </div>
-            
+
             <SheetFooter className="flex-col gap-2 sm:flex-col sm:gap-2">
               <Button
                 className="w-full"

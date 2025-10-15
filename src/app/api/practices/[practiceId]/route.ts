@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 ;
-import { practices } from '@/db/schema';
+import { practices, currencies } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { z } from 'zod';
+import { pgPool } from '@/db';
 
 // GET /api/practices/[practiceId] - Get a specific practice
 export async function GET(request: NextRequest, { params }: { params: Promise<{ practiceId: string }> }) {
@@ -38,7 +40,33 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Practice not found' }, { status: 404 });
     }
 
-    return NextResponse.json(practice);
+    // Resolve currency code if defaultCurrencyId is set
+    let resolvedCurrency = null;
+    try {
+      if ((practice as any).defaultCurrencyId) {
+        const currencyRow = await tenantDb.query.currencies.findFirst({
+          where: (c: any, { eq: _eq }: any) => _eq(c.id, (practice as any).defaultCurrencyId),
+        }).catch(() => null);
+        if (currencyRow) {
+          resolvedCurrency = {
+            id: (currencyRow as any).id,
+            code: (currencyRow as any).code,
+            decimals: (currencyRow as any).decimals,
+          };
+        }
+      }
+    } catch (e) {
+      // ignore currency resolution errors
+      resolvedCurrency = null;
+    }
+
+    // Attach resolved currency if available
+    const responsePayload = {
+      ...practice,
+      currency: resolvedCurrency,
+    };
+
+    return NextResponse.json(responsePayload);
   } catch (error) {
     console.error('Error fetching practice:', error);
     return NextResponse.json(
@@ -47,3 +75,93 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     );
   }
 }
+
+  // PATCH /api/practices/[practiceId] - Update practice details
+  export async function PATCH(request: NextRequest) {
+    const tenantDb = await getCurrentTenantDb();
+
+    const pathname = request.nextUrl.pathname;
+    const practiceIdStr = pathname.split('/').pop();
+    const practiceId = practiceIdStr ? parseInt(practiceIdStr, 10) : NaN;
+
+    if (!Number.isFinite(practiceId)) {
+      return NextResponse.json({ error: 'Invalid practice ID' }, { status: 400 });
+    }
+
+    try {
+      const userPractice = await getUserPractice(request);
+      if (!userPractice) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      const body = await request.json();
+      const schema = z.object({
+        name: z.string().optional(),
+        email: z.string().email().optional(),
+        phone: z.string().optional(),
+        address: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        zipCode: z.string().optional(),
+        country: z.string().optional(),
+        isHeadOffice: z.boolean().optional(),
+        defaultCurrencyId: z.number().optional(),
+        defaultCurrencyCode: z.string().optional(),
+      });
+
+      const parsed = schema.parse(body);
+
+      // Prevent non-admins from toggling the head office flag
+      if (parsed.isHeadOffice !== undefined && !['ADMINISTRATOR', 'SUPER_ADMIN'].includes(userPractice.user.role)) {
+        return NextResponse.json({ error: 'Insufficient permissions to change head office flag' }, { status: 403 });
+      }
+
+      const updateData: Record<string, any> = { ...parsed };
+      delete updateData.createdAt;
+      delete updateData.updatedAt;
+
+      try {
+        const [updated] = await tenantDb
+          .update(practices)
+          .set(updateData as any)
+          .where(eq(practices.id, practiceId))
+          .returning();
+
+        if (!updated) {
+          return NextResponse.json({ error: 'Practice not found' }, { status: 404 });
+        }
+
+        return NextResponse.json(updated, { status: 200 });
+      } catch (drizzleErr) {
+        console.error('Drizzle update failed, attempting raw SQL fallback:', drizzleErr);
+        try {
+          const keys = Object.keys(updateData);
+          if (keys.length === 0) {
+            return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
+          }
+
+          const setClauses: string[] = [];
+          const values: any[] = [];
+          keys.forEach((k, i) => {
+            const dbKey = k.replace(/([A-Z])/g, '_$1').toLowerCase();
+            setClauses.push(`"${dbKey}" = $${i + 1}`);
+            values.push((updateData as any)[k]);
+          });
+          values.push(practiceId);
+
+          const updateSql = `UPDATE "practices" SET ${setClauses.join(', ')} WHERE id = $${values.length} RETURNING *`;
+          const rawRes = await pgPool.query(updateSql, values);
+          if (rawRes.rows.length === 0) {
+            return NextResponse.json({ error: 'Practice not found' }, { status: 404 });
+          }
+          return NextResponse.json(rawRes.rows[0], { status: 200 });
+        } catch (rawErr) {
+          console.error('Practice PATCH fallback failed:', rawErr);
+          return NextResponse.json({ error: 'Failed to update practice' }, { status: 500 });
+        }
+      }
+    } catch (err) {
+      console.error('Error in PATCH /api/practices/[id]:', err);
+      return NextResponse.json({ error: 'Failed to update practice' }, { status: 500 });
+    }
+  }

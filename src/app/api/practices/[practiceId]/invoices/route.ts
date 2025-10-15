@@ -54,6 +54,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       clientId: inv.clientId,
       petId: inv.petId,
       practiceId: inv.practiceId,
+    currencyId: inv.currencyId,
       status: inv.status as any,
       subtotal: inv.subtotal,
       tax: inv.taxAmount,
@@ -88,7 +89,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!clientId || !date || !dueDate || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
-    const tenantDb = await getCurrentTenantDb();
+  const tenantDb = await getCurrentTenantDb();
+
+  // Determine practice default currency (required)
+  const practice = await tenantDb.query.practices.findFirst({ where: (p: any, { eq }: any) => eq(p.id, practiceId) });
+  const defaultCurrencyId = (practice as any)?.defaultCurrencyId;
+  if (!defaultCurrencyId) return NextResponse.json({ error: 'Practice has no configured default currency' }, { status: 400 });
 
     const [invoiceCountResult] = await tenantDb.select({ count: count() }).from(invoices).where(eq(invoices.practiceId, practiceId));
     const invoiceNumber = `INV-${new Date().getFullYear()}-${String((invoiceCountResult?.count || 0) + 1).padStart(3, '0')}`;
@@ -117,6 +123,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       petId: petId || null,
       description: notes || null,
       invoiceNumber,
+  currencyId: defaultCurrencyId,
       subtotal: subtotal.toFixed(2),
       taxAmount: taxAmount.toFixed(2),
       discountAmount: '0.00',

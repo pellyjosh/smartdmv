@@ -144,11 +144,31 @@ export default function InvoiceDetailPage() {
   const practiceId = userPracticeId;
 
   // Format currency helper
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
+  // Fetch practice currency metadata
+  const { data: practiceCurrency } = useQuery({
+    queryKey: [`/api/practices/${practiceId}/currency`],
+    queryFn: async () => {
+      if (!practiceId) return null;
+      const res = await fetch(`/api/practices/${practiceId}/currency`, {
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!practiceId,
+  });
+
+  const formatCurrency = (amount: number, currencyCode?: string) => {
+    const code = currencyCode || (practiceCurrency && practiceCurrency.code);
+    if (!code) return (amount || 0).toFixed(practiceCurrency?.decimals ?? 2);
+    try {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: code,
+      }).format(amount);
+    } catch (e) {
+      return `${code} ${amount.toFixed(2)}`;
+    }
   };
 
   // Fetch invoice data

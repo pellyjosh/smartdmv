@@ -5,6 +5,7 @@ import { dbTable, primaryKeyId, text, timestamp, integer, decimal, foreignKeyInt
 import { relations, sql } from 'drizzle-orm';
 import { practices } from './practicesSchema';
 import { users } from './usersSchema';
+import { currencies } from './currencySchema';
 import { createInsertSchema } from 'drizzle-zod';
 
 // -----------------------------
@@ -16,7 +17,10 @@ export const expenses = dbTable('expenses', {
   submittedById: foreignKeyInt('submitted_by_id').references(() => users.id), // user who created the expense
   approvedById: foreignKeyInt('approved_by_id').references(() => users.id), // approver (once approved)
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  // Legacy text currency (kept for backward compatibility)
   currency: text('currency').notNull().default(sql`'USD'`),
+  // Reference to currencies table (preferred)
+  currencyId: foreignKeyInt('currency_id').default(1).references(() => currencies.id),
   category: text('category').notNull(), // e.g., supplies, utilities, payroll_adjustment
   subcategory: text('subcategory'),
   description: text('description'),
@@ -83,7 +87,10 @@ export const refunds = dbTable('refunds', {
   expenseId: foreignKeyInt('expense_id').references(() => expenses.id), // optional: some refunds may originate from expenses
   issuedById: foreignKeyInt('issued_by_id').references(() => users.id),
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  // Legacy text currency
   currency: text('currency').notNull().default(sql`'USD'`),
+  // Preferred FK to currencies
+  currencyId: foreignKeyInt('currency_id').default(1).references(() => currencies.id),
   reason: text('reason').notNull(),
   status: text('status', { enum: ['pending', 'approved', 'rejected', 'processed', 'failed', 'void'] }).notNull().default(sql`'pending'`),
   issuedAt: timestamp('issued_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -190,7 +197,10 @@ export const payroll = dbTable('payroll', {
   payDate: timestamp('pay_date', { mode: 'date' }).notNull(),
   grossAmount: decimal('gross_amount', { precision: 12, scale: 2 }).notNull(),
   netAmount: decimal('net_amount', { precision: 12, scale: 2 }).notNull(),
+  // Legacy text currency
   currency: text('currency').notNull().default(sql`'USD'`),
+  // Preferred FK to currencies
+  currencyId: foreignKeyInt('currency_id').default(1).references(() => currencies.id),
   deductions: text('deductions'), // JSON string representing deduction breakdown
   taxes: text('taxes'), // JSON string representing tax breakdown
   status: text('status', { enum: ['pending', 'processing', 'paid', 'failed', 'void'] }).notNull().default(sql`'pending'`),
@@ -528,6 +538,110 @@ export const NOTIFICATION_METHODS = ['email', 'sms', 'in_app', 'push'] as const;
 export const NOTIFICATION_FREQUENCIES = ['immediate', 'hourly', 'daily', 'weekly'] as const;
 export const BUDGET_SUPPORTED = true;
 
+// -----------------------------
+// Payment Processing
+// -----------------------------
+
+// Bank accounts for payroll disbursements
+export const bankAccounts = dbTable('bank_accounts', {
+  id: primaryKeyId(),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id),
+  accountName: text('account_name').notNull(),
+  accountType: text('account_type', { enum: ['checking', 'savings', 'payroll'] }).notNull(),
+  bankName: text('bank_name').notNull(),
+  routingNumber: text('routing_number').notNull(),
+  accountNumber: text('account_number').notNull(), // Should be encrypted in production
+  isActive: boolean('is_active').notNull().default(true),
+  isDefault: boolean('is_default').notNull().default(false),
+  balance: decimal('balance', { precision: 12, scale: 2 }).default('0.00'),
+  createdAt: timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull().$onUpdate(() => sql`CURRENT_TIMESTAMP`),
+});
+
+export const bankAccountsRelations = relations(bankAccounts, ({ one }) => ({
+  practice: one(practices, { fields: [bankAccounts.practiceId], references: [practices.id] }),
+}));
+
+// Employee bank account details
+export const employeeBankAccounts = dbTable('employee_bank_accounts', {
+  id: primaryKeyId(),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id),
+  employeeId: foreignKeyInt('employee_id').notNull().references(() => users.id),
+  accountType: text('account_type', { enum: ['checking', 'savings'] }).notNull(),
+  bankName: text('bank_name').notNull(),
+  routingNumber: text('routing_number').notNull(),
+  accountNumber: text('account_number').notNull(), // Should be encrypted in production
+  accountHolderName: text('account_holder_name').notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  isPrimary: boolean('is_primary').notNull().default(true),
+  allocationPercentage: decimal('allocation_percentage', { precision: 5, scale: 2 }).default('100.00'),
+  createdAt: timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull().$onUpdate(() => sql`CURRENT_TIMESTAMP`),
+});
+
+export const employeeBankAccountsRelations = relations(employeeBankAccounts, ({ one }) => ({
+  practice: one(practices, { fields: [employeeBankAccounts.practiceId], references: [practices.id] }),
+  employee: one(users, { fields: [employeeBankAccounts.employeeId], references: [users.id] }),
+}));
+
+// Payroll payments (actual disbursements)
+export const payrollPayments = dbTable('payroll_payments', {
+  id: primaryKeyId(),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id),
+  payrollId: foreignKeyInt('payroll_id').notNull().references(() => payroll.id),
+  employeeId: foreignKeyInt('employee_id').notNull().references(() => users.id),
+  amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
+  paymentMethod: text('payment_method', { 
+    enum: ['direct_deposit', 'check', 'cash', 'payroll_card', 'wire_transfer'] 
+  }).notNull(),
+  paymentReference: text('payment_reference').notNull(), // Check number, transaction ID, etc.
+  transactionId: text('transaction_id'), // External payment processor transaction ID
+  processorResponse: text('processor_response'), // JSON response from payment processor
+  status: text('status', { 
+    enum: ['pending', 'processing', 'completed', 'failed', 'cancelled', 'returned'] 
+  }).notNull().default(sql`'pending'`),
+  bankAccountId: foreignKeyInt('bank_account_id').references(() => bankAccounts.id),
+  employeeBankAccountId: foreignKeyInt('employee_bank_account_id').references(() => employeeBankAccounts.id),
+  paymentDate: timestamp('payment_date', { mode: 'date' }).notNull(),
+  processedBy: foreignKeyInt('processed_by').notNull().references(() => users.id),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull().$onUpdate(() => sql`CURRENT_TIMESTAMP`),
+});
+
+export const payrollPaymentsRelations = relations(payrollPayments, ({ one }) => ({
+  practice: one(practices, { fields: [payrollPayments.practiceId], references: [practices.id] }),
+  payroll: one(payroll, { fields: [payrollPayments.payrollId], references: [payroll.id] }),
+  employee: one(users, { fields: [payrollPayments.employeeId], references: [users.id] }),
+  bankAccount: one(bankAccounts, { fields: [payrollPayments.bankAccountId], references: [bankAccounts.id] }),
+  employeeBankAccount: one(employeeBankAccounts, { fields: [payrollPayments.employeeBankAccountId], references: [employeeBankAccounts.id] }),
+  processedByUser: one(users, { fields: [payrollPayments.processedBy], references: [users.id] }),
+}));
+
+// Payment transaction log for audit trail
+export const payrollTransactions = dbTable('payroll_transactions', {
+  id: primaryKeyId(),
+  practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id),
+  payrollId: foreignKeyInt('payroll_id').references(() => payroll.id),
+  paymentId: foreignKeyInt('payment_id').references(() => payrollPayments.id),
+  transactionType: text('transaction_type', { 
+    enum: ['payment', 'batch_payment', 'reversal', 'adjustment', 'fee'] 
+  }).notNull(),
+  amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
+  description: text('description').notNull(),
+  reference: text('reference'),
+  processedBy: foreignKeyInt('processed_by').notNull().references(() => users.id),
+  transactionDate: timestamp('transaction_date', { mode: 'date' }).notNull(),
+  createdAt: timestamp('created_at', { mode: 'date' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const payrollTransactionsRelations = relations(payrollTransactions, ({ one }) => ({
+  practice: one(practices, { fields: [payrollTransactions.practiceId], references: [practices.id] }),
+  payroll: one(payroll, { fields: [payrollTransactions.payrollId], references: [payroll.id] }),
+  payment: one(payrollPayments, { fields: [payrollTransactions.paymentId], references: [payrollPayments.id] }),
+  processedByUser: one(users, { fields: [payrollTransactions.processedBy], references: [users.id] }),
+}));
+
 // Payroll Reports
 export const payrollReports = dbTable('payroll_reports', {
   id: primaryKeyId(),
@@ -578,6 +692,10 @@ export const payrollCompliance = dbTable('payroll_compliance', {
 export const createPayrollReportSchema = createInsertSchema(payrollReports);
 export const createPayrollAnalyticsSchema = createInsertSchema(payrollAnalytics);
 export const createPayrollComplianceSchema = createInsertSchema(payrollCompliance);
+export const createBankAccountSchema = createInsertSchema(bankAccounts);
+export const createEmployeeBankAccountSchema = createInsertSchema(employeeBankAccounts);
+export const createPayrollPaymentSchema = createInsertSchema(payrollPayments);
+export const createPayrollTransactionSchema = createInsertSchema(payrollTransactions);
 
 // Add new enums
 export const REPORT_TYPES = ['summary', 'detailed', 'tax', 'deductions', 'analytics'] as const;
@@ -587,3 +705,7 @@ export const METRIC_TYPES = ['cost_per_employee', 'overtime_trends', 'department
 export const COMPLIANCE_TYPES = ['tax_filing', 'labor_law', 'overtime_rules', 'minimum_wage', 'benefit_compliance'] as const;
 export const COMPLIANCE_STATUSES = ['compliant', 'warning', 'violation'] as const;
 export const SEVERITY_LEVELS = ['low', 'medium', 'high', 'critical'] as const;
+export const PAYMENT_METHODS = ['direct_deposit', 'check', 'cash', 'payroll_card', 'wire_transfer'] as const;
+export const PAYMENT_STATUSES = ['pending', 'processing', 'completed', 'failed', 'cancelled', 'returned'] as const;
+export const TRANSACTION_TYPES = ['payment', 'batch_payment', 'reversal', 'adjustment', 'fee'] as const;
+export const BANK_ACCOUNT_TYPES = ['checking', 'savings', 'payroll'] as const;

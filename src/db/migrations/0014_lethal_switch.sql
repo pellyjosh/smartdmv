@@ -1,0 +1,1 @@
+ALTER TABLE "practices" ADD COLUMN "is_head_office" boolean DEFAULT false;

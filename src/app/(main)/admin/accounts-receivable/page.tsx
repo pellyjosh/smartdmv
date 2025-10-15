@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { usePractice } from "@/hooks/use-practice";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import {
   Card,
   CardContent,
@@ -104,6 +105,7 @@ const AccountsReceivablePage = () => {
   const router = useRouter();
   const { practice } = usePractice();
   const practiceId = practice?.id;
+  const { format: formatCurrency } = useCurrencyFormatter();
 
   // State for filters and search
   const [searchTerm, setSearchTerm] = useState("");
@@ -423,11 +425,7 @@ const AccountsReceivablePage = () => {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-blue-900">
-              $
-              {arMetrics.totalOutstanding.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
+              {formatCurrency(arMetrics.totalOutstanding)}
             </div>
             <p className="text-sm text-blue-700 mt-1">
               {arMetrics.outstandingInvoicesCount} outstanding invoices
@@ -451,11 +449,7 @@ const AccountsReceivablePage = () => {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-red-900">
-              $
-              {arMetrics.totalOverdue.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
+              {formatCurrency(arMetrics.totalOverdue)}
             </div>
             <p className="text-sm text-red-700 mt-1">
               {arMetrics.overdueInvoicesCount} overdue invoices
@@ -504,41 +498,25 @@ const AccountsReceivablePage = () => {
           <div className="grid gap-4 md:grid-cols-4">
             <div className="p-4 bg-green-50 rounded-lg border border-green-200">
               <div className="text-2xl font-bold text-green-900">
-                $
-                {arMetrics.aging.current.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                {formatCurrency(arMetrics.aging.current)}
               </div>
               <p className="text-sm text-green-700">Current (0-30 days)</p>
             </div>
             <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
               <div className="text-2xl font-bold text-yellow-900">
-                $
-                {arMetrics.aging.thirty.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                {formatCurrency(arMetrics.aging.thirty)}
               </div>
               <p className="text-sm text-yellow-700">31-60 days</p>
             </div>
             <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
               <div className="text-2xl font-bold text-orange-900">
-                $
-                {arMetrics.aging.sixty.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                {formatCurrency(arMetrics.aging.sixty)}
               </div>
               <p className="text-sm text-orange-700">61-90 days</p>
             </div>
             <div className="p-4 bg-red-50 rounded-lg border border-red-200">
               <div className="text-2xl font-bold text-red-900">
-                $
-                {arMetrics.aging.ninety.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                {formatCurrency(arMetrics.aging.ninety)}
               </div>
               <p className="text-sm text-red-700">90+ days</p>
             </div>
@@ -757,13 +735,13 @@ const AccountsReceivablePage = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        ${parseFloat(invoice.total).toFixed(2)}
+                        {formatCurrency(parseFloat(invoice.total))}
                       </TableCell>
                       <TableCell>
-                        ${parseFloat(invoice.amountPaid || "0").toFixed(2)}
+                        {formatCurrency(parseFloat(invoice.amountPaid || "0"))}
                       </TableCell>
                       <TableCell className="font-medium">
-                        ${balanceDue.toFixed(2)}
+                        {formatCurrency(balanceDue)}
                       </TableCell>
                       <TableCell>{getAgingBadge(invoice.dueDate)}</TableCell>
                       <TableCell>
@@ -851,15 +829,15 @@ const AccountsReceivablePage = () => {
                 </span>
                 <div className="h-4 border-l border-muted-foreground/20" />
                 <span className="font-medium">
-                  Total: $
-                  {filteredInvoices
-                    .reduce((sum, inv) => {
+                  Total:{" "}
+                  {formatCurrency(
+                    filteredInvoices.reduce((sum, inv) => {
                       const balance =
                         parseFloat(inv.total) -
                         parseFloat(inv.amountPaid || "0");
                       return sum + balance;
                     }, 0)
-                    .toFixed(2)}
+                  )}
                 </span>
               </div>
               <Button

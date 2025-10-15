@@ -64,6 +64,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { formatDistance } from "date-fns";
 import { usePractice } from "@/hooks/use-practice";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 
 // Schema
 const refundRequestSchema = z.object({
@@ -133,13 +134,18 @@ export default function RefundManagementPage() {
   const { practice } = usePractice();
   const practiceId = practice?.id ? Number(practice.id) : undefined;
 
+  const { format: formatCurrency } = useCurrencyFormatter();
+
   const form = useForm<RefundRequestFormValues>({
     resolver: zodResolver(refundRequestSchema),
     // Provide all text inputs with empty-string defaults so they are controlled from first render
     defaultValues: {
       paymentId: "",
       amount: "",
-      currency: "USD",
+      // currency is provided by practice default; form does not expose currency selection
+      currency: (practice as any)?.defaultCurrencyId
+        ? ((practice as any).defaultCurrencyId as any)
+        : (undefined as any),
       gatewayType: "STRIPE",
       clientId: undefined as any, // remains unset until user picks; select will treat '' as no selection
       reason: "",
@@ -179,10 +185,13 @@ export default function RefundManagementPage() {
   const createRefundMutation = useMutation({
     mutationFn: async (data: RefundRequestFormValues) => {
       if (!base) throw new Error("No practice context");
+      // Ensure practice has configured default currency
+      if (!(practice as any)?.defaultCurrencyId)
+        throw new Error("Practice has no configured default currency");
       const payload = {
         paymentId: data.paymentId,
         amount: parseFloat(data.amount as unknown as string),
-        currency: data.currency,
+        currencyId: (practice as any).defaultCurrencyId,
         gatewayType: data.gatewayType,
         clientId: data.clientId,
         reason: data.reason,
@@ -254,7 +263,18 @@ export default function RefundManagementPage() {
   });
 
   const onSubmit = (data: RefundRequestFormValues) =>
-    createRefundMutation.mutate(data);
+    // Block if practice doesn't have a default currency
+    (async () => {
+      if (!(practice as any)?.defaultCurrencyId) {
+        toast({
+          title:
+            "Please configure the practice default currency before creating refunds.",
+          variant: "destructive",
+        });
+        return;
+      }
+      createRefundMutation.mutate(data);
+    })();
   const handleViewDetails = (r: any) => {
     setSelectedRefund(r);
     setShowRefundDetails(true);
@@ -340,7 +360,6 @@ export default function RefundManagementPage() {
                   <TableCaption>List of refund requests</TableCaption>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
                       <TableHead>Payment ID</TableHead>
                       <TableHead>Amount</TableHead>
                       <TableHead>Gateway</TableHead>
@@ -421,32 +440,7 @@ export default function RefundManagementPage() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="currency"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Currency</FormLabel>
-                      <FormControl>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select currency" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="USD">USD</SelectItem>
-                            <SelectItem value="EUR">EUR</SelectItem>
-                            <SelectItem value="GBP">GBP</SelectItem>
-                            <SelectItem value="NGN">NGN</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Currency is provided by the practice default; users cannot select it here */}
               </div>
               <FormField
                 control={form.control}

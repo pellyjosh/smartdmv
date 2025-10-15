@@ -57,6 +57,55 @@
       "when": 1759873583097,
       "tag": "0007_jazzy_alex_wilder",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1760365189865,
+      "tag": "0008_flawless_next_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1760370626689,
+      "tag": "0009_safe_purifiers",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1760386082537,
+      "tag": "0010_rapid_punisher",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1760388819329,
+      "tag": "0011_robust_reavers",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1760399552840,
+      "tag": "0012_aromatic_wolf_cub",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1760435683412,
+      "tag": "0013_big_prowler",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1760516136359,
+      "tag": "0014_lethal_switch",
+      "breakpoints": true
     }
   ]
 }

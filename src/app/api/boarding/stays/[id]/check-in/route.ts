@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getUserPractice } from '@/lib/auth-utils';
+import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-import { boardingStays } from "@/db/schema";
+import { boardingStays, invoices, invoiceItems, taxRates, practices } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(
@@ -31,6 +31,8 @@ export async function POST(
   try {
     const body = await request.json();
     const { checkInById } = body;
+
+    const currentUser = await getCurrentUser(request);
 
     // Check if the stay exists and is scheduled
     const existingStay = await tenantDb.query.boardingStays.findFirst({
@@ -75,6 +77,71 @@ export async function POST(
         createdBy: true
       }
     });
+
+    // Create invoice for the stay server-side (if possible)
+    try {
+      if (completeStay?.pet?.owner?.id) {
+        const clientId = completeStay.pet.owner.id;
+        const petId = completeStay.pet.id;
+        const dailyRate = parseFloat(completeStay.dailyRate || '0') || 0;
+        // Determine duration: use plannedCheckOutDate - checkInDate
+        const start = completeStay.checkInDate ? new Date(completeStay.checkInDate) : new Date();
+        const end = completeStay.plannedCheckOutDate ? new Date(completeStay.plannedCheckOutDate) : start;
+        const days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+
+        // Calculate subtotal and tax
+        const subtotal = dailyRate * days;
+
+        // Get default tax rate for practice
+        const defaultTaxRate = await tenantDb.query.taxRates.findFirst({
+          where: (t: any, { eq }: any) => eq(t.practiceId, completeStay.practiceId)
+        });
+        const taxRate = defaultTaxRate ? parseFloat(defaultTaxRate.rate) / 100 : 0;
+        const taxAmount = subtotal * taxRate;
+        const totalAmount = subtotal + taxAmount;
+
+        // Generate invoice number
+        const [countResult] = await tenantDb.select({ count: tenantDb.raw('count(*)') }).from(invoices).where(eq(invoices.practiceId, completeStay.practiceId as any)).catch(() => [{ count: 0 }]);
+        const nextNum = (countResult?.count ?? 0) + 1;
+        const invoiceNumber = `INV-${new Date().getFullYear()}-${String(nextNum).padStart(3, '0')}`;
+
+        const practiceRow = await tenantDb.query.practices.findFirst({ where: (p: any, { eq }: any) => eq(p.id, completeStay.practiceId) });
+        const currencyId = (practiceRow as any)?.defaultCurrencyId || null;
+
+        const [newInvoice] = await tenantDb.insert(invoices).values({
+          practiceId: completeStay.practiceId,
+          clientId,
+          petId,
+          description: `Boarding reservation ${completeStay.id}`,
+          invoiceNumber,
+          currencyId: currencyId,
+          subtotal: subtotal.toFixed(2),
+          taxAmount: taxAmount.toFixed(2),
+          totalAmount: totalAmount.toFixed(2),
+          issueDate: new Date(),
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        }).returning();
+
+        const invoiceItem = {
+          invoiceId: newInvoice.id,
+          description: `Boarding - ${completeStay.pet.name}`,
+          quantity: String(days),
+          unitPrice: dailyRate.toFixed(2),
+          subtotal: subtotal.toFixed(2),
+          discountAmount: '0.00',
+          taxable: 'yes'
+        };
+
+        await tenantDb.insert(invoiceItems).values(invoiceItem);
+
+        // Optionally create audit log (if you have helper) - skipped here for brevity
+        // attach invoice id to response
+        (completeStay as any)._createdInvoiceId = newInvoice.id;
+      }
+    } catch (invErr) {
+      console.error('Failed to create invoice during check-in:', invErr);
+      // Don't fail the whole check-in if invoice creation fails
+    }
 
     return NextResponse.json(completeStay, { status: 200 });
   } catch (error) {

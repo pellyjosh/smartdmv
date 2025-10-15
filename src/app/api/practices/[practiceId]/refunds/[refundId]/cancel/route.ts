@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { refunds } from '@/db/schemas/financeSchema';
+import { createAuditLogFromRequest } from '@/lib/audit-logger';
 import { and, eq } from 'drizzle-orm';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ practiceId: string; refundId: string }> }) {
@@ -16,7 +17,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pra
     const [existing] = await tenantDb.select().from(refunds).where(and(eq(refunds.id, id), eq(refunds.practiceId, practiceId)));
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (existing.status !== 'pending') return NextResponse.json({ error: 'Only pending refunds can be canceled' }, { status: 400 });
-    const [updated] = await tenantDb.update(refunds).set({ status: 'void' }).where(eq(refunds.id, id)).returning();
+    const now = new Date();
+    const [updated] = await tenantDb
+      .update(refunds)
+      .set({ status: 'void', updatedAt: now })
+      .where(eq(refunds.id, id))
+      .returning();
 
     const serializedUpdated = {
       ...updated,
@@ -29,6 +35,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pra
       updatedAt: updated.updatedAt instanceof Date ? updated.updatedAt.toISOString() :
                  updated.updatedAt ? new Date(updated.updatedAt).toISOString() : null,
     };
+
+    // Create audit log entry for cancellation
+    try {
+      await createAuditLogFromRequest(req as unknown as Request, {
+        action: 'UPDATE',
+        recordType: 'BILLING',
+        recordId: String(id),
+        description: `Refund ${id} canceled`,
+        practiceId: String(practiceId),
+        changes: { after: serializedUpdated }
+      });
+    } catch (auditErr) {
+      console.error('Failed to create audit log for refund cancel:', auditErr);
+    }
 
     return NextResponse.json(serializedUpdated);
   } catch (e) {

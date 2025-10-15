@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { CalendarIcon, Loader2, Plus, Trash2, ArrowLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePractice } from "@/hooks/use-practice";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -90,6 +91,7 @@ interface InvoiceItem {
 const NewInvoicePage = () => {
   const { practice } = usePractice();
   const practiceId = practice?.id;
+  const { format: formatCurrency } = useCurrencyFormatter();
   const { toast } = useToast();
   const router = useRouter();
 
