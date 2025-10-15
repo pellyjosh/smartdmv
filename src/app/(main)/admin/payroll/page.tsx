@@ -1,6 +1,11 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  useIsFetching,
+} from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -165,10 +170,39 @@ const employeeDeductionSchema = z.object({
 });
 
 export default function PayrollPage() {
-  const { practice } = usePractice();
+  const { practice, isLoading: practiceLoading } = usePractice();
   const practiceId = practice?.id ? Number(practice.id) : undefined;
   const base = practiceId ? `/api/practices/${practiceId}/payroll` : undefined;
-  const formatCurrency = useFormatCurrency(practiceId);
+  // Allow overriding the formatter below if the practice has no configured currency
+  let formatCurrency = useFormatCurrency(practiceId);
+  const { practiceCurrency } = useCurrencyFormatter();
+
+  // Prefer practice-level configured currency code (stable once practice loads).
+  const practiceConfiguredCode = (practice as any)?.defaultCurrencyCode;
+  const currencyConfigured = practiceConfiguredCode || practiceCurrency?.code;
+
+  // Show the missing-currency notification once we have enough information
+  // to know it's missing: either the practice finished loading (and has no
+  // defaultCurrencyCode) or the practice currency API has returned (even if null).
+  const currencyMissing =
+    !currencyConfigured && (!practiceLoading || practiceCurrency !== undefined);
+
+  // Fallback: show amounts with a dollar sign when no configured currency is available.
+  const fallbackDecimals = practiceCurrency?.decimals ?? 2;
+  if (!currencyConfigured) {
+    formatCurrency = (amount: number) =>
+      `$${new Intl.NumberFormat("en-US", {
+        minimumFractionDigits: fallbackDecimals,
+        maximumFractionDigits: fallbackDecimals,
+      }).format(amount || 0)}`;
+  }
+
+  // Page-level loading: consider the page loading while any payroll-related
+  // queries (those keyed by `base`) are fetching or if `base` is not yet set.
+  const fetchingCount = useIsFetching({
+    predicate: (q: any) => Array.isArray(q.queryKey) && q.queryKey[0] === base,
+  });
+  const pageLoading = !base || fetchingCount > 0;
 
   return (
     <div className="container mx-auto py-8">
@@ -176,6 +210,34 @@ export default function PayrollPage() {
         <h1 className="text-3xl font-bold">Payroll Management</h1>
         <PayrollQuickActions practiceId={practiceId} base={base} />
       </div>
+
+      {currencyMissing && (
+        <Card className="mb-4 border-yellow-200 bg-yellow-50">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="font-medium">
+                No currency configured for this practice
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Amounts will display with a $ fallback. Set the practice default
+                currency in Practice Settings to ensure proper formatting.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  (window.location.href = "/admin/practice-settings")
+                }
+              >
+                Open Practice Settings
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tutorial restored inside PayStubsTab (see that component) */}
 
       {/* Summary Cards */}
       <PayrollSummaryCards practiceId={practiceId} base={base} />
@@ -1859,42 +1921,40 @@ function PayStubsTab({
         </Card>
       )}
 
-      {/* Quick Help Card */}
-      {(!stubs || stubs.length === 0) && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="p-4">
-            <div className="flex items-start space-x-3">
-              <div className="flex-shrink-0">
-                <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
-                  <svg
-                    className="w-4 h-4 text-blue-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </div>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-blue-800">
-                  How to generate pay slips
-                </h3>
-                <p className="mt-1 text-sm text-blue-700">
-                  1. Create pay rates for employees → 2. Add work hours → 3.
-                  Create pay periods → 4. Go to "Pay Periods" tab and click
-                  "Generate Pay Slips"
-                </p>
+      {/* Quick Help Card: original placement inside PayStubsTab */}
+      <Card className="border-blue-200 bg-blue-50 mb-4">
+        <CardContent className="p-4">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0">
+              <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
+                <svg
+                  className="w-4 h-4 text-blue-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <div>
+              <h3 className="text-sm font-medium text-blue-800">
+                How to generate pay slips
+              </h3>
+              <p className="mt-1 text-sm text-blue-700">
+                1. Create pay rates for employees → 2. Add work hours → 3.
+                Create pay periods → 4. Go to "Pay Periods" tab and click
+                "Generate Pay Slips"
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <Card>
@@ -2482,6 +2542,21 @@ function PayrollSummaryCards({
   practiceId?: number;
   base?: string;
 }) {
+  // Use the practice-aware currency formatter here so the summary cards
+  // reflect the practice's currency (or the $ fallback) rather than the
+  // module-level formatter which appends the "(no currency configured)" marker.
+  const { format: formatCurrencyHook, practiceCurrency } =
+    useCurrencyFormatter();
+  const currencyMissingLocal = !practiceCurrency || !practiceCurrency.code;
+  const formatCurrencyLocal = currencyMissingLocal
+    ? (amount: number) => {
+        const decimals = practiceCurrency?.decimals ?? 2;
+        return `$${new Intl.NumberFormat("en-US", {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
+        }).format(amount || 0)}`;
+      }
+    : (amount: number) => formatCurrencyHook(amount);
   const { data: summaryData, isLoading } = useQuery({
     queryKey: [base, "summary"],
     enabled: !!base,
@@ -2539,7 +2614,7 @@ function PayrollSummaryCards({
                 Total Payroll
               </p>
               <p className="text-2xl font-bold">
-                {formatCurrency(summary.totalPayroll || 0)}
+                {formatCurrencyLocal(summary.totalPayroll || 0)}
               </p>
             </div>
             <DollarSign className="h-8 w-8 text-green-600" />
