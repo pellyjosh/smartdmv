@@ -11,6 +11,23 @@
  *   NODE_ENV=production npm run ws # Start in production mode
  */
 
+// Load environment variables based on NODE_ENV
+import dotenv from 'dotenv';
+import path from 'path';
+
+const nodeEnv = process.env.NODE_ENV || 'development';
+const envFile = nodeEnv === 'production' ? '.env.production' : '.env.local';
+const envPath = path.resolve(process.cwd(), envFile);
+
+console.log(`[WS] Loading environment from: ${envFile}`);
+dotenv.config({ path: envPath });
+
+// Fallback to .env if specific env file doesn't exist
+if (nodeEnv === 'production' && !process.env.DATABASE_URL) {
+  console.log(`[WS] Fallback: Loading from .env`);
+  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+}
+
 import { WebSocketServer } from './server';
 
 // Handle graceful shutdown
