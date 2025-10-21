@@ -681,6 +681,15 @@ export default function ClientsPage() {
       return await res.json();
     },
     onSuccess: (newClient) => {
+      // Debug: log what the registration endpoint returned for the created client
+      try {
+        console.log("[Clients] create onSuccess - newClient:", newClient);
+      } catch (e) {
+        console.log(
+          "[Clients] create onSuccess - failed to stringify newClient",
+          e
+        );
+      }
       // Immediately refetch clients list
       refetchClients();
       // Show success message
@@ -695,7 +704,40 @@ export default function ClientsPage() {
       // Optional: Select the newly created client
       // This helps avoid the 404 error by directly selecting the client instead of navigating
       if (newClient) {
-        setSelectedClient(newClient);
+        // If the registration endpoint returned the full user including optional
+        // address/contact fields, use it directly. Otherwise, fetch the full user
+        // record to ensure the UI has the persisted fields available.
+        const hasAddressFields =
+          Object.prototype.hasOwnProperty.call(newClient, "address") ||
+          Object.prototype.hasOwnProperty.call(newClient, "phone");
+        if (hasAddressFields) {
+          setSelectedClient(newClient);
+        } else if (newClient.id) {
+          // Fetch full user record as a fallback
+          apiRequest("GET", `/api/users/${newClient.id}`)
+            .then((res) => res.json())
+            .then((fullUser) => {
+              // Debug: log the full user fetched after create
+              try {
+                console.log(
+                  "[Clients] fetched full user after create:",
+                  fullUser
+                );
+              } catch (e) {
+                console.log(
+                  "[Clients] fetched full user after create - failed to stringify",
+                  e
+                );
+              }
+              setSelectedClient(fullUser);
+            })
+            .catch((err) => {
+              console.warn("Failed to fetch full user after create:", err);
+              setSelectedClient(newClient);
+            });
+        } else {
+          setSelectedClient(newClient);
+        }
       }
     },
     onError: (error: Error) => {
@@ -1030,27 +1072,63 @@ export default function ClientsPage() {
 
   // Open edit client dialog with the selected client's data
   const handleEditClient = () => {
-    if (selectedClient) {
-      // Populate the updateClientForm with the selected client's data
-      updateClientForm.reset({
-        name: selectedClient.name || "",
-        email: selectedClient.email || "",
-        // password: "", // Always clear password for security when opening edit form
-        phone: selectedClient.phone || "",
-        address: selectedClient.address || "",
-        city: selectedClient.city || "",
-        state: selectedClient.state || "",
-        zipCode: selectedClient.zipCode || "",
-        country: selectedClient.country || "",
-        emergencyContactName: selectedClient.emergencyContactName || "",
-        emergencyContactPhone: selectedClient.emergencyContactPhone || "",
-        emergencyContactRelationship:
-          selectedClient.emergencyContactRelationship || "",
-        practiceId: String(selectedClient.practiceId || userPracticeId || ""),
-        role: selectedClient.role || "CLIENT",
-      });
-      setIsEditClientDialogOpen(true);
-    }
+    if (!selectedClient) return;
+
+    // The client item in the list may be a lightweight representation (no
+    // address/emergency fields). Fetch the full user record to ensure the
+    // edit modal is populated with all persisted fields.
+    const fetchFullUser = async () => {
+      try {
+        const res = await apiRequest("GET", `/api/users/${selectedClient.id}`);
+        const fullUser = await res.json();
+        // Update selected client state with the full row
+        setSelectedClient(fullUser);
+
+        updateClientForm.reset({
+          name: fullUser.name || "",
+          email: fullUser.email || "",
+          // password: "", // Always clear password for security when opening edit form
+          phone: fullUser.phone || "",
+          address: fullUser.address || "",
+          city: fullUser.city || "",
+          state: fullUser.state || "",
+          zipCode: fullUser.zipCode || "",
+          country: fullUser.country || "",
+          emergencyContactName: fullUser.emergencyContactName || "",
+          emergencyContactPhone: fullUser.emergencyContactPhone || "",
+          emergencyContactRelationship:
+            fullUser.emergencyContactRelationship || "",
+          practiceId: String(fullUser.practiceId || userPracticeId || ""),
+          role: fullUser.role || "CLIENT",
+        });
+        setIsEditClientDialogOpen(true);
+      } catch (err) {
+        console.warn(
+          "Failed to fetch full user for edit, falling back to lightweight data:",
+          err
+        );
+        // Fallback to whatever data we have
+        updateClientForm.reset({
+          name: selectedClient.name || "",
+          email: selectedClient.email || "",
+          phone: selectedClient.phone || "",
+          address: selectedClient.address || "",
+          city: selectedClient.city || "",
+          state: selectedClient.state || "",
+          zipCode: selectedClient.zipCode || "",
+          country: selectedClient.country || "",
+          emergencyContactName: selectedClient.emergencyContactName || "",
+          emergencyContactPhone: selectedClient.emergencyContactPhone || "",
+          emergencyContactRelationship:
+            selectedClient.emergencyContactRelationship || "",
+          practiceId: String(selectedClient.practiceId || userPracticeId || ""),
+          role: selectedClient.role || "CLIENT",
+        });
+        setIsEditClientDialogOpen(true);
+      }
+    };
+
+    fetchFullUser();
   };
 
   // Handle pet form submission

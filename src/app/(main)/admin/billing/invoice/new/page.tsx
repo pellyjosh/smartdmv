@@ -7,8 +7,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import * as z from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Loader2, Plus, Trash2, ArrowLeft } from "lucide-react";
+import { CalendarIcon, Loader2, Plus, Trash2, ArrowLeft, AlertTriangle, Settings } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePractice } from "@/hooks/use-practice";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { useRouter } from "next/navigation";
@@ -151,6 +152,20 @@ const NewInvoicePage = () => {
     },
     enabled: !!practiceId,
   });
+
+  // Check if practice has default currency configured
+  const { data: practiceDetails } = useQuery({
+    queryKey: ["/api/practices", practiceId],
+    queryFn: async () => {
+      if (!practiceId) return null;
+      const res = await apiRequest("GET", `/api/practices/${practiceId}`);
+      if (!res.ok) throw new Error("Failed to fetch practice details");
+      return res.json();
+    },
+    enabled: !!practiceId,
+  });
+
+  const hasDefaultCurrency = (practiceDetails as any)?.defaultCurrencyId;
 
   const [selectedClient, setSelectedClient] = useState<number | null>(null);
   const [pets, setPets] = useState<any[]>([]);
@@ -301,7 +316,7 @@ const NewInvoicePage = () => {
       description: code.description,
       unitPrice: code.defaultPrice,
       taxable: code.taxable === "yes",
-      serviceCode: code.code,
+      serviceCode: codeId, // Store the ID instead of code string
     } as InvoiceItem;
     form.setValue("items", items as any);
   };
@@ -321,7 +336,7 @@ const NewInvoicePage = () => {
         (inventoryItem.description ? ` - ${inventoryItem.description}` : ""),
       unitPrice: inventoryItem.price || "0.00",
       taxable: true, // Most products are taxable
-      serviceCode: inventoryItem.sku || "",
+      productId: itemId, // Store the ID
     } as InvoiceItem;
     form.setValue("items", items as any);
   };
@@ -436,6 +451,28 @@ const NewInvoicePage = () => {
         </Button>
         <h1 className="text-3xl font-bold tracking-tight">New Invoice</h1>
       </div>
+
+      {/* Currency Configuration Alert */}
+      {!hasDefaultCurrency && (
+        <Alert className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              <strong>Currency Not Configured:</strong> Your practice doesn't have a default currency set.
+              Please configure it in Practice Settings before creating invoices.
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/admin/practice-settings")}
+              className="ml-4 gap-2"
+            >
+              <Settings className="h-4 w-4" />
+              Go to Practice Settings
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <Card>
@@ -733,7 +770,7 @@ const NewInvoicePage = () => {
                                     disabled={isSaving}
                                   >
                                     <FormControl>
-                                      <SelectTrigger>
+                                      <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Select service" />
                                       </SelectTrigger>
                                     </FormControl>
@@ -746,21 +783,12 @@ const NewInvoicePage = () => {
                                           key={code.id}
                                           value={code.id.toString()}
                                         >
-                                          <div className="flex flex-col text-left">
-                                            <span className="font-medium">
-                                              {code.code}
-                                            </span>
-                                            <span className="text-sm text-muted-foreground">
-                                              {code.description} - $
-                                              {parseFloat(
-                                                code.defaultPrice
-                                              ).toFixed(2)}
-                                            </span>
-                                          </div>
+                                          {code.code} - {code.description}
                                         </SelectItem>
                                       ))}
                                     </SelectContent>
                                   </Select>
+                                  <FormMessage />
                                 </FormItem>
                               )}
                             />
@@ -780,7 +808,7 @@ const NewInvoicePage = () => {
                                     disabled={isSaving}
                                   >
                                     <FormControl>
-                                      <SelectTrigger>
+                                      <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Select product" />
                                       </SelectTrigger>
                                     </FormControl>
@@ -798,23 +826,13 @@ const NewInvoicePage = () => {
                                             key={item.id}
                                             value={item.id.toString()}
                                           >
-                                            <div className="flex flex-col text-left">
-                                              <span className="font-medium">
-                                                {item.name}
-                                              </span>
-                                              <span className="text-sm text-muted-foreground">
-                                                {item.sku && `${item.sku} - `}
-                                                Stock: {item.quantity}{" "}
-                                                {item.unit} - $
-                                                {parseFloat(
-                                                  item.price || "0"
-                                                ).toFixed(2)}
-                                              </span>
-                                            </div>
+                                            {item.name}
+                                            {item.sku && ` (${item.sku})`}
                                           </SelectItem>
                                         ))}
                                     </SelectContent>
                                   </Select>
+                                  <FormMessage />
                                 </FormItem>
                               )}
                             />
@@ -829,8 +847,10 @@ const NewInvoicePage = () => {
                                       placeholder="Enter description"
                                       {...field}
                                       disabled={isSaving}
+                                      className="w-full"
                                     />
                                   </FormControl>
+                                  <FormMessage />
                                 </FormItem>
                               )}
                             />

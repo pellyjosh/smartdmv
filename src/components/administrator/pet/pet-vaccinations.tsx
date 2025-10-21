@@ -226,7 +226,7 @@ const PetVaccinations = ({ petId }: { petId: string | number }) => {
                               </Button>
                             </Link>
                             {vaccination.status === "completed" && (
-                              <Link href={`/vaccinations/certificate/${vaccination.id}`}>
+                              <Link href={`/admin/vaccinations/certificate/${vaccination.id}`}>
                                 <Button variant="outline" size="sm">
                                   Certificate
                                 </Button>

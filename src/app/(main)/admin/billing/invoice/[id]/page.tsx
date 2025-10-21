@@ -29,7 +29,9 @@ import {
   Download,
   Receipt,
   CreditCard,
+  Printer,
 } from "lucide-react";
+import html2pdf from "html2pdf.js";
 import PageHeader from "@/components/page-header";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -311,15 +313,72 @@ export default function InvoiceDetailPage() {
   };
 
   const handlePrint = () => {
+    // Use the browser's print functionality
     window.print();
   };
 
-  const handleDownload = () => {
-    // TODO: Implement PDF download functionality
-    toast({
-      title: "Info",
-      description: "PDF download feature coming soon",
-    });
+  const handleDownload = async () => {
+    if (!invoice) {
+      toast({
+        title: "Error",
+        description: "Invoice data not available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Show loading toast
+      toast({
+        title: "Generating PDF...",
+        description: "Please wait while we prepare your invoice PDF",
+      });
+
+      // Get the invoice content element (exclude print:hidden elements)
+      const invoiceElement = document.querySelector(".max-w-4xl") as HTMLElement;
+
+      if (!invoiceElement) {
+        throw new Error("Invoice content not found");
+      }
+
+      // Configure PDF options
+      const options = {
+        margin: 0.5,
+        filename: `invoice-${invoice.invoiceNumber}.pdf`,
+        image: { type: "jpeg" as const, quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          letterRendering: true,
+          allowTaint: false
+        },
+        jsPDF: {
+          unit: "in",
+          format: "letter",
+          orientation: "portrait" as const
+        }
+      };
+
+      // Generate and download PDF
+      await html2pdf()
+        .set(options)
+        .from(invoiceElement)
+        .save();
+
+      // Show success toast
+      toast({
+        title: "PDF Downloaded",
+        description: `Invoice ${invoice.invoiceNumber} has been downloaded successfully`,
+      });
+
+    } catch (error) {
+      console.error("PDF generation error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate PDF. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSendEmail = () => {

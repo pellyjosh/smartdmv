@@ -107,6 +107,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         isHeadOffice: z.boolean().optional(),
         defaultCurrencyId: z.number().optional(),
         defaultCurrencyCode: z.string().optional(),
+        // Additional fields that might be sent from the form
+        apiKey: z.string().optional(),
+        webhookUrl: z.string().optional(),
+        bookingWidgetEnabled: z.boolean().optional(),
+        paymentEnabled: z.boolean().optional(),
       });
 
       const parsed = schema.parse(body);
@@ -117,8 +122,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }
 
       const updateData: Record<string, any> = { ...parsed };
+
+      // Remove system fields that should not be manually updated
       delete updateData.createdAt;
       delete updateData.updatedAt;
+
+      // Ensure updatedAt is set to current timestamp for audit purposes
+      updateData.updatedAt = new Date();
+
+      console.log('Parsed data:', parsed);
+      console.log('Update data before processing:', updateData);
 
       try {
         const [updated] = await tenantDb
@@ -132,33 +145,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         }
 
         return NextResponse.json(updated, { status: 200 });
-      } catch (drizzleErr) {
-        console.error('Drizzle update failed, attempting raw SQL fallback:', drizzleErr);
-        try {
-          const keys = Object.keys(updateData);
-          if (keys.length === 0) {
-            return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
-          }
+      } catch (drizzleErr: any) {
+        console.error('Drizzle update failed:', drizzleErr);
 
-          const setClauses: string[] = [];
-          const values: any[] = [];
-          keys.forEach((k, i) => {
-            const dbKey = k.replace(/([A-Z])/g, '_$1').toLowerCase();
-            setClauses.push(`"${dbKey}" = $${i + 1}`);
-            values.push((updateData as any)[k]);
-          });
-          values.push(practiceId);
-
-          const updateSql = `UPDATE "practices" SET ${setClauses.join(', ')} WHERE id = $${values.length} RETURNING *`;
-          const rawRes = await pgPool.query(updateSql, values);
-          if (rawRes.rows.length === 0) {
-            return NextResponse.json({ error: 'Practice not found' }, { status: 404 });
-          }
-          return NextResponse.json(rawRes.rows[0], { status: 200 });
-        } catch (rawErr) {
-          console.error('Practice PATCH fallback failed:', rawErr);
-          return NextResponse.json({ error: 'Failed to update practice' }, { status: 500 });
+        // Check if it's a column doesn't exist error
+        if (drizzleErr.message && drizzleErr.message.includes('column') && drizzleErr.message.includes('does not exist')) {
+          return NextResponse.json({
+            error: 'Database schema mismatch. Please contact your administrator to update the database schema.',
+            details: 'Some form fields are not yet supported in the current database version.'
+          }, { status: 400 });
         }
+
+        return NextResponse.json({ error: 'Failed to update practice' }, { status: 500 });
       }
     } catch (err) {
       console.error('Error in PATCH /api/practices/[id]:', err);

@@ -86,14 +86,25 @@ export async function POST(req: Request) {
   const hashedPassword: string = await bcrypt.hash(password as string, 12);
     console.log(`[API Register] Password hashed for email: ${email}`);
 
-    // Create the new client user (only required fields to avoid type friction)
+    // Create the new client user, include optional profile fields so address/contact
+    // information provided on the client form is persisted.
     const insertData: typeof users.$inferInsert = {
-  name: name as string,
-  email: email as string,
-  username: username as string,
+      name: name as string,
+      email: email as string,
+      username: username as string,
       password: hashedPassword,
       role: 'CLIENT',
-  practiceId: practiceIdInt as number,
+      practiceId: practiceIdInt as number,
+      // Optional fields (may be undefined)
+      phone: phone as string | undefined,
+      address: address as string | undefined,
+      city: city as string | undefined,
+      state: state as string | undefined,
+      zipCode: zipCode as string | undefined,
+      country: country as string | undefined,
+      emergencyContactName: emergencyContactName as string | undefined,
+      emergencyContactPhone: emergencyContactPhone as string | undefined,
+      emergencyContactRelationship: emergencyContactRelationship as string | undefined,
     };
 
     const [newUser] = await tenantDb.insert(users).values(insertData).returning({
@@ -103,6 +114,16 @@ export async function POST(req: Request) {
       username: users.username,
       role: users.role,
       practiceId: users.practiceId,
+      // Return optional fields so the client can immediately populate UI
+      phone: users.phone,
+      address: users.address,
+      city: users.city,
+      state: users.state,
+      zipCode: users.zipCode,
+      country: users.country,
+      emergencyContactName: users.emergencyContactName,
+      emergencyContactPhone: users.emergencyContactPhone,
+      emergencyContactRelationship: users.emergencyContactRelationship,
     });
 
     if (!newUser) {

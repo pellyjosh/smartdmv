@@ -23,7 +23,34 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, FileText, CreditCard, DollarSign } from "lucide-react";
+import {
+  Plus,
+  Search,
+  FileText,
+  CreditCard,
+  DollarSign,
+  Eye,
+  FilePenLine,
+  Trash2,
+  MoreHorizontal,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import ServiceCodeEditDialog from "@/components/billing/ServiceCodeEditDialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -232,6 +259,33 @@ const BillingPage = () => {
     isDefault: false,
   });
   const [isCreatingTaxRate, setIsCreatingTaxRate] = useState(false);
+  // Service code dialog state
+  const [serviceCodeToEdit, setServiceCodeToEdit] = useState<any>(null);
+  const [serviceCodeToDelete, setServiceCodeToDelete] = useState<any>(null);
+
+  const handleDeleteServiceCode = async () => {
+    if (!practiceId || !serviceCodeToDelete) return;
+    try {
+      const res = await fetch(
+        `/api/practices/${practiceId}/service-codes/${serviceCodeToDelete.id}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        }
+      );
+      if (res.ok) {
+        // refresh list
+        // naive: reload the page data by navigating to same route (or could use queryClient.invalidateQueries if available)
+        window.location.reload();
+      } else {
+        console.error("Failed to delete service code");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setServiceCodeToDelete(null);
+    }
+  };
 
   // Navigate helpers
   const handleNewInvoice = () => {
@@ -554,36 +608,17 @@ const BillingPage = () => {
                           <InvoiceStatusBadge status={invoice.status} />
                         </TableCell>
                         <TableCell>
-                          <div className="flex space-x-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="View"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleViewInvoice(invoice.id);
-                              }}
-                            >
-                              <FileText className="h-4 w-4" />
-                            </Button>
-                            {invoice.status !== "paid" &&
-                              invoice.status !== "cancelled" &&
-                              invoice.status !== "refunded" && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Process Payment"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    router.push(
-                                      `/admin/billing/invoice/${invoice.id}`
-                                    );
-                                  }}
-                                >
-                                  <CreditCard className="h-4 w-4" />
-                                </Button>
-                              )}
-                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="View Invoice"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewInvoice(invoice.id);
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))
@@ -986,17 +1021,31 @@ const BillingPage = () => {
                         </TableCell>
                         <TableCell>{code.taxable ? "Yes" : "No"}</TableCell>
                         <TableCell>
-                          <div className="flex space-x-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Edit"
-                              onClick={() =>
-                                router.push(`/admin/billing/invoice/${code.id}`)
-                              }
-                            >
-                              <FileText className="h-4 w-4" />
-                            </Button>
+                          <div className="flex justify-end">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <FileText className="h-4 w-4" />
+                                  <span className="sr-only">Open menu</span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => setServiceCodeToEdit(code)}
+                                >
+                                  <FilePenLine className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={() => setServiceCodeToDelete(code)}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1018,6 +1067,37 @@ const BillingPage = () => {
           </Card>
         </TabsContent>
       </Tabs>
+      {/* Service Code Dialogs */}
+      {serviceCodeToEdit && (
+        <ServiceCodeEditDialog
+          code={serviceCodeToEdit}
+          open={!!serviceCodeToEdit}
+          onOpenChange={(open: boolean) => !open && setServiceCodeToEdit(null)}
+          practiceId={practiceId}
+        />
+      )}
+
+      <AlertDialog
+        open={!!serviceCodeToDelete}
+        onOpenChange={(open) => !open && setServiceCodeToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete this service code?
+            </AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground"
+              onClick={handleDeleteServiceCode}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

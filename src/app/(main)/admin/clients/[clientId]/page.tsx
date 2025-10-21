@@ -50,7 +50,9 @@ import { queryClient } from "@/lib/queryClient";
 const clientEditFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters" }),
   email: z.string().email({ message: "Please enter a valid email" }),
-  username: z.string().min(3, { message: "Username must be at least 3 characters" }),
+  username: z
+    .string()
+    .min(3, { message: "Username must be at least 3 characters" }),
   phone: z.string().optional(),
   smsOptOut: z.boolean().default(false),
   // Address fields
@@ -74,33 +76,37 @@ export default function ClientDetailPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
   // Fetch client data
-  const { 
-    data: client, 
-    isLoading: isClientLoading, 
-    isError: isClientError 
+  const {
+    data: client,
+    isLoading: isClientLoading,
+    isError: isClientError,
   } = useQuery({
     queryKey: ["/api/users", clientId],
     queryFn: async () => {
-      const res = await fetch(`/api/users/${clientId}`, { credentials: "include" });
+      const res = await fetch(`/api/users/${clientId}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch client data");
       return res.json();
     },
-    enabled: !!clientId
+    enabled: !!clientId,
   });
 
   // Fetch client's pets
-  const { 
-    data: pets, 
-    isLoading: isPetsLoading, 
-    isError: isPetsError 
+  const {
+    data: pets,
+    isLoading: isPetsLoading,
+    isError: isPetsError,
   } = useQuery({
     queryKey: ["/api/pets/owner", clientId],
     queryFn: async () => {
-      const res = await fetch(`/api/pets?clientId=${clientId}`, { credentials: "include" });
+      const res = await fetch(`/api/pets?clientId=${clientId}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch pets data");
       return res.json();
     },
-    enabled: !!clientId
+    enabled: !!clientId,
   });
 
   // Edit client form
@@ -122,12 +128,18 @@ export default function ClientDetailPage() {
       emergencyContactName: "",
       emergencyContactPhone: "",
       emergencyContactRelationship: "",
-    }
+    },
   });
 
   // Update form values when client data is loaded
   useEffect(() => {
     if (client) {
+      // Debug: log the client object received from GET /api/users/:id
+      try {
+        console.log("[ClientDetail] client loaded:", client);
+      } catch (e) {
+        console.log("[ClientDetail] client loaded - (stringify failed)", e);
+      }
       form.reset({
         name: client.name,
         email: client.email,
@@ -148,9 +160,43 @@ export default function ClientDetailPage() {
     }
   }, [client, form]);
 
+  useEffect(() => {
+    if (client && isEditDialogOpen) {
+      // Debug: log the client before resetting the edit form (when dialog opens)
+      try {
+        console.log("[ClientDetail] edit dialog opened - client:", client);
+      } catch (e) {
+        console.log("[ClientDetail] edit dialog opened - stringify failed", e);
+      }
+      form.reset({
+        name: client.name,
+        email: client.email,
+        username: client.username || "",
+        phone: client.phone || "",
+        smsOptOut: client.smsOptOut || false,
+        // Address fields
+        address: client.address || "",
+        city: client.city || "",
+        state: client.state || "",
+        zipCode: client.zipCode || "",
+        country: client.country || "",
+        // Emergency contact fields
+        emergencyContactName: client.emergencyContactName || "",
+        emergencyContactPhone: client.emergencyContactPhone || "",
+        emergencyContactRelationship: client.emergencyContactRelationship || "",
+      });
+    }
+  }, [isEditDialogOpen, client, form]);
+
   // Update client mutation
   const updateClientMutation = useMutation({
     mutationFn: async (data: ClientEditFormValues) => {
+      // Debug: log the outgoing request body
+      try {
+        console.log("[ClientDetail] update mutation - sending body:", data);
+      } catch (e) {
+        console.log("[ClientDetail] update mutation - stringify failed", e);
+      }
       const res = await fetch(`/api/users/${clientId}`, {
         method: "PATCH",
         headers: {
@@ -160,11 +206,46 @@ export default function ClientDetailPage() {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to update client");
-      return res.json();
+      const json = await res.json();
+      try {
+        console.log("[ClientDetail] update mutation - server response:", json);
+      } catch (e) {
+        console.log(
+          "[ClientDetail] update mutation - response stringify failed",
+          e
+        );
+      }
+      return json;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/users/clients"] });
+    onSuccess: async () => {
+      // Ensure we have fresh data from the server before closing the dialog.
+      try {
+        // Invalidate caches and fetch the latest user row
+        queryClient.invalidateQueries({ queryKey: ["/api/users/clients"] });
+        const fresh = await fetch(`/api/users/${clientId}`, {
+          credentials: "include",
+        });
+        if (fresh.ok) {
+          const freshJson = await fresh.json();
+          try {
+            console.log(
+              "[ClientDetail] onSuccess - fresh user after update:",
+              freshJson
+            );
+          } catch {}
+          // Prime the react-query cache with the fresh value
+          queryClient.setQueryData(["/api/users", clientId], freshJson);
+        } else {
+          console.warn(
+            "[ClientDetail] onSuccess - failed to fetch fresh user after update"
+          );
+        }
+      } catch (e) {
+        console.warn(
+          "[ClientDetail] onSuccess - error fetching fresh user:",
+          e
+        );
+      }
       toast({
         title: "Client updated",
         description: "Client information has been successfully updated.",
@@ -198,7 +279,9 @@ export default function ClientDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/users", clientId] });
       toast({
         title: "SMS preferences updated",
-        description: `SMS notifications ${client?.smsOptOut ? 'enabled' : 'disabled'} for this client.`,
+        description: `SMS notifications ${
+          client?.smsOptOut ? "enabled" : "disabled"
+        } for this client.`,
       });
     },
     onError: (error: Error) => {
@@ -212,6 +295,12 @@ export default function ClientDetailPage() {
 
   // Handle form submission
   const onSubmit = (data: ClientEditFormValues) => {
+    // Debug: log the data we are about to send to the server
+    try {
+      console.log("[ClientDetail] onSubmit - data to update:", data);
+    } catch (e) {
+      console.log("[ClientDetail] onSubmit - stringify failed", e);
+    }
     updateClientMutation.mutate(data);
   };
 
@@ -269,10 +358,15 @@ export default function ClientDetailPage() {
         <Card>
           <CardHeader>
             <CardTitle>Error</CardTitle>
-            <CardDescription>Failed to load client information.</CardDescription>
+            <CardDescription>
+              Failed to load client information.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <p>There was an error loading the client details. Please try again or contact support.</p>
+            <p>
+              There was an error loading the client details. Please try again or
+              contact support.
+            </p>
           </CardContent>
           <CardFooter>
             <Button asChild>
@@ -302,47 +396,60 @@ export default function ClientDetailPage() {
       <Card>
         <CardHeader>
           <CardTitle>Client Information</CardTitle>
-          <CardDescription>Detailed information about {client.name}</CardDescription>
+          <CardDescription>
+            Detailed information about {client.name}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col md:flex-row gap-6">
             <Avatar className="h-24 w-24">
-              <AvatarFallback className="text-xl">{client.name.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
+              <AvatarFallback className="text-xl">
+                {client.name
+                  .split(" ")
+                  .map((n: string) => n[0])
+                  .join("")}
+              </AvatarFallback>
             </Avatar>
             <div className="space-y-3 flex-1">
               <div>
                 <h3 className="text-xl font-semibold flex items-center">
                   <UserCircle className="mr-2 h-5 w-5" /> {client.name}
                 </h3>
-                <p className="text-sm text-muted-foreground">Username: {client.username}</p>
+                <p className="text-sm text-muted-foreground">
+                  Username: {client.username}
+                </p>
               </div>
-              
+
               <div className="flex items-center">
                 <Mail className="mr-2 h-4 w-4" />
                 <span>{client.email}</span>
               </div>
-              
+
               {client.phone && (
                 <div className="flex items-center">
                   <Phone className="mr-2 h-4 w-4" />
                   <span>{client.phone}</span>
                 </div>
               )}
-              
+
               <div className="flex items-center space-x-2 pt-2">
-                <Switch 
+                <Switch
                   id="sms-notifications"
                   checked={!client.smsOptOut}
                   onCheckedChange={handleSmsOptOutToggle}
                   disabled={updateSmsOptOutMutation.isPending}
                 />
                 <Label htmlFor="sms-notifications">
-                  SMS Notifications {client.smsOptOut ? 'Disabled' : 'Enabled'}
+                  SMS Notifications {client.smsOptOut ? "Disabled" : "Enabled"}
                 </Label>
               </div>
-              
+
               {/* Display address information if available */}
-              {(client.address || client.city || client.state || client.zipCode || client.country) && (
+              {(client.address ||
+                client.city ||
+                client.state ||
+                client.zipCode ||
+                client.country) && (
                 <div className="mt-4">
                   <h4 className="text-sm font-medium mb-1">Address</h4>
                   <div className="text-sm text-muted-foreground space-y-1">
@@ -360,15 +467,24 @@ export default function ClientDetailPage() {
                   </div>
                 </div>
               )}
-              
+
               {/* Display emergency contact if available */}
-              {(client.emergencyContactName || client.emergencyContactPhone) && (
+              {(client.emergencyContactName ||
+                client.emergencyContactPhone) && (
                 <div className="mt-4">
-                  <h4 className="text-sm font-medium mb-1">Emergency Contact</h4>
+                  <h4 className="text-sm font-medium mb-1">
+                    Emergency Contact
+                  </h4>
                   <div className="text-sm text-muted-foreground space-y-1">
-                    {client.emergencyContactName && <p>{client.emergencyContactName}</p>}
-                    {client.emergencyContactPhone && <p>Phone: {client.emergencyContactPhone}</p>}
-                    {client.emergencyContactRelationship && <p>Relationship: {client.emergencyContactRelationship}</p>}
+                    {client.emergencyContactName && (
+                      <p>{client.emergencyContactName}</p>
+                    )}
+                    {client.emergencyContactPhone && (
+                      <p>Phone: {client.emergencyContactPhone}</p>
+                    )}
+                    {client.emergencyContactRelationship && (
+                      <p>Relationship: {client.emergencyContactRelationship}</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -398,9 +514,9 @@ export default function ClientDetailPage() {
                   <div className="flex">
                     <div className="w-1/3 bg-muted flex items-center justify-center">
                       {pet.photoPath ? (
-                        <img 
-                          src={pet.photoPath} 
-                          alt={pet.name} 
+                        <img
+                          src={pet.photoPath}
+                          alt={pet.name}
                           className="h-32 w-full object-cover"
                         />
                       ) : (
@@ -412,12 +528,23 @@ export default function ClientDetailPage() {
                     <div className="w-2/3 p-4">
                       <h4 className="font-semibold">{pet.name}</h4>
                       <div className="text-sm text-muted-foreground mt-1">
-                        <p>{pet.species} {pet.breed ? `- ${pet.breed}` : ''}</p>
+                        <p>
+                          {pet.species} {pet.breed ? `- ${pet.breed}` : ""}
+                        </p>
                         {pet.gender && <p>Gender: {pet.gender}</p>}
                         {pet.color && <p>Color: {pet.color}</p>}
                       </div>
-                      <Button size="sm" variant="outline" className="mt-2" asChild>
-                        <Link href={`/admin/clients/${clientId}/pets/${pet.id}`}>View Details</Link>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-2"
+                        asChild
+                      >
+                        <Link
+                          href={`/admin/clients/${clientId}/pets/${pet.id}`}
+                        >
+                          View Details
+                        </Link>
                       </Button>
                     </div>
                   </div>
@@ -426,9 +553,13 @@ export default function ClientDetailPage() {
             </div>
           ) : (
             <div className="text-center py-6">
-              <p className="text-muted-foreground">No pets found for Client ID: {clientId}</p>
+              <p className="text-muted-foreground">
+                No pets found for Client ID: {clientId}
+              </p>
               <Button className="mt-4" asChild>
-                <Link href={`/admin/clients?addPet=${clientId}`}>Add a Pet</Link>
+                <Link href={`/admin/clients?addPet=${clientId}`}>
+                  Add a Pet
+                </Link>
               </Button>
             </div>
           )}
@@ -436,7 +567,9 @@ export default function ClientDetailPage() {
         {pets && pets.length > 0 && (
           <CardFooter>
             <Button asChild>
-              <Link href={`/admin/clients?addPet=${clientId}`}>Add New Pet</Link>
+              <Link href={`/admin/clients?addPet=${clientId}`}>
+                Add New Pet
+              </Link>
             </Button>
           </CardFooter>
         )}
@@ -452,7 +585,10 @@ export default function ClientDetailPage() {
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="space-y-4 pt-4"
+            >
               <FormField
                 control={form.control}
                 name="name"
@@ -466,7 +602,7 @@ export default function ClientDetailPage() {
                   </FormItem>
                 )}
               />
-              
+
               <FormField
                 control={form.control}
                 name="email"
@@ -480,7 +616,7 @@ export default function ClientDetailPage() {
                   </FormItem>
                 )}
               />
-              
+
               <FormField
                 control={form.control}
                 name="username"
@@ -494,7 +630,7 @@ export default function ClientDetailPage() {
                   </FormItem>
                 )}
               />
-              
+
               <FormField
                 control={form.control}
                 name="phone"
@@ -511,14 +647,16 @@ export default function ClientDetailPage() {
                   </FormItem>
                 )}
               />
-              
+
               <FormField
                 control={form.control}
                 name="smsOptOut"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-base">SMS Notifications</FormLabel>
+                      <FormLabel className="text-base">
+                        SMS Notifications
+                      </FormLabel>
                       <FormDescription>
                         Allow sending SMS notifications to this client.
                       </FormDescription>
@@ -532,7 +670,7 @@ export default function ClientDetailPage() {
                   </FormItem>
                 )}
               />
-              
+
               <div className="space-y-2">
                 <h3 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                   Address Information
@@ -551,7 +689,7 @@ export default function ClientDetailPage() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
@@ -580,7 +718,7 @@ export default function ClientDetailPage() {
                       )}
                     />
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
@@ -611,7 +749,7 @@ export default function ClientDetailPage() {
                   </div>
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <h3 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                   Emergency Contact
@@ -630,7 +768,7 @@ export default function ClientDetailPage() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
@@ -661,7 +799,7 @@ export default function ClientDetailPage() {
                   </div>
                 </div>
               </div>
-              
+
               <DialogFooter>
                 <Button
                   type="button"
@@ -670,11 +808,10 @@ export default function ClientDetailPage() {
                 >
                   Cancel
                 </Button>
-                <Button 
-                  type="submit"
-                  disabled={updateClientMutation.isPending}
-                >
-                  {updateClientMutation.isPending ? "Saving..." : "Save Changes"}
+                <Button type="submit" disabled={updateClientMutation.isPending}>
+                  {updateClientMutation.isPending
+                    ? "Saving..."
+                    : "Save Changes"}
                 </Button>
               </DialogFooter>
             </form>

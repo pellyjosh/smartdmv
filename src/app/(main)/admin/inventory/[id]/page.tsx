@@ -22,6 +22,7 @@ import {
   History as HistoryIcon,
   AlertTriangle,
 } from "lucide-react";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -111,12 +112,15 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 
 // New implementation code goes below:
 
-function InventoryItemDetailPage() {
+// Hydration-safe wrapper component
+function InventoryItemDetailPageContent() {
   const params = useParams() as { id?: string };
   const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useUser();
+  const { practiceCurrency } = useCurrencyFormatter();
+  const currencySymbol = practiceCurrency?.symbol || "$";
   const [currentTab, setCurrentTab] = useState("details");
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
@@ -148,7 +152,6 @@ function InventoryItemDetailPage() {
   const hasDeleteAccess = canDelete || canManage || isAdmin;
 
   // Interaction state
-  const [interactions, setInteractions] = useState<any[]>([]);
   const [selectedInteraction, setSelectedInteraction] = useState<any>(null);
   const [showAddInteractionModal, setShowAddInteractionModal] = useState(false);
   const [showEditInteractionModal, setShowEditInteractionModal] =
@@ -165,15 +168,21 @@ function InventoryItemDetailPage() {
     data: item,
     isLoading,
     isError,
+    error,
   } = useQuery({
     queryKey: ["inventory", itemId],
     queryFn: async () => {
       if (!itemId) throw new Error("No item ID provided");
       const res = await apiRequest("GET", `/api/inventory/${itemId}`);
+      if (!res.ok) {
+        throw new Error(`Failed to fetch inventory item: ${res.statusText}`);
+      }
       return res.json();
     },
     enabled: !!itemId,
-  }) as { data: any | undefined; isLoading: boolean; isError: boolean };
+    retry: 2,
+    retryDelay: 1000,
+  });
 
   // Add edit dialog form
   const editForm = useForm({
@@ -182,11 +191,11 @@ function InventoryItemDetailPage() {
         name: z.string().min(2, "Name must be at least 2 characters"),
         description: z.string().optional(),
         type: z.string(),
-        minQuantity: z.number().optional(),
+        minQuantity: z.coerce.number().optional(),
         unit: z.string().optional(),
         sku: z.string().optional(),
-        cost: z.number().optional(),
-        price: z.number().optional(),
+        cost: z.coerce.number().optional(),
+        price: z.coerce.number().optional(),
         supplier: z.string().optional(),
         location: z.string().optional(),
         deaSchedule: z.string().optional(),
@@ -209,7 +218,7 @@ function InventoryItemDetailPage() {
     },
   });
 
-  // Update form values when item data changes
+  // Update form values when item data changes - FIXED FOR HYDRATION
   useEffect(() => {
     if (item) {
       editForm.reset({
@@ -227,7 +236,8 @@ function InventoryItemDetailPage() {
         requiresSpecialAuth: item.requiresSpecialAuth || false,
       });
     }
-  }, [item, editForm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item]);
 
   // Edit item mutation
   const editMutation = useMutation({
@@ -294,15 +304,15 @@ function InventoryItemDetailPage() {
     },
   });
 
-  // Update edit interaction form values when selection changes
-  useEffect(() => {
-    if (selectedInteraction) {
-      editInteractionForm.reset({
-        severity: selectedInteraction.severity,
-        description: selectedInteraction.description,
-      });
-    }
-  }, [selectedInteraction, editInteractionForm]);
+  // COMMENTED: Update edit interaction form values when selection changes - POTENTIAL HYDRATION ISSUE SOURCE
+  // useEffect(() => {
+  //   if (selectedInteraction) {
+  //     editInteractionForm.reset({
+  //       severity: selectedInteraction.severity,
+  //       description: selectedInteraction.description,
+  //     });
+  //   }
+  // }, [selectedInteraction, editInteractionForm]);
 
   // Query for other medications to populate the dropdown
   const { data: otherMedications = [] } = useQuery({
@@ -458,7 +468,7 @@ function InventoryItemDetailPage() {
   const adjustStockForm = useForm({
     resolver: zodResolver(
       z.object({
-        quantity: z.number(),
+        quantity: z.coerce.number(),
         transactionType: z.string(),
         notes: z.string().optional(),
       })
@@ -521,10 +531,10 @@ function InventoryItemDetailPage() {
   const restockForm = useForm({
     resolver: zodResolver(
       z.object({
-        quantity: z.number().min(1, "Quantity must be at least 1"),
+        quantity: z.coerce.number().min(1, "Quantity must be at least 1"),
         notes: z.string().optional(),
         supplier: z.string().optional(),
-        cost: z.number().optional(),
+        cost: z.coerce.number().optional(),
         // Remove the date picker because it's causing issues
         // expiryDate: z.date().optional().nullable(),
       })
@@ -538,15 +548,18 @@ function InventoryItemDetailPage() {
     },
   });
 
-  // Use effect to set default supplier
+  // Use effect to set default supplier - FIXED FOR HYDRATION
   useEffect(() => {
-    if (item && item.supplier) {
-      restockForm.setValue("supplier", item.supplier);
+    if (item) {
+      if (item.supplier) {
+        restockForm.setValue("supplier", item.supplier);
+      }
+      if (item.cost) {
+        restockForm.setValue("cost", item.cost);
+      }
     }
-    if (item && item.cost) {
-      restockForm.setValue("cost", item.cost);
-    }
-  }, [item, restockForm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item]);
 
   const restockMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -638,13 +651,6 @@ function InventoryItemDetailPage() {
         item.type === "medication" &&
         currentTab === "interactions",
     }) as { data: any[]; isLoading: boolean };
-
-  // Update the interactions state when data is loaded
-  useEffect(() => {
-    if (interactionsData && Array.isArray(interactionsData)) {
-      setInteractions(interactionsData);
-    }
-  }, [interactionsData]);
 
   // Get usage chart data
   const usageChartData =
@@ -789,6 +795,9 @@ function InventoryItemDetailPage() {
         <p className="text-muted-foreground mb-4">
           Unable to load inventory item details
         </p>
+        <p className="text-sm text-muted-foreground mb-4">
+          {error?.message || "Please try again later"}
+        </p>
         <Button
           variant="secondary"
           onClick={() => router.push("/admin/inventory")}
@@ -819,15 +828,6 @@ function InventoryItemDetailPage() {
       </div>
     );
   }
-
-  // Log item structure to help debug
-  console.log("Item data structure:", JSON.stringify(item, null, 2));
-
-  // Check explicitly for name property
-  console.log("Item name exists:", item && "name" in item);
-  console.log("Item name value:", item?.name);
-  console.log("Item type value:", item?.type);
-  console.log("Is medication?", item?.type === "medication");
 
   return (
     <div className="container mx-auto p-4 md:p-6">
@@ -861,71 +861,43 @@ function InventoryItemDetailPage() {
         </div>
         <div className="flex items-center space-x-2 mt-4 md:mt-0">
           {hasUpdateAccess && (
-            <Button variant="outline" size="sm" asChild>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setEditDialogOpen(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ")
-                    setEditDialogOpen(true);
-                }}
-                className="inline-flex items-center"
-              >
-                <Edit className="mr-2 h-4 w-4" />
-                Edit Details
-              </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditDialogOpen(true)}
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Edit Details
             </Button>
           )}
           {hasUpdateAccess && (
-            <Button variant="outline" size="sm" asChild>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setAdjustDialogOpen(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ")
-                    setAdjustDialogOpen(true);
-                }}
-                className="inline-flex items-center"
-              >
-                <ArrowUpDown className="mr-2 h-4 w-4" />
-                Adjust Stock
-              </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAdjustDialogOpen(true)}
+            >
+              <ArrowUpDown className="mr-2 h-4 w-4" />
+              Adjust Stock
             </Button>
           )}
           {hasUpdateAccess && (
-            <Button variant="default" size="sm" asChild>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setRestockFormOpen(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ")
-                    setRestockFormOpen(true);
-                }}
-                className="inline-flex items-center"
-              >
-                <ShoppingBag className="mr-2 h-4 w-4" />
-                Restock
-              </div>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setRestockFormOpen(true)}
+            >
+              <ShoppingBag className="mr-2 h-4 w-4" />
+              Restock
             </Button>
           )}
           {hasDeleteAccess && (
-            <Button variant="destructive" size="sm" asChild>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setDeleteDialogOpen(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ")
-                    setDeleteDialogOpen(true);
-                }}
-                className="inline-flex items-center"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
             </Button>
           )}
           {!hasReadAccess && (
@@ -1129,7 +1101,8 @@ function InventoryItemDetailPage() {
                     <div>
                       <p className="text-sm font-medium">Cost</p>
                       <p className="text-sm text-muted-foreground">
-                        ${item.cost}
+                        {currencySymbol}
+                        {item.cost}
                       </p>
                     </div>
                   )}
@@ -1137,7 +1110,8 @@ function InventoryItemDetailPage() {
                     <div>
                       <p className="text-sm font-medium">Price</p>
                       <p className="text-sm text-muted-foreground">
-                        ${item.price}
+                        {currencySymbol}
+                        {item.price}
                       </p>
                     </div>
                   )}
@@ -1434,7 +1408,7 @@ function InventoryItemDetailPage() {
                     )}
                   </div>
 
-                  {interactions && interactions.length > 0 ? (
+                  {interactionsData && interactionsData.length > 0 ? (
                     <div className="rounded-md border">
                       <Table>
                         <TableHeader>
@@ -1446,7 +1420,7 @@ function InventoryItemDetailPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {interactions.map((interaction: any) => (
+                          {interactionsData.map((interaction: any) => (
                             <TableRow key={interaction.id}>
                               <TableCell>
                                 <Link
@@ -1638,13 +1612,7 @@ function InventoryItemDetailPage() {
                     <FormItem>
                       <FormLabel>Min Quantity</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          {...field}
-                          onChange={(e) =>
-                            field.onChange(Number(e.target.value))
-                          }
-                        />
+                        <Input type="number" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1670,16 +1638,9 @@ function InventoryItemDetailPage() {
                   name="cost"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Cost ($)</FormLabel>
+                      <FormLabel>Cost ({currencySymbol})</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          {...field}
-                          onChange={(e) =>
-                            field.onChange(Number(e.target.value))
-                          }
-                        />
+                        <Input type="number" step="0.01" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1690,16 +1651,9 @@ function InventoryItemDetailPage() {
                   name="price"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Price ($)</FormLabel>
+                      <FormLabel>Price ({currencySymbol})</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          {...field}
-                          onChange={(e) =>
-                            field.onChange(Number(e.target.value))
-                          }
-                        />
+                        <Input type="number" step="0.01" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1863,13 +1817,7 @@ function InventoryItemDetailPage() {
                   <FormItem>
                     <FormLabel>Quantity ({item?.unit || "units"})</FormLabel>
                     <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
-                      />
+                      <Input type="number" step="0.01" min="0.01" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1938,12 +1886,7 @@ function InventoryItemDetailPage() {
                   <FormItem>
                     <FormLabel>Quantity ({item?.unit || "units"})</FormLabel>
                     <FormControl>
-                      <Input
-                        type="number"
-                        min="1"
-                        {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
-                      />
+                      <Input type="number" min="1" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1967,7 +1910,7 @@ function InventoryItemDetailPage() {
                 name="cost"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Cost per Unit ($)</FormLabel>
+                    <FormLabel>Cost per Unit ({currencySymbol})</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -1975,7 +1918,6 @@ function InventoryItemDetailPage() {
                         min="0"
                         placeholder="0.00"
                         {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
                       />
                     </FormControl>
                     <FormMessage />
@@ -2351,4 +2293,27 @@ function getTransactionTypeBadge(type: string) {
   }
 }
 
-export default InventoryItemDetailPage;
+// Hydration-safe wrapper component
+function HydrationSafeInventoryPage() {
+  const { user, initialAuthChecked } = useUser();
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    // Set isClient to true only once on mount
+    setIsClient(true);
+  }, []); // Empty dependency array - only run once on mount
+
+  // Don't render anything until we're on the client and auth is checked
+  if (!isClient || !initialAuthChecked) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Spinner size="lg" />
+        <span className="ml-4 text-lg text-muted-foreground">Loading...</span>
+      </div>
+    );
+  }
+
+  return <InventoryItemDetailPageContent />;
+}
+
+export default HydrationSafeInventoryPage;

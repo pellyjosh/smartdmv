@@ -312,9 +312,7 @@ const AddVaccinationPage = () => {
           <Button
             variant="ghost"
             className="mr-2"
-            onClick={() =>
-              router.push(petId ? `/pets/${petId}` : "/admin/vaccinations")
-            }
+            onClick={() => router.back()}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
@@ -852,11 +850,7 @@ const AddVaccinationPage = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() =>
-                    router.push(
-                      petId ? `/pets/${petId}` : "/admin/vaccinations"
-                    )
-                  }
+                  onClick={() => router.back()}
                 >
                   Cancel
                 </Button>

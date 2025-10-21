@@ -106,6 +106,13 @@
       "when": 1760516136359,
       "tag": "0014_lethal_switch",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1761043699345,
+      "tag": "0015_illegal_chamber",
+      "breakpoints": true
     }
   ]
 }

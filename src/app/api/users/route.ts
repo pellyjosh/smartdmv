@@ -113,7 +113,8 @@ export async function POST(req: NextRequest) {
       email: z.string().email(),
       username: z.string().min(3),
       password: z.string().min(6),
-      role: z.enum([UserRoleEnum.CLIENT, UserRoleEnum.ADMINISTRATOR, UserRoleEnum.SUPER_ADMIN, UserRoleEnum.PRACTICE_ADMINISTRATOR]).default(UserRoleEnum.CLIENT), // Use the enum
+      // Accept any value from the canonical UserRoleEnum (includes PRACTICE_STAFF etc)
+      role: z.nativeEnum(UserRoleEnum).default(UserRoleEnum.CLIENT),
       practiceId: z.coerce.number(), // Convert string to number
       phone: z.string().optional(),
       address: z.string().optional(),
@@ -126,46 +127,62 @@ export async function POST(req: NextRequest) {
       emergencyContactRelationship: z.string().optional(),
     });
 
-    const validatedData = userSchema.parse(body);
+    // Debug logs to help trace validation issues when creating users
+    try {
+      console.log('Incoming user create body:', body);
+      console.log('UserRoleEnum values:', Object.values(UserRoleEnum));
+      console.log('Incoming role value:', body?.role);
+      const validatedData = userSchema.parse(body);
+      console.log('Validated user data:', validatedData);
 
-    // Check for existing user with same email or username
-    const existingUser = await tenantDb.query.users.findFirst({
-      where: and(
-        eq(users.email, validatedData.email),
-        eq(users.username, validatedData.username),
-      )
-    })
+      // proceed with creation using validatedData
 
-    if (existingUser) {
-      return NextResponse.json({ error: "User with this email or username already exists" }, { status: 400 });
+      // Check for existing user with same email or username
+      const existingUser = await tenantDb.query.users.findFirst({
+        where: and(
+          eq(users.email, validatedData.email),
+          eq(users.username, validatedData.username),
+        )
+      })
+
+      if (existingUser) {
+        return NextResponse.json({ error: "User with this email or username already exists" }, { status: 400 });
+      }
+
+      const [newUser] = await tenantDb.insert(users).values(validatedData).returning();
+
+      // Log user creation audit
+      const auditUserContext = await getUserContextFromRequest(req);
+      if (auditUserContext) {
+        await logCreate(
+          req as any,
+          'USER',
+          newUser.id.toString(),
+          {
+            name: newUser.name,
+            email: newUser.email,
+            role: newUser.role,
+            practiceId: newUser.practiceId
+          },
+          auditUserContext.userId,
+          newUser.practiceId?.toString(),
+          undefined,
+          {
+            createdBy: auditUserContext.name || auditUserContext.email,
+            registrationMethod: 'api'
+          }
+        );
+      }
+
+      return NextResponse.json(newUser, { status: 201 });
+    } catch (parseError) {
+      console.error('Error creating user:', parseError);
+      if (parseError instanceof z.ZodError) {
+        return NextResponse.json({ error: 'Invalid input', details: parseError.errors }, { status: 400 });
+      }
+      return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
     }
-
-    const [newUser] = await tenantDb.insert(users).values(validatedData).returning();
-
-    // Log user creation audit
-    const auditUserContext = await getUserContextFromRequest(req);
-    if (auditUserContext) {
-      await logCreate(
-        req as any,
-        'USER',
-        newUser.id.toString(),
-        {
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role,
-          practiceId: newUser.practiceId
-        },
-        auditUserContext.userId,
-        newUser.practiceId?.toString(),
-        undefined,
-        {
-          createdBy: auditUserContext.name || auditUserContext.email,
-          registrationMethod: 'api'
-        }
-      );
-    }
-
-    return NextResponse.json(newUser, { status: 201 });
+    
   } catch (error) {
     console.error('Error creating user:', error);
     if (error instanceof z.ZodError) {

@@ -1030,10 +1030,8 @@ function InventoryTable({
   return (
     <div>
                 <PermissionButton resource={"inventory" as any} action={"CREATE" as any}>
-                  <Button>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Add Item
-                  </Button>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Add Item
                 </PermissionButton>
       {hasSelectionEnabled && selectedItems.length > 0 && (
         <div className="bg-muted p-4 mb-4 rounded-md flex justify-between items-center">

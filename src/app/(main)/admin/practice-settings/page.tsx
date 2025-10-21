@@ -119,8 +119,8 @@ export default function PracticeSettingsPage() {
   const [isHeadOffice, setIsHeadOffice] = useState(
     practice?.isHeadOffice || false
   );
-  const [defaultCurrencyCode, setDefaultCurrencyCode] = useState(
-    (practice as any)?.defaultCurrencyCode || "USD"
+  const [defaultCurrencyId, setDefaultCurrencyId] = useState<number | null>(
+    (practice as any)?.defaultCurrencyId || 1
   );
 
   // State for practice appearance
@@ -141,7 +141,7 @@ export default function PracticeSettingsPage() {
       setPracticeZipCode(practice.zipCode || "");
       setPracticeCountry(practice.country || "");
       setIsHeadOffice(practice.isHeadOffice || false);
-      setDefaultCurrencyCode((practice as any).defaultCurrencyCode || "USD");
+      setDefaultCurrencyId((practice as any).defaultCurrencyId || 1);
       setLogoPreview(practice.logoPath ? `/uploads/${practice.logoPath}` : "");
     }
   }, [practice]);
@@ -194,44 +194,58 @@ export default function PracticeSettingsPage() {
     if (!practice) return;
 
     try {
-      await (updatePracticeAsync
-        ? updatePracticeAsync(practice.id, {
-            name: practiceName,
-            email: practiceEmail,
-            phone: practicePhone,
-            address: practiceAddress,
-            city: practiceCity,
-            state: practiceState,
-            zipCode: practiceZipCode,
-            country: practiceCountry,
-            isHeadOffice,
-            defaultCurrencyCode: defaultCurrencyCode as any,
-          } as any)
-        : Promise.resolve(
-            updatePractice(practice.id, {
-              name: practiceName,
-              email: practiceEmail,
-              phone: practicePhone,
-              address: practiceAddress,
-              city: practiceCity,
-              state: practiceState,
-              zipCode: practiceZipCode,
-              country: practiceCountry,
-              isHeadOffice,
-              defaultCurrencyCode: defaultCurrencyCode as any,
-            } as any)
-          ));
+      // Only send fields that are known to exist in the current database
+      const updateData: any = {};
+
+      if (practiceName !== practice.name) {
+        updateData.name = practiceName;
+      }
+
+      // Try to update currency if it has changed
+      if (defaultCurrencyId && defaultCurrencyId !== (practice as any)?.defaultCurrencyId) {
+        updateData.defaultCurrencyId = defaultCurrencyId;
+        console.log('Updating currency from', (practice as any)?.defaultCurrencyId, 'to', defaultCurrencyId);
+      }
+
+      // For now, only update the name and currency fields to avoid database column errors
+      // The other fields (email, phone, address, etc.) need database schema updates first
+
+      console.log('Update data being sent:', updateData);
+
+      if (Object.keys(updateData).length === 0) {
+        toast({
+          title: "No changes",
+          description: "No changes were made to the practice information.",
+        });
+        return;
+      }
+
+      const result = await (updatePracticeAsync
+        ? updatePracticeAsync(practice.id, updateData)
+        : Promise.resolve(updatePractice(practice.id, updateData)));
+
+      console.log('Update result:', result);
 
       toast({
         title: "Practice updated",
         description: "Practice details saved successfully.",
       });
     } catch (err: any) {
-      toast({
-        title: "Failed to update practice",
-        description: err?.message || "An unknown error occurred",
-        variant: "destructive",
-      });
+      console.error('Form submission error:', err);
+
+      if (err?.message?.includes('Database schema mismatch')) {
+        toast({
+          title: "Database update needed",
+          description: "Some form fields require database updates. Please contact your administrator.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Failed to update practice",
+          description: err?.message || "An unknown error occurred",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -245,7 +259,7 @@ export default function PracticeSettingsPage() {
   };
 
   // Handle logo upload submission
-  const handleLogoSubmit = (e: React.FormEvent) => {
+  const handleLogoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!logoFile || !practice) {
       toast({
@@ -256,7 +270,49 @@ export default function PracticeSettingsPage() {
       return;
     }
 
-    uploadLogo(practice.id, logoFile);
+    try {
+      const formData = new FormData();
+      formData.append("logo", logoFile);
+
+      const response = await fetch(`/api/practices/${practice.id}/logo`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to upload logo");
+      }
+
+      const result = await response.json();
+
+      // Update the logo preview with the new path
+      setLogoPreview(result.logoPath);
+
+      // Clear the file input
+      setLogoFile(null);
+
+      // Reset file input
+      const fileInput = document.getElementById('practice-logo') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
+      toast({
+        title: "Logo uploaded",
+        description: "Practice logo has been successfully updated.",
+      });
+
+      // Invalidate queries to refresh practice data
+      queryClient.invalidateQueries({ queryKey: ["/api/practices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user-practices"] });
+
+    } catch (error: any) {
+      toast({
+        title: "Logo upload failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   // Delete logo handler
@@ -457,17 +513,17 @@ export default function PracticeSettingsPage() {
                   <div className="space-y-2">
                     <Label htmlFor="default-currency">Default Currency</Label>
                     <Select
-                      value={defaultCurrencyCode || undefined}
+                      value={defaultCurrencyId?.toString() || undefined}
                       onValueChange={(val: string) =>
-                        setDefaultCurrencyCode(val)
+                        setDefaultCurrencyId(val ? parseInt(val) : null)
                       }
                     >
                       <SelectTrigger id="default-currency">
                         <SelectValue placeholder="Select currency" />
                       </SelectTrigger>
                       <SelectContent className="w-[220px]">
-                        <SelectItem value="USD">USD — US Dollar</SelectItem>
-                        <SelectItem value="NGN">
+                        <SelectItem value="1">USD — US Dollar</SelectItem>
+                        <SelectItem value="2">
                           NGN — Nigerian Naira
                         </SelectItem>
                       </SelectContent>
