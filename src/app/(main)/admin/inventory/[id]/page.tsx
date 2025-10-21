@@ -1817,7 +1817,7 @@ function InventoryItemDetailPageContent() {
                   <FormItem>
                     <FormLabel>Quantity ({item?.unit || "units"})</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" min="0.01" {...field} />
+                      <Input type="number" step="1" min="1" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1886,7 +1886,7 @@ function InventoryItemDetailPageContent() {
                   <FormItem>
                     <FormLabel>Quantity ({item?.unit || "units"})</FormLabel>
                     <FormControl>
-                      <Input type="number" min="1" {...field} />
+                      <Input type="number" step="1" min="1" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

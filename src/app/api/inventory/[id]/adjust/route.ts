@@ -51,7 +51,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // Calculate the quantity change based on transaction type
-    let quantityChange = Number(quantity);
+    // Parse as integer to ensure no decimals
+    let quantityChange = parseInt(quantity, 10);
+    
+    // Validate that quantity is a valid integer
+    if (isNaN(quantityChange)) {
+      return NextResponse.json({ error: 'Quantity must be a valid whole number' }, { status: 400 });
+    }
     
     // For remove, use, expired, and lost transactions, make quantity negative
     if (['remove', 'use', 'expired', 'lost'].includes(transactionType)) {
