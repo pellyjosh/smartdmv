@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { invoices } from '@/db/schema';
-import { getStripeClientForPractice } from '@/lib/payments/providers';
+import { getStripeClientForPractice } from '@/lib/payments/payment-handler';
 import { eq, and } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {

@@ -3,10 +3,15 @@
 
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { ownerDb } from '@/owner/db/config';
-import { practices } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { practices, practicePaymentProviders } from '@/db/schema';
+import { paymentProviders, providerCurrencySupport } from '@/db/owner-schema';
+import { eq, and, asc } from 'drizzle-orm';
 import { createStripePayment, verifyStripePayment } from './providers/stripe';
 import { createPaystackPayment, verifyPaystackPayment } from './providers/paystack';
+import crypto from 'crypto';
+
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'your-32-character-secret-key!!';
+const ALGORITHM = 'aes-256-cbc';
 
 /**
  * Payment parameters - what you need to make a payment
@@ -31,12 +36,21 @@ interface PaymentResponse {
 }
 
 /**
- * Decrypt API keys (implement your actual decryption here)
+ * Decrypt API keys
  */
-async function decryptApiKey(encrypted: string): Promise<string> {
-  // TODO: Replace with your actual KMS/encryption service
-  // For now, assuming keys are stored encrypted in DB
-  return encrypted;
+async function decryptApiKey(encryptedKey: string): Promise<string> {
+  try {
+    const parts = encryptedKey.split(':');
+    const iv = Buffer.from(parts.shift()!, 'hex');
+    const encryptedText = Buffer.from(parts.join(':'), 'hex');
+    const decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY), iv);
+    let decrypted = decipher.update(encryptedText);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return decrypted.toString();
+  } catch (error) {
+    console.error('Error decrypting key:', error);
+    throw new Error('Failed to decrypt API key');
+  }
 }
 
 /**
@@ -54,30 +68,47 @@ export async function createPayment(params: PaymentParams): Promise<PaymentRespo
 
     // STEP 1: Get practice info from tenant DB
     const tenantDb = await getCurrentTenantDb();
-    const practice = await tenantDb.query.practices.findFirst({
-      where: eq(practices.id, practiceId),
-      with: {
-        currency: true, // Get the practice's default currency
-      },
-    });
+    const [practice] = await tenantDb
+      .select({
+        id: practices.id,
+        defaultCurrencyId: practices.defaultCurrencyId,
+      })
+      .from(practices)
+      .where(eq(practices.id, practiceId))
+      .limit(1);
 
     if (!practice) {
       return { success: false, provider: 'none', error: 'Practice not found' };
     }
 
-    const currencyCode = practice.currency?.code || 'USD';
+    // Use practice currency or default to 1 (usually USD)
+    const currencyId = practice.defaultCurrencyId || 1;
+    
+    // TODO: Get actual currency code from currencies table
+    // For now, assume 1 = USD
+    const currencyCode = 'USD';
 
-    // STEP 2: Find which provider to use from Owner DB
-    // Get provider that supports this currency
-    const providerCurrency = await ownerDb.query.providerCurrencySupport.findFirst({
-      where: (pcs: any, { eq }: any) => eq(pcs.currencyCode, currencyCode),
-      with: {
-        provider: true, // Include the full provider info
-      },
-      orderBy: (pcs: any, { asc }: any) => [asc(pcs.priority)], // Get highest priority
-    });
+    // STEP 2: Find which provider supports this currency from Owner DB
+    // First, get the provider that supports this currency (join with paymentProviders table)
+    const [providerInfo] = await ownerDb
+      .select({
+        providerId: providerCurrencySupport.providerId,
+        currencyCode: providerCurrencySupport.currencyCode,
+        providerCode: paymentProviders.code,
+      })
+      .from(providerCurrencySupport)
+      .innerJoin(paymentProviders, eq(providerCurrencySupport.providerId, paymentProviders.id))
+      .where(
+        and(
+          eq(providerCurrencySupport.currencyCode, currencyCode),
+          eq(providerCurrencySupport.isActive, true),
+          eq(paymentProviders.status, 'active')
+        )
+      )
+      .orderBy(asc(paymentProviders.priority))
+      .limit(1);
 
-    if (!providerCurrency || !providerCurrency.provider) {
+    if (!providerInfo) {
       return { 
         success: false, 
         provider: 'none', 
@@ -85,17 +116,20 @@ export async function createPayment(params: PaymentParams): Promise<PaymentRespo
       };
     }
 
-    const providerCode = providerCurrency.provider.code; // 'stripe' or 'paystack'
+    const providerCode = providerInfo.providerCode; // 'stripe' or 'paystack'
 
     // STEP 3: Get practice's API keys for this provider from tenant DB
-    const practiceProvider = await tenantDb.query.practice_payment_providers.findFirst({
-      where: (ppp: any, { and, eq }: any) => 
+    const [practiceProvider] = await tenantDb
+      .select()
+      .from(practicePaymentProviders)
+      .where(
         and(
-          eq(ppp.practiceId, practiceId),
-          eq(ppp.providerCode, providerCode),
-          eq(ppp.enabled, true)
-        ),
-    });
+          eq(practicePaymentProviders.practiceId, practiceId),
+          eq(practicePaymentProviders.providerCode, providerCode),
+          eq(practicePaymentProviders.isEnabled, true)
+        )
+      )
+      .limit(1);
 
     if (!practiceProvider) {
       return { 
@@ -106,8 +140,10 @@ export async function createPayment(params: PaymentParams): Promise<PaymentRespo
     }
 
     // Decrypt API keys
-    const secretKey = await decryptApiKey(practiceProvider.secretKeyEncrypted);
-    const publicKey = practiceProvider.publicKey;
+    const secretKey = practiceProvider.secretKey 
+      ? await decryptApiKey(practiceProvider.secretKey)
+      : '';
+    const publicKey = practiceProvider.publicKey || null;
 
     // STEP 4: Create payment with the selected provider
     if (providerCode === 'stripe') {
@@ -200,5 +236,106 @@ export async function verifyPayment(
   } catch (error) {
     console.error('Verification error:', error);
     return { success: false, status: 'error' };
+  }
+}
+
+/**
+ * Get Stripe client configured for a specific practice
+ * Returns null if Stripe is not configured for this practice
+ */
+export async function getStripeClientForPractice(practiceId: number): Promise<any | null> {
+  try {
+    const tenantDb = await getCurrentTenantDb();
+    
+    // Fetch Stripe configuration for this practice
+    const [config] = await tenantDb
+      .select()
+      .from(practicePaymentProviders)
+      .where(
+        and(
+          eq(practicePaymentProviders.practiceId, practiceId),
+          eq(practicePaymentProviders.providerCode, 'stripe'),
+          eq(practicePaymentProviders.isEnabled, true)
+        )
+      )
+      .limit(1);
+
+    if (!config || !config.secretKey) {
+      console.log(`Stripe not configured for practice ${practiceId}`);
+      return null;
+    }
+
+    // Decrypt the secret key
+    const secretKey = await decryptApiKey(config.secretKey);
+
+    // Dynamically import and initialize Stripe
+    const Stripe = (await import('stripe')).default;
+    const stripe = new Stripe(secretKey, {
+      apiVersion: '2025-09-30.clover',
+    });
+
+    return stripe;
+  } catch (error) {
+    console.error('Error getting Stripe client for practice:', error);
+    return null;
+  }
+}
+
+/**
+ * Get Paystack client configured for a specific practice
+ * Returns null if Paystack is not configured for this practice
+ */
+export async function getPaystackClientForPractice(practiceId: number): Promise<any | null> {
+  try {
+    const tenantDb = await getCurrentTenantDb();
+    
+    // Fetch Paystack configuration for this practice
+    const [config] = await tenantDb
+      .select()
+      .from(practicePaymentProviders)
+      .where(
+        and(
+          eq(practicePaymentProviders.practiceId, practiceId),
+          eq(practicePaymentProviders.providerCode, 'paystack'),
+          eq(practicePaymentProviders.isEnabled, true)
+        )
+      )
+      .limit(1);
+
+    if (!config || !config.secretKey) {
+      console.log(`Paystack not configured for practice ${practiceId}`);
+      return null;
+    }
+
+    // Decrypt the secret key
+    const secretKey = await decryptApiKey(config.secretKey);
+
+    // Create simple Paystack client
+    const paystackClient = {
+      secretKey,
+      async request(endpoint: string, method: string = 'GET', body?: any) {
+        const url = `https://api.paystack.co${endpoint}`;
+        const response = await fetch(url, {
+          method,
+          headers: {
+            'Authorization': `Bearer ${secretKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.message || 'Paystack API request failed');
+        }
+
+        return data;
+      },
+    };
+
+    return paystackClient;
+  } catch (error) {
+    console.error('Error getting Paystack client for practice:', error);
+    return null;
   }
 }

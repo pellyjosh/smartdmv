@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice, getCurrentUser } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { payments, invoices, paymentMethods } from '@/db/schema';
-import { getStripeClientForPractice, getPaystackClientForPractice } from '@/lib/payments/providers';
+import { getStripeClientForPractice, getPaystackClientForPractice } from '@/lib/payments/payment-handler';
 import { createAuditLog } from '@/lib/audit-logger';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { z } from 'zod';
