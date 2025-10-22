@@ -679,7 +679,7 @@ const menuGroups: MenuGroup[] = [
       },
       {
         title: "Payment Gateway",
-        href: "/payment-gateway",
+        href: "/admin/payment-gateway",
         icon: CreditCard,
         roles: ["SUPER_ADMIN", "ADMINISTRATOR", "PRACTICE_ADMIN"],
       },

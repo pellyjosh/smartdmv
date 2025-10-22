@@ -3,11 +3,11 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { ownerSchema } from './schema';
 
-// Owner database connection (uses the main database)
-const ownerDbUrl = process.env.DATABASE_URL;
+// Owner database connection (uses OWNER_DATABASE_URL)
+const ownerDbUrl = process.env.OWNER_DATABASE_URL;
 
 if (!ownerDbUrl) {
-  throw new Error('DATABASE_URL environment variable is required');
+  throw new Error('OWNER_DATABASE_URL environment variable is required');
 }
 
 // Normalize connection string for RDS (handle special characters in password)

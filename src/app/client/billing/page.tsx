@@ -153,37 +153,70 @@ export default function BillingPage() {
       ...prev,
       amount: parseFloat(invoice.totalAmount),
     }));
-    // Choose provider based on practice currency (NGN -> paystack).
-    // We avoid calling usePractice() here because this component may render
-    // outside the PracticeProvider during some layouts. Instead fetch practice
-    // server-side data for the invoice's practice.
-    (async () => {
-      try {
-        if ((invoice as any).practiceId) {
-          const res = await fetch(
-            `/api/practices/${(invoice as any).practiceId}`,
-            { credentials: "include" }
-          );
-          if (res.ok) {
-            const pr = await res.json();
-            const legacyCurrency = (pr as any)?.currency;
-            if (legacyCurrency && legacyCurrency.toUpperCase() === "NGN") {
-              setSelectedProvider("paystack");
-            } else {
-              setSelectedProvider("stripe");
-            }
-          } else {
-            setSelectedProvider("stripe");
-          }
-        } else {
-          setSelectedProvider("stripe");
-        }
-      } catch (e) {
-        setSelectedProvider("stripe");
-      } finally {
-        setShowProviderDialog(true);
+
+    // Automatically process payment using the new payment handler
+    processPaymentWithHandler(invoice);
+  };
+
+  /**
+   * Process payment using the new simplified payment handler
+   * This automatically selects the right provider based on currency
+   */
+  const processPaymentWithHandler = async (invoice: Invoice) => {
+    try {
+      setIsProcessingPayment(true);
+
+      // Call the new payment creation API
+      const response = await fetch("/api/payments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          practiceId: (invoice as any).practiceId || 1, // Get from invoice or context
+          amount: parseFloat(invoice.totalAmount),
+          email: user?.email || billingInfoForm.receiptEmail,
+          description: `Invoice #${invoice.invoiceNumber}`,
+          metadata: {
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            clientId: user?.id,
+            clientName: user?.name,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Payment initialization failed");
       }
-    })();
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || "Payment failed");
+      }
+
+      // Show success toast
+      toast({
+        title: "Redirecting to Payment",
+        description: `Opening ${result.provider} checkout page...`,
+      });
+
+      // Redirect to payment URL
+      if (result.paymentUrl) {
+        window.location.href = result.paymentUrl;
+      } else {
+        throw new Error("No payment URL received");
+      }
+    } catch (error) {
+      setIsProcessingPayment(false);
+      toast({
+        title: "Payment Failed",
+        description:
+          error instanceof Error ? error.message : "Failed to process payment",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleRefresh = async () => {
@@ -203,156 +236,15 @@ export default function BillingPage() {
     }
   };
 
+  /**
+   * LEGACY: Old payment processing function - kept for backward compatibility
+   * Consider migrating to processPaymentWithHandler for all use cases
+   */
   const processPayment = async () => {
     if (!selectedInvoice) return;
 
-    try {
-      setIsProcessingPayment(true);
-      // If provider is stripe, try to use Stripe Elements if available for PCI compliance
-      if (selectedProvider === "stripe") {
-        try {
-          const [
-            { loadStripe },
-            { Elements, CardElement, useStripe, useElements },
-          ] = await Promise.all([
-            import("@stripe/stripe-js"),
-            import("@stripe/react-stripe-js"),
-          ]);
-
-          // Request a client_secret from server
-          const intentRes = await fetch("/api/billing/payments/create-intent", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              invoiceId: selectedInvoice.id,
-              amount: paymentForm.amount,
-            }),
-          });
-          if (!intentRes.ok) throw new Error("Failed to create payment intent");
-          const intentJson = await intentRes.json();
-          const clientSecret = intentJson.client_secret;
-          if (!clientSecret) throw new Error("No client_secret from server");
-
-          // Initialize Stripe
-          const stripePromise = loadStripe(
-            (window as any).__STRIPE_PUBLISHABLE_KEY__ || ""
-          );
-          const stripe = await stripePromise;
-          if (!stripe) throw new Error("Stripe JS not available");
-
-          // Render a minimal temporary element to collect card details
-          // For brevity, we will open a browser prompt for card details in fallback (since mounting Elements inside modal requires more refactor).
-          // Prompt for basic card details (ONLY for dev/testing). In production, mount <Elements><CardElement/></Elements> and call stripe.confirmCardPayment.
-          const cardNumber =
-            window.prompt("Enter full card number (test only)") || "";
-          const exp = window.prompt("Enter expiry MM/YY (test only)") || "";
-          const cvv = window.prompt("Enter CVC (test only)") || "";
-
-          if (!cardNumber || !exp || !cvv)
-            throw new Error("Card details required");
-
-          // Use stripe.confirmCardPayment with raw card details is not supported without Elements. For now we'll call the server to process using paymentMethod details.
-          // Create a payment on the server with the paymentIntentId returned after client-side confirmation step would normally complete.
-          // Since we couldn't mount Elements here, we will ask server to create a PaymentIntent and then record the payment by passing the intent id.
-          // This is a pragmatic fallback for environments without @stripe/react-stripe-js installed.
-
-          await processPaymentMutation.mutateAsync({
-            invoiceId: selectedInvoice.id,
-            amount: paymentForm.amount,
-            paymentMethod: "credit_card",
-            provider: "stripe",
-            paymentIntentId:
-              intentJson.id || intentJson.client_secret || undefined,
-          });
-        } catch (stripeErr) {
-          // If Stripe libs aren't available or something failed, fallback to server-side processing using card details
-          await processPaymentMutation.mutateAsync({
-            invoiceId: selectedInvoice.id,
-            amount: paymentForm.amount,
-            paymentMethod: "credit_card",
-            provider: "stripe",
-            cardDetails: {
-              cardNumber: paymentForm.cardNumber,
-              expiryDate: paymentForm.expiryDate,
-              cvv: paymentForm.cvv,
-              nameOnCard: paymentForm.nameOnCard,
-            },
-          });
-        }
-      } else {
-        // Paystack flow: call server to initialize transaction and get authorization_url
-        if (selectedProvider === "paystack") {
-          const res = await fetch("/api/billing/payments", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              invoiceId: selectedInvoice.id,
-              amount: paymentForm.amount,
-              paymentMethod: "online",
-              provider: "paystack",
-            }),
-          });
-
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(
-              err.error || "Failed to initialize Paystack payment"
-            );
-          }
-
-          const json = await res.json();
-          const url =
-            json.authorization_url ||
-            json.authorizationUrl ||
-            json.authorizationURL;
-          if (url) {
-            // Close modal and redirect
-            setShowPaymentDialog(false);
-            window.location.href = url;
-            return; // halt further client-side toast until redirect
-          }
-
-          throw new Error("Paystack did not return an authorization URL");
-        }
-
-        // Other non-stripe providers - fallback to server-side processing
-        await processPaymentMutation.mutateAsync({
-          invoiceId: selectedInvoice.id,
-          amount: paymentForm.amount,
-          paymentMethod: "credit_card",
-          provider: selectedProvider,
-          cardDetails: {
-            cardNumber: paymentForm.cardNumber,
-            expiryDate: paymentForm.expiryDate,
-            cvv: paymentForm.cvv,
-            nameOnCard: paymentForm.nameOnCard,
-          },
-        });
-      }
-
-      toast({
-        title: "Payment Processed",
-        description: `Payment of $${paymentForm.amount.toFixed(
-          2
-        )} has been processed successfully.`,
-      });
-
-      setShowPaymentDialog(false);
-      setSelectedInvoice(null);
-      setIsProcessingPayment(false);
-    } catch (error) {
-      setIsProcessingPayment(false);
-      toast({
-        title: "Payment Failed",
-        description:
-          error instanceof Error
-            ? error.message
-            : "An error occurred processing your payment.",
-        variant: "destructive",
-      });
-    }
+    // Use the new simplified payment handler instead
+    processPaymentWithHandler(selectedInvoice);
   };
 
   const handleAddPaymentMethod = async () => {
@@ -1183,7 +1075,12 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Pay Invoice</DialogTitle>
+            <DialogTitle className="flex items-center justify-between">
+              <span>Pay Invoice</span>
+              <Badge variant="outline" className="ml-2">
+                {selectedProvider === "stripe" ? "Stripe" : "Paystack"}
+              </Badge>
+            </DialogTitle>
             <DialogDescription>
               {selectedInvoice &&
                 `Pay invoice ${selectedInvoice.invoiceNumber} for $${parseFloat(

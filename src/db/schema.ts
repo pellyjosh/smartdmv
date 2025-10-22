@@ -151,6 +151,9 @@ import {
   healthResources,
   healthResourcesRelations
 } from './schemas/healthResourcesSchema';
+import {
+  practicePaymentProviders,
+} from './schemas/paymentProvidersSchema';
 
 export const schema = {
   users,
@@ -322,6 +325,8 @@ export const schema = {
   // Health Resources tables
   healthResources,
   healthResourcesRelations,
+  // Payment Providers tables
+  practicePaymentProviders,
 };
 
 // Re-export all tables and their relations for Drizzle to use
@@ -371,6 +376,7 @@ export * from './schemas/currencySchema';
 export * from './schemas/taxRatesSchema';
 export * from './schemas/financeSchema';
 export * from './schemas/healthResourcesSchema';
+export * from './schemas/paymentProvidersSchema';
 
 // You might also want to re-export the userRoleEnum if it's used elsewhere for typing
 export { UserRoleEnum };

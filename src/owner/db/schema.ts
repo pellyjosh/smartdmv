@@ -12,6 +12,13 @@ import {
   billingHistoryRelations,
 } from './schemas/companiesSchema';
 
+import {
+  paymentProviders,
+  providerCurrencySupport,
+  paymentProvidersRelations,
+  providerCurrencySupportRelations,
+} from '@/db/owner-schema';
+
 export const ownerSchema = {
   companies,
   companyDatabases,
@@ -23,6 +30,10 @@ export const ownerSchema = {
   companyUsersRelations,
   subscriptionsRelations,
   billingHistoryRelations,
+  paymentProviders,
+  providerCurrencySupport,
+  paymentProvidersRelations,
+  providerCurrencySupportRelations,
 };
 
 // Export all schemas and types

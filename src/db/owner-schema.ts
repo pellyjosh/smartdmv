@@ -125,6 +125,82 @@ export const systemSettings = pgTable('system_settings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Payment providers catalog - available providers for all tenants
+export const paymentProviders = pgTable('payment_providers', {
+  id: serial('id').primaryKey(),
+  
+  // Provider Identity
+  code: text('code').notNull().unique(), // 'stripe', 'paystack', 'flutterwave', etc.
+  name: text('name').notNull(), // 'Stripe', 'Paystack', 'Flutterwave'
+  description: text('description'),
+  
+  // Provider Details
+  logoUrl: text('logo_url'), // URL to provider logo
+  websiteUrl: text('website_url'),
+  documentationUrl: text('documentation_url'),
+  
+  // Technical Configuration
+  apiBaseUrl: text('api_base_url'), // Base URL for API calls
+  sandboxApiBaseUrl: text('sandbox_api_base_url'), // Sandbox/test URL
+  
+  // Features & Capabilities
+  supportedCurrencies: json('supported_currencies').$type<string[]>(), // ['USD', 'NGN', 'GHS', etc.]
+  supportedPaymentMethods: json('supported_payment_methods').$type<string[]>(), // ['card', 'bank_transfer', 'mobile_money', etc.]
+  supportedFeatures: json('supported_features').$type<string[]>(), // ['refunds', 'subscriptions', 'webhooks', etc.]
+  
+  // Integration Requirements
+  requiresPublicKey: boolean('requires_public_key').notNull().default(true),
+  requiresSecretKey: boolean('requires_secret_key').notNull().default(true),
+  requiresWebhookSecret: boolean('requires_webhook_secret').notNull().default(false),
+  configSchema: json('config_schema').$type<{
+    fields?: {
+      name: string;
+      label: string;
+      type: 'text' | 'password' | 'select' | 'boolean';
+      required?: boolean;
+      placeholder?: string;
+      options?: string[];
+    }[];
+  }>(), // JSON schema for configuration fields
+  
+  // Status & Priority
+  status: text('status', { enum: ['active', 'inactive', 'deprecated', 'beta'] }).notNull().default('active'),
+  isDefault: boolean('is_default').notNull().default(false), // Default provider for new practices
+  priority: integer('priority').notNull().default(0), // Higher = preferred (for same currency)
+  
+  // Integration Code Reference
+  integrationType: text('integration_type', { 
+    enum: ['built_in', 'plugin', 'custom'] 
+  }).notNull().default('built_in'),
+  handlerModule: text('handler_module'), // e.g., 'stripe', 'paystack'
+  
+  // Metadata
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  createdBy: integer('created_by').references(() => ownerUsers.id), // Owner user ID who added this provider
+});
+
+// Provider-Currency support mapping (many-to-many)
+export const providerCurrencySupport = pgTable('provider_currency_support', {
+  id: serial('id').primaryKey(),
+  
+  providerId: integer('provider_id').notNull().references(() => paymentProviders.id, { onDelete: 'cascade' }),
+  currencyCode: text('currency_code').notNull(), // 'USD', 'NGN', 'GHS', etc.
+  
+  // Currency-specific settings for this provider
+  isRecommended: boolean('is_recommended').notNull().default(false), // Recommended for this currency
+  transactionFeePercent: text('transaction_fee_percent'), // e.g., '2.9'
+  transactionFeeFixed: text('transaction_fee_fixed'), // e.g., '30' (in smallest unit, cents)
+  minAmount: text('min_amount'), // Minimum transaction amount
+  maxAmount: text('max_amount'), // Maximum transaction amount
+  
+  // Status
+  isActive: boolean('is_active').notNull().default(true),
+  
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Relations
 export const tenantsRelations = relations(tenants, ({ many, one }) => ({
   domains: many(tenantDomains),
@@ -164,6 +240,21 @@ export const ownerSessionsRelations = relations(ownerSessions, ({ one }) => ({
   }),
 }));
 
+export const paymentProvidersRelations = relations(paymentProviders, ({ many, one }) => ({
+  currencySupport: many(providerCurrencySupport),
+  createdByUser: one(ownerUsers, {
+    fields: [paymentProviders.createdBy],
+    references: [ownerUsers.id],
+  }),
+}));
+
+export const providerCurrencySupportRelations = relations(providerCurrencySupport, ({ one }) => ({
+  provider: one(paymentProviders, {
+    fields: [providerCurrencySupport.providerId],
+    references: [paymentProviders.id],
+  }),
+}));
+
 // Types
 export type OwnerUser = typeof ownerUsers.$inferSelect;
 export type NewOwnerUser = typeof ownerUsers.$inferInsert;
@@ -177,3 +268,7 @@ export type TenantSubscription = typeof tenantSubscriptions.$inferSelect;
 export type NewTenantSubscription = typeof tenantSubscriptions.$inferInsert;
 export type TenantUsage = typeof tenantUsage.$inferSelect;
 export type NewTenantUsage = typeof tenantUsage.$inferInsert;
+export type PaymentProvider = typeof paymentProviders.$inferSelect;
+export type NewPaymentProvider = typeof paymentProviders.$inferInsert;
+export type ProviderCurrencySupport = typeof providerCurrencySupport.$inferSelect;
+export type NewProviderCurrencySupport = typeof providerCurrencySupport.$inferInsert;
