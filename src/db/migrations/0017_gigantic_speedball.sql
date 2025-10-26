@@ -1,0 +1,1 @@
+ALTER TABLE "practices" ALTER COLUMN "default_currency_id" DROP DEFAULT;

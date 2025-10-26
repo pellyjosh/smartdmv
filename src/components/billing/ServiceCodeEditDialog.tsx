@@ -67,6 +67,29 @@ export default function ServiceCodeEditDialog({
     enabled: !!practiceId,
   });
 
+  // Fetch practice currency
+  const { data: currency } = useQuery<{
+    code: string;
+    name: string;
+    symbol: string;
+    decimals: string;
+  }>({
+    queryKey: ["/api/practices", practiceId, "currency"],
+    queryFn: async () => {
+      if (!practiceId) throw new Error("Practice ID is required");
+      const res = await apiRequest(
+        "GET",
+        `/api/practices/${practiceId}/currency`
+      );
+      if (!res.ok) throw new Error("Failed to fetch currency");
+      return res.json();
+    },
+    enabled: !!practiceId,
+    staleTime: 300_000,
+  });
+
+  const currencySymbol = currency?.symbol;
+
   const form = useForm({
     resolver: zodResolver(serviceCodeFormSchema),
     defaultValues: {
@@ -219,7 +242,9 @@ export default function ServiceCodeEditDialog({
                     <FormLabel>Default Price</FormLabel>
                     <FormControl>
                       <div className="relative">
-                        <span className="absolute left-3 top-2.5">$</span>
+                        <span className="absolute left-3 top-2.5">
+                          {currencySymbol}
+                        </span>
                         <Input
                           type="number"
                           min="0.01"

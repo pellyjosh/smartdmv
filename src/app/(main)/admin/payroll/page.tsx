@@ -177,6 +177,9 @@ export default function PayrollPage() {
   let formatCurrency = useFormatCurrency(practiceId);
   const { practiceCurrency } = useCurrencyFormatter();
 
+  // Get currency symbol
+  const currencySymbol = practiceCurrency?.symbol;
+
   // Prefer practice-level configured currency code (stable once practice loads).
   const practiceConfiguredCode = (practice as any)?.defaultCurrencyCode;
   const currencyConfigured = practiceConfiguredCode || practiceCurrency?.code;
@@ -186,16 +189,6 @@ export default function PayrollPage() {
   // defaultCurrencyCode) or the practice currency API has returned (even if null).
   const currencyMissing =
     !currencyConfigured && (!practiceLoading || practiceCurrency !== undefined);
-
-  // Fallback: show amounts with a dollar sign when no configured currency is available.
-  const fallbackDecimals = practiceCurrency?.decimals ?? 2;
-  if (!currencyConfigured) {
-    formatCurrency = (amount: number) =>
-      `$${new Intl.NumberFormat("en-US", {
-        minimumFractionDigits: fallbackDecimals,
-        maximumFractionDigits: fallbackDecimals,
-      }).format(amount || 0)}`;
-  }
 
   // Page-level loading: consider the page loading while any payroll-related
   // queries (those keyed by `base`) are fetching or if `base` is not yet set.
@@ -219,8 +212,8 @@ export default function PayrollPage() {
                 No currency configured for this practice
               </p>
               <p className="text-sm text-muted-foreground">
-                Amounts will display with a $ fallback. Set the practice default
-                currency in Practice Settings to ensure proper formatting.
+                Set the practice default currency in Practice Settings to
+                display amounts properly.
               </p>
             </div>
             <div className="flex gap-2">

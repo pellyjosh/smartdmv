@@ -7,7 +7,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import * as z from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Loader2, Plus, Trash2, ArrowLeft, AlertTriangle, Settings } from "lucide-react";
+import {
+  CalendarIcon,
+  Loader2,
+  Plus,
+  Trash2,
+  ArrowLeft,
+  AlertTriangle,
+  Settings,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePractice } from "@/hooks/use-practice";
@@ -92,7 +100,8 @@ interface InvoiceItem {
 const NewInvoicePage = () => {
   const { practice } = usePractice();
   const practiceId = practice?.id;
-  const { format: formatCurrency } = useCurrencyFormatter();
+  const { format: formatCurrency, practiceCurrency } = useCurrencyFormatter();
+  const currencySymbol = practiceCurrency?.symbol;
   const { toast } = useToast();
   const router = useRouter();
 
@@ -458,8 +467,9 @@ const NewInvoicePage = () => {
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription className="flex items-center justify-between">
             <span>
-              <strong>Currency Not Configured:</strong> Your practice doesn't have a default currency set.
-              Please configure it in Practice Settings before creating invoices.
+              <strong>Currency Not Configured:</strong> Your practice doesn't
+              have a default currency set. Please configure it in Practice
+              Settings before creating invoices.
             </span>
             <Button
               variant="outline"
@@ -886,7 +896,7 @@ const NewInvoicePage = () => {
                                 <FormControl>
                                   <div className="relative">
                                     <span className="absolute left-3 top-2.5">
-                                      $
+                                      {currencySymbol}
                                     </span>
                                     <Input
                                       type="number"
@@ -939,7 +949,7 @@ const NewInvoicePage = () => {
                                 <FormControl>
                                   <div className="relative">
                                     <span className="absolute left-3 top-2.5">
-                                      $
+                                      {currencySymbol}
                                     </span>
                                     <Input
                                       type="number"
@@ -957,7 +967,8 @@ const NewInvoicePage = () => {
                           />
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          ${itemTotal}
+                          {currencySymbol}
+                          {itemTotal}
                         </TableCell>
                         <TableCell>
                           {fields.length > 1 && (
@@ -981,16 +992,25 @@ const NewInvoicePage = () => {
               <div className="mt-6 space-y-2 flex flex-col items-end">
                 <div className="flex w-64 justify-between">
                   <span className="text-muted-foreground">Subtotal:</span>
-                  <span>${subtotal}</span>
+                  <span>
+                    {currencySymbol}
+                    {subtotal}
+                  </span>
                 </div>
                 <div className="flex w-64 justify-between">
                   <span className="text-muted-foreground">Tax:</span>
-                  <span>${taxAmount}</span>
+                  <span>
+                    {currencySymbol}
+                    {taxAmount}
+                  </span>
                 </div>
                 <Separator className="my-2 w-64" />
                 <div className="flex w-64 justify-between font-bold">
                   <span>Total:</span>
-                  <span>${total}</span>
+                  <span>
+                    {currencySymbol}
+                    {total}
+                  </span>
                 </div>
               </div>
             </CardContent>

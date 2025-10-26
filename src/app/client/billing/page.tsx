@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/hooks/use-toast";
 import { useBillingData, type Invoice, type Payment } from "@/lib/billing-api";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -64,6 +65,8 @@ export default function BillingPage() {
   const { user } = useUser();
   const { toast } = useToast();
   const billingHooks = useBillingData();
+  const { practiceCurrency } = useCurrencyFormatter();
+  const currencySymbol = practiceCurrency?.symbol;
 
   const [activeTab, setActiveTab] = useState("invoices");
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
@@ -387,7 +390,7 @@ export default function BillingPage() {
 INVOICE: ${invoice.invoiceNumber}
 Date: ${format(new Date(invoice.issueDate), "MMM d, YYYY")}
 Due Date: ${format(new Date(invoice.dueDate), "MMM d, YYYY")}
-Amount: $${parseFloat(invoice.totalAmount).toFixed(2)}
+Amount: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
 Status: ${invoice.status}
 
 Description: ${invoice.description}
@@ -395,11 +398,11 @@ Description: ${invoice.description}
 Services:
 ${invoice.items
   .map(
-    (item) => `- ${item.description}: $${parseFloat(item.subtotal).toFixed(2)}`
+    (item) => `- ${item.description}: ${currencySymbol}${parseFloat(item.subtotal).toFixed(2)}`
   )
   .join("\n")}
 
-Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
+Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
       `;
 
       const blob = new Blob([content], { type: "text/plain" });
@@ -539,7 +542,7 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-900">
-              ${totalOutstanding.toFixed(2)}
+              {currencySymbol}{totalOutstanding.toFixed(2)}
             </div>
             <p className="text-xs text-red-700 mt-1">
               {invoices.filter((inv) => inv.status !== "paid").length} unpaid
@@ -574,7 +577,7 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-900">
-              $
+              {currencySymbol}
               {payments
                 .reduce((sum, pay) => sum + parseFloat(pay.amount), 0)
                 .toFixed(2)}
@@ -627,7 +630,7 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
                 </CardHeader>
                 <CardContent>
                   <p className="text-red-700 mb-4">
-                    You have {overdueBills.length} overdue bill(s) totaling $
+                    You have {overdueBills.length} overdue bill(s) totaling {currencySymbol}
                     {overdueBills
                       .reduce(
                         (sum, inv) => sum + parseFloat(inv.totalAmount),
@@ -672,7 +675,7 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
                       </div>
                       <div className="text-right">
                         <div className="text-xl font-bold">
-                          ${parseFloat(invoice.totalAmount).toFixed(2)}
+                          {currencySymbol}{parseFloat(invoice.totalAmount).toFixed(2)}
                         </div>
                         {getStatusBadge(invoice.status)}
                       </div>
@@ -708,7 +711,7 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
                             >
                               <span>{item.description}</span>
                               <span>
-                                ${parseFloat(item.subtotal).toFixed(2)}
+                                {currencySymbol}{parseFloat(item.subtotal).toFixed(2)}
                               </span>
                             </div>
                           ))}
@@ -770,7 +773,7 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
                     </div>
                     <div className="text-right">
                       <div className="text-xl font-bold">
-                        ${parseFloat(payment.amount).toFixed(2)}
+                        {currencySymbol}{parseFloat(payment.amount).toFixed(2)}
                       </div>
                       <Badge className="bg-green-50 text-green-700 border-green-200">
                         {payment.status}
@@ -1083,7 +1086,7 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
             </DialogTitle>
             <DialogDescription>
               {selectedInvoice &&
-                `Pay invoice ${selectedInvoice.invoiceNumber} for $${parseFloat(
+                `Pay invoice ${selectedInvoice.invoiceNumber} for ${currencySymbol}${parseFloat(
                   selectedInvoice.totalAmount
                 ).toFixed(2)}`}
             </DialogDescription>
@@ -1176,7 +1179,7 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               <CreditCard className="h-4 w-4 mr-2" />
-              Pay ${paymentForm.amount.toFixed(2)}
+              Pay {currencySymbol}{paymentForm.amount.toFixed(2)}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1607,16 +1610,16 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
                           <td className="p-3">{item.description}</td>
                           <td className="p-3 text-right">{item.quantity}</td>
                           <td className="p-3 text-right">
-                            ${parseFloat(item.unitPrice).toFixed(2)}
+                            {currencySymbol}{parseFloat(item.unitPrice).toFixed(2)}
                           </td>
                           <td className="p-3 text-right">
-                            ${parseFloat(item.discountAmount).toFixed(2)}
+                            {currencySymbol}{parseFloat(item.discountAmount).toFixed(2)}
                           </td>
                           <td className="p-3 text-right">
                             {item.taxable === "yes" ? "Yes" : "No"}
                           </td>
                           <td className="p-3 text-right font-medium">
-                            ${parseFloat(item.subtotal).toFixed(2)}
+                            {currencySymbol}{parseFloat(item.subtotal).toFixed(2)}
                           </td>
                         </tr>
                       ))}
@@ -1632,19 +1635,19 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
                     <div className="flex justify-between">
                       <span>Subtotal:</span>
                       <span>
-                        ${parseFloat(selectedInvoice.subtotal).toFixed(2)}
+                        {currencySymbol}{parseFloat(selectedInvoice.subtotal).toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span>Tax:</span>
                       <span>
-                        ${parseFloat(selectedInvoice.taxAmount).toFixed(2)}
+                        {currencySymbol}{parseFloat(selectedInvoice.taxAmount).toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between border-t pt-2 font-bold text-lg">
                       <span>Total:</span>
                       <span>
-                        ${parseFloat(selectedInvoice.totalAmount).toFixed(2)}
+                        {currencySymbol}{parseFloat(selectedInvoice.totalAmount).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -1676,7 +1679,7 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
                           </div>
                           <div className="text-right">
                             <div className="font-medium">
-                              ${parseFloat(payment.amount).toFixed(2)}
+                              {currencySymbol}{parseFloat(payment.amount).toFixed(2)}
                             </div>
                             <Badge className="bg-green-50 text-green-700 border-green-200">
                               {payment.status}
@@ -1821,7 +1824,7 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center text-lg font-bold">
                   <span>Amount Paid:</span>
-                  <span>${parseFloat(selectedPayment.amount).toFixed(2)}</span>
+                  <span>{currencySymbol}{parseFloat(selectedPayment.amount).toFixed(2)}</span>
                 </div>
               </div>
 
@@ -1860,7 +1863,7 @@ Total: $${parseFloat(invoice.totalAmount).toFixed(2)}
 PAYMENT RECEIPT
 Receipt Number: ${selectedPayment.paymentNumber}
 Payment Date: ${format(new Date(selectedPayment.paymentDate), "MMM d, YYYY")}
-Amount: $${parseFloat(selectedPayment.amount).toFixed(2)}
+Amount: ${currencySymbol}${parseFloat(selectedPayment.amount).toFixed(2)}
 Payment Method: ${selectedPayment.paymentMethod
                     .replace("_", " ")
                     .replace(/\b\w/g, (l) => l.toUpperCase())}

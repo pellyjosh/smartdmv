@@ -132,7 +132,8 @@ export default function ExpensesPage() {
   const { toast } = useToast();
   const { practice } = usePractice();
   const practiceId = practice?.id ? Number(practice.id) : undefined;
-  const { format: formatCurrency } = useCurrencyFormatter();
+  const { format: formatCurrency, practiceCurrency } = useCurrencyFormatter();
+  const currencySymbol = practiceCurrency?.symbol;
   const [activeTab, setActiveTab] = useState<TabName>("expenses");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
@@ -764,11 +765,13 @@ export default function ExpensesPage() {
                             {b.category || "All"}
                           </p>
                           <p>
-                            <span className="text-gray-500">Allocated:</span> $
+                            <span className="text-gray-500">Allocated:</span>{" "}
+                            {currencySymbol}
                             {Number(b.amountAllocated).toFixed(2)}
                           </p>
                           <p>
-                            <span className="text-gray-500">Spent:</span> $
+                            <span className="text-gray-500">Spent:</span>{" "}
+                            {currencySymbol}
                             {Number(b.spent).toFixed(2)}
                           </p>
                           <p>
@@ -776,7 +779,8 @@ export default function ExpensesPage() {
                             <span
                               className={over ? "text-red-600 font-medium" : ""}
                             >
-                              ${Number(b.remaining).toFixed(2)}
+                              {currencySymbol}
+                              {Number(b.remaining).toFixed(2)}
                             </span>
                           </p>
                         </div>
@@ -934,7 +938,9 @@ export default function ExpensesPage() {
                           ))}
                         </Pie>
                         <RechartsTooltip
-                          formatter={(v: any) => `$${Number(v).toFixed(2)}`}
+                          formatter={(v: any) =>
+                            `${currencySymbol}${Number(v).toFixed(2)}`
+                          }
                         />
                       </PieChart>
                     </ResponsiveContainer>
@@ -943,12 +949,12 @@ export default function ExpensesPage() {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={reportSummary}>
                         <XAxis dataKey="label" hide={groupBy === "month"} />
-                        <YAxis tickFormatter={(v) => `$${v}`} />
+                        <YAxis tickFormatter={(v) => `${currencySymbol}${v}`} />
                         <RechartsTooltip
                           content={({ active, payload }: any) =>
                             active && payload?.length ? (
                               <div className="bg-white border shadow px-3 py-2 text-xs">
-                                {payload[0].payload.label}: $
+                                {payload[0].payload.label}: {currencySymbol}
                                 {Number(payload[0].value).toFixed(2)}
                               </div>
                             ) : null
@@ -1013,7 +1019,7 @@ export default function ExpensesPage() {
                       <FormControl>
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2">
-                            $
+                            {currencySymbol}
                           </span>
                           <Input
                             type="number"

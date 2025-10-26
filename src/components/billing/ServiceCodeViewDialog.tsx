@@ -12,6 +12,7 @@ export default function ServiceCodeViewDialog({
   code,
   open,
   onOpenChange,
+  currencySymbol,
 }: any) {
   if (!code) return null;
   return (
@@ -32,7 +33,8 @@ export default function ServiceCodeViewDialog({
           <div>
             <div className="text-sm text-muted-foreground">Default Price</div>
             <div className="font-medium">
-              ${parseFloat(code.defaultPrice || "0").toFixed(2)}
+              {currencySymbol}
+              {parseFloat(code.defaultPrice || "0").toFixed(2)}
             </div>
           </div>
           <div>

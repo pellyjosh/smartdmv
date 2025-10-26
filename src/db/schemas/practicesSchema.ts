@@ -32,8 +32,8 @@ export const practices = dbTable('practices', {
   paymentProviders: jsonb('payment_providers'), // e.g. { stripe: { publishableKey, secretKeyEncrypted, enabled }, paystack: { publicKey, secretKeyEncrypted, enabled } }
   paymentEnabled: boolean('payment_enabled').default(false),
 
-  // Default currency for the practice (points to currencies.id)
-  defaultCurrencyId: foreignKeyInt('default_currency_id').default(1).references(() => require('./currencySchema').currencies.id),
+  // Default currency for the practice (points to currencies.id) - should be set by practice in settings
+  defaultCurrencyId: foreignKeyInt('default_currency_id').references(() => require('./currencySchema').currencies.id),
 
   // Mark this location as the head office for the organization
   isHeadOffice: boolean('is_head_office').default(false),

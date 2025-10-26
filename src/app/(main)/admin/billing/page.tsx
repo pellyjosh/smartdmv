@@ -244,6 +244,28 @@ const BillingPage = () => {
     enabled: !!practiceId,
   });
 
+  // Fetch practice currency
+  const { data: currency } = useQuery<{
+    code: string;
+    name: string;
+    symbol: string;
+    decimals: string;
+  }>({
+    queryKey: ["/api/practices", practiceId, "currency"],
+    queryFn: async () => {
+      if (!practiceId) throw new Error("Practice ID is required");
+      const res = await fetch(`/api/practices/${practiceId}/currency`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch currency");
+      return res.json();
+    },
+    enabled: !!practiceId,
+    staleTime: 300_000, // 5 minutes - currency doesn't change often
+  });
+
+  const currencySymbol = currency?.symbol;
+
   // Search and filter state
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -602,7 +624,8 @@ const BillingPage = () => {
                         <TableCell>{invoice.clientName || "N/A"}</TableCell>
                         <TableCell>{invoice.petName || "N/A"}</TableCell>
                         <TableCell>
-                          ${parseFloat(invoice.total).toFixed(2)}
+                          {currencySymbol}
+                          {parseFloat(invoice.total).toFixed(2)}
                         </TableCell>
                         <TableCell>
                           <InvoiceStatusBadge status={invoice.status} />
@@ -702,7 +725,8 @@ const BillingPage = () => {
                           {payment.invoice?.pet?.name || "N/A"}
                         </TableCell>
                         <TableCell>
-                          ${parseFloat(payment.amount).toFixed(2)}
+                          {currencySymbol}
+                          {parseFloat(payment.amount).toFixed(2)}
                         </TableCell>
                         <TableCell>
                           {payment.paymentMethod
@@ -824,7 +848,9 @@ const BillingPage = () => {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="percentage">%</SelectItem>
-                              <SelectItem value="fixed">$</SelectItem>
+                              <SelectItem value="fixed">
+                                {currencySymbol}
+                              </SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -1017,7 +1043,8 @@ const BillingPage = () => {
                         <TableCell>{code.description}</TableCell>
                         <TableCell>{code.category}</TableCell>
                         <TableCell>
-                          ${parseFloat(code.defaultPrice).toFixed(2)}
+                          {currencySymbol}
+                          {parseFloat(code.defaultPrice).toFixed(2)}
                         </TableCell>
                         <TableCell>{code.taxable ? "Yes" : "No"}</TableCell>
                         <TableCell>

@@ -564,7 +564,7 @@ export default function AppointmentsPage() {
                     name="practitionerId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Practitionerrrrr</FormLabel>
+                        <FormLabel>Practitioner</FormLabel>
                         <FormControl>
                           <Combobox
                             options={
