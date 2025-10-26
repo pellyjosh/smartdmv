@@ -1,4 +1,4 @@
-'use client';
+"use client";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -39,10 +40,21 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, CheckSquare, Package, PlusCircle, Search, ShoppingBag, Trash, ArrowUpDown, AlertTriangle, Pill } from "lucide-react";
+import {
+  AlertCircle,
+  CheckSquare,
+  Package,
+  PlusCircle,
+  Search,
+  ShoppingBag,
+  Trash,
+  ArrowUpDown,
+  AlertTriangle,
+  Pill,
+} from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { RequirePermission, PermissionButton } from '@/lib/rbac/components';
+import { RequirePermission, PermissionButton } from "@/lib/rbac/components";
 import { Inventory } from "@/db/schema";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
@@ -56,8 +68,17 @@ export default function InventoryPage() {
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
   const [batchActionDialogOpen, setBatchActionDialogOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
-  const [batchAction, setBatchAction] = useState<"adjust" | "delete" | "update">("adjust");
-  const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
+  const [batchAction, setBatchAction] = useState<
+    "adjust" | "delete" | "update"
+  >("adjust");
+  const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
+
+  // Single item adjustment state
+  const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [adjustQuantity, setAdjustQuantity] = useState<string>("");
+  const [adjustType, setAdjustType] = useState<string>("add");
+  const [adjustNotes, setAdjustNotes] = useState<string>("");
 
   // Quick Add Templates
   const quickAddTemplates = [
@@ -70,7 +91,7 @@ export default function InventoryPage() {
     },
     {
       name: "Surgical Gloves",
-      type: "supply", 
+      type: "supply",
       description: "Disposable latex gloves",
       unit: "boxes",
       minQuantity: 5,
@@ -81,27 +102,31 @@ export default function InventoryPage() {
       description: "Veterinary digital thermometer",
       unit: "units",
       minQuantity: 2,
-    }
+    },
   ];
 
   // Quick add function
-  const handleQuickAdd = (template: typeof quickAddTemplates[0]) => {
-    const form = document.getElementById('add-item-form') as HTMLFormElement;
+  const handleQuickAdd = (template: (typeof quickAddTemplates)[0]) => {
+    const form = document.getElementById("add-item-form") as HTMLFormElement;
     if (form) {
       // Fill form with template data
-      (form.elements.namedItem('name') as HTMLInputElement).value = template.name;
-      (form.elements.namedItem('description') as HTMLInputElement).value = template.description;
-      (form.elements.namedItem('unit') as HTMLInputElement).value = template.unit;
-      (form.elements.namedItem('minQuantity') as HTMLInputElement).value = template.minQuantity.toString();
-      
+      (form.elements.namedItem("name") as HTMLInputElement).value =
+        template.name;
+      (form.elements.namedItem("description") as HTMLInputElement).value =
+        template.description;
+      (form.elements.namedItem("unit") as HTMLInputElement).value =
+        template.unit;
+      (form.elements.namedItem("minQuantity") as HTMLInputElement).value =
+        template.minQuantity.toString();
+
       // Set select value for type
       const typeSelect = form.querySelector('[name="type"]') as HTMLElement;
       if (typeSelect) {
-        typeSelect.setAttribute('data-value', template.type);
+        typeSelect.setAttribute("data-value", template.type);
         // Trigger change event
-        typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        typeSelect.dispatchEvent(new Event("change", { bubbles: true }));
       }
-      
+
       // Clear any existing errors
       setFormErrors({});
     }
@@ -127,12 +152,13 @@ export default function InventoryPage() {
   // Calculate totals and metrics
   const totalItems = inventoryItems?.length || 0;
   const lowStockItems =
-    inventoryItems?.filter(
-      (item) => item.quantity < (item.minQuantity || 0)
-    ).length || 0;
+    inventoryItems?.filter((item) => item.quantity < (item.minQuantity || 0))
+      .length || 0;
   const totalValue =
     inventoryItems?.reduce((acc, item) => {
-      const price = parseFloat(Array.isArray(item.price) ? item.price[0] : item.price || "0");
+      const price = parseFloat(
+        Array.isArray(item.price) ? item.price[0] : item.price || "0"
+      );
       return acc + price * item.quantity;
     }, 0) || 0;
 
@@ -144,19 +170,22 @@ export default function InventoryPage() {
           (typeof item.name === "string"
             ? item.name.toLowerCase()
             : Array.isArray(item.name)
-              ? item.name.join(" ").toLowerCase()
-              : ""
+            ? item.name.join(" ").toLowerCase()
+            : ""
           ).includes(searchTerm.toLowerCase()) ||
           (typeof item.description === "string"
             ? item.description.toLowerCase().includes(searchTerm.toLowerCase())
             : Array.isArray(item.description)
-              ? item.description.join(" ").toLowerCase().includes(searchTerm.toLowerCase())
-              : false) ||
+            ? item.description
+                .join(" ")
+                .toLowerCase()
+                .includes(searchTerm.toLowerCase())
+            : false) ||
           (typeof item.sku === "string"
             ? item.sku.toLowerCase()
             : Array.isArray(item.sku)
-              ? item.sku.join(" ").toLowerCase()
-              : ""
+            ? item.sku.join(" ").toLowerCase()
+            : ""
           ).includes(searchTerm.toLowerCase());
 
         const matchesCategory =
@@ -186,12 +215,12 @@ export default function InventoryPage() {
         body: JSON.stringify(newItem),
         credentials: "include",
       });
-      
+
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || "Failed to add inventory item");
       }
-      
+
       return res.json();
     },
     onSuccess: (data) => {
@@ -201,18 +230,20 @@ export default function InventoryPage() {
       });
       setAddItemDialogOpen(false);
       // Reset form and clear errors
-      const form = document.getElementById('add-item-form') as HTMLFormElement;
+      const form = document.getElementById("add-item-form") as HTMLFormElement;
       form?.reset();
       setFormErrors({});
       refetch();
     },
     onError: (error: any) => {
       // Handle validation errors from server
-      if (error.message.includes('Validation failed')) {
+      if (error.message.includes("Validation failed")) {
         try {
-          const errorData = JSON.parse(error.message.split('Validation failed: ')[1]);
-          const newFormErrors: {[key: string]: string} = {};
-          
+          const errorData = JSON.parse(
+            error.message.split("Validation failed: ")[1]
+          );
+          const newFormErrors: { [key: string]: string } = {};
+
           if (errorData.details) {
             errorData.details.forEach((detail: any) => {
               if (detail.path && detail.path.length > 0) {
@@ -220,7 +251,7 @@ export default function InventoryPage() {
               }
             });
           }
-          
+
           setFormErrors(newFormErrors);
         } catch (parseError) {
           // Fallback to generic error message
@@ -243,33 +274,35 @@ export default function InventoryPage() {
   // Handle add new item
   const handleAddItem = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
+
     // Clear previous errors
     setFormErrors({});
-    
+
     const formData = new FormData(e.currentTarget);
-    
+
     // Parse and validate form data
     const rawData = {
       name: formData.get("name") as string,
       type: formData.get("type") as string,
-      description: formData.get("description") as string || undefined,
-      sku: formData.get("sku") as string || undefined,
+      description: (formData.get("description") as string) || undefined,
+      sku: (formData.get("sku") as string) || undefined,
       quantity: parseInt(formData.get("quantity") as string, 10) || 0,
-      unit: formData.get("unit") as string || undefined,
-      minQuantity: formData.get("minQuantity") as string ? parseInt(formData.get("minQuantity") as string, 10) : undefined,
-      cost: formData.get("cost") as string || undefined,
-      price: formData.get("price") as string || undefined,
-      location: formData.get("location") as string || undefined,
-      supplier: formData.get("supplier") as string || undefined,
-      expiryDate: formData.get("expiryDate") as string || undefined,
-      deaSchedule: formData.get("deaSchedule") as string || "none",
+      unit: (formData.get("unit") as string) || undefined,
+      minQuantity: (formData.get("minQuantity") as string)
+        ? parseInt(formData.get("minQuantity") as string, 10)
+        : undefined,
+      cost: (formData.get("cost") as string) || undefined,
+      price: (formData.get("price") as string) || undefined,
+      location: (formData.get("location") as string) || undefined,
+      supplier: (formData.get("supplier") as string) || undefined,
+      expiryDate: (formData.get("expiryDate") as string) || undefined,
+      deaSchedule: (formData.get("deaSchedule") as string) || "none",
       requiresSpecialAuth: formData.get("requiresSpecialAuth") === "on",
     };
 
     // Client-side validation
-    const errors: {[key: string]: string} = {};
-    
+    const errors: { [key: string]: string } = {};
+
     if (!rawData.name.trim()) {
       errors.name = "Item name is required.";
     }
@@ -295,19 +328,21 @@ export default function InventoryPage() {
 
     // Remove empty strings and convert to proper types
     const newItem = Object.fromEntries(
-      Object.entries(rawData).filter(([_, value]) => value !== undefined && value !== "")
+      Object.entries(rawData).filter(
+        ([_, value]) => value !== undefined && value !== ""
+      )
     );
-    
+
     addInventoryMutation.mutate(newItem);
   };
 
   // Batch actions mutations
   const { toast } = useToast();
-  
+
   const batchAdjustMutation = useMutation({
-    mutationFn: async (data: { itemIds: number[], quantityChange: number }) => {
-      const res = await fetch('/api/inventory/batch-adjust', {
-        method: 'POST',
+    mutationFn: async (data: { itemIds: number[]; quantityChange: number }) => {
+      const res = await fetch("/api/inventory/batch-adjust", {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
@@ -334,11 +369,11 @@ export default function InventoryPage() {
       });
     },
   });
-  
+
   const batchDeleteMutation = useMutation({
     mutationFn: async (itemIds: number[]) => {
-      const res = await fetch('/api/inventory/batch-delete', {
-        method: 'DELETE',
+      const res = await fetch("/api/inventory/batch-delete", {
+        method: "DELETE",
         headers: {
           "Content-Type": "application/json",
         },
@@ -366,37 +401,120 @@ export default function InventoryPage() {
     },
   });
 
+  // Single item adjustment mutation
+  const adjustItemMutation = useMutation({
+    mutationFn: async (data: {
+      itemId: number;
+      quantity: number;
+      transactionType: string;
+      notes?: string;
+    }) => {
+      const res = await fetch(`/api/inventory/${data.itemId}/adjust`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          quantity: data.quantity,
+          transactionType: data.transactionType,
+          notes: data.notes,
+        }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to adjust inventory");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Stock Adjusted",
+        description: `Successfully adjusted stock for ${
+          selectedItem?.name || "item"
+        }.`,
+      });
+      setAdjustDialogOpen(false);
+      setSelectedItem(null);
+      setAdjustQuantity("");
+      setAdjustType("add");
+      setAdjustNotes("");
+      refetch();
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // Handle batch action form submission
   const handleBatchAction = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    
+
     if (batchAction === "adjust") {
       const quantityChange = parseInt(formData.get("quantityChange") as string);
-      batchAdjustMutation.mutate({ 
+      batchAdjustMutation.mutate({
         itemIds: selectedItems,
-        quantityChange 
+        quantityChange,
       });
     } else if (batchAction === "delete") {
       batchDeleteMutation.mutate(selectedItems);
     }
   };
 
+  // Handle single item adjustment
+  const handleOpenAdjustDialog = (item: any) => {
+    setSelectedItem(item);
+    setAdjustQuantity("");
+    setAdjustType("add");
+    setAdjustNotes("");
+    setAdjustDialogOpen(true);
+  };
+
+  const handleSubmitAdjustment = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!adjustQuantity || isNaN(parseInt(adjustQuantity))) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid quantity",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    adjustItemMutation.mutate({
+      itemId: selectedItem.id,
+      quantity: parseInt(adjustQuantity),
+      transactionType: adjustType,
+      notes: adjustNotes || undefined,
+    });
+  };
+
   return (
     <div className="container py-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Inventory Management</h1>
-        <Dialog open={addItemDialogOpen} onOpenChange={(open) => {
-          setAddItemDialogOpen(open);
-          if (!open) {
-            // Clear form and errors when dialog closes
-            setTimeout(() => {
-              const form = document.getElementById('add-item-form') as HTMLFormElement;
-              form?.reset();
-              setFormErrors({});
-            }, 100);
-          }
-        }}>
+        <Dialog
+          open={addItemDialogOpen}
+          onOpenChange={(open) => {
+            setAddItemDialogOpen(open);
+            if (!open) {
+              // Clear form and errors when dialog closes
+              setTimeout(() => {
+                const form = document.getElementById(
+                  "add-item-form"
+                ) as HTMLFormElement;
+                form?.reset();
+                setFormErrors({});
+              }, 100);
+            }
+          }}
+        >
           <DialogTrigger asChild>
             <Button>
               <PlusCircle className="mr-2 h-4 w-4" />
@@ -410,10 +528,12 @@ export default function InventoryPage() {
                 <DialogDescription>
                   Complete the form below to add a new item to your inventory.
                 </DialogDescription>
-                
+
                 {/* Quick Add Templates */}
                 <div className="mt-4">
-                  <Label className="text-sm font-medium">Quick Add Templates:</Label>
+                  <Label className="text-sm font-medium">
+                    Quick Add Templates:
+                  </Label>
                   <div className="flex flex-wrap gap-2 mt-2">
                     {quickAddTemplates.map((template, index) => (
                       <Button
@@ -433,19 +553,23 @@ export default function InventoryPage() {
               <div className="grid gap-6 py-4">
                 {/* Basic Information Section */}
                 <div className="space-y-4">
-                  <h4 className="text-sm font-medium text-muted-foreground border-b pb-2">Basic Information</h4>
+                  <h4 className="text-sm font-medium text-muted-foreground border-b pb-2">
+                    Basic Information
+                  </h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="name">Item Name *</Label>
-                      <Input 
-                        id="name" 
-                        name="name" 
-                        required 
+                      <Input
+                        id="name"
+                        name="name"
+                        required
                         placeholder="e.g., Amoxicillin 500mg"
                         className={formErrors.name ? "border-red-500" : ""}
                       />
                       {formErrors.name && (
-                        <p className="text-sm text-red-500">{formErrors.name}</p>
+                        <p className="text-sm text-red-500">
+                          {formErrors.name}
+                        </p>
                       )}
                     </div>
                     <div className="space-y-2">
@@ -464,26 +588,26 @@ export default function InventoryPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>
-                    <Input 
-                      id="description" 
-                      name="description" 
+                    <Input
+                      id="description"
+                      name="description"
                       placeholder="Brief description of the item"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="sku">SKU/Item Code</Label>
-                      <Input 
-                        id="sku" 
-                        name="sku" 
+                      <Input
+                        id="sku"
+                        name="sku"
                         placeholder="e.g., MED-AMX-500"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="location">Storage Location</Label>
-                      <Input 
-                        id="location" 
-                        name="location" 
+                      <Input
+                        id="location"
+                        name="location"
                         placeholder="e.g., Pharmacy Shelf A2"
                       />
                     </div>
@@ -492,34 +616,40 @@ export default function InventoryPage() {
 
                 {/* Quantity & Stock Management */}
                 <div className="space-y-4">
-                  <h4 className="text-sm font-medium text-muted-foreground border-b pb-2">Quantity & Stock Management</h4>
+                  <h4 className="text-sm font-medium text-muted-foreground border-b pb-2">
+                    Quantity & Stock Management
+                  </h4>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="quantity">Current Quantity *</Label>
-                      <Input 
-                        id="quantity" 
-                        name="quantity" 
-                        type="number" 
-                        min="0" 
-                        required 
+                      <Input
+                        id="quantity"
+                        name="quantity"
+                        type="number"
+                        min="0"
+                        required
                         defaultValue="0"
                         placeholder="0"
                         className={formErrors.quantity ? "border-red-500" : ""}
                       />
                       {formErrors.quantity && (
-                        <p className="text-sm text-red-500">{formErrors.quantity}</p>
+                        <p className="text-sm text-red-500">
+                          {formErrors.quantity}
+                        </p>
                       )}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="unit">Unit</Label>
-                      <Input 
-                        id="unit" 
-                        name="unit" 
+                      <Input
+                        id="unit"
+                        name="unit"
                         placeholder="e.g., tablets, ml, boxes"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="minQuantity">Low Stock Alert Threshold</Label>
+                      <Label htmlFor="minQuantity">
+                        Low Stock Alert Threshold
+                      </Label>
                       <Input
                         id="minQuantity"
                         name="minQuantity"
@@ -536,42 +666,44 @@ export default function InventoryPage() {
                       id="expiryDate"
                       name="expiryDate"
                       type="date"
-                      min={new Date().toISOString().split('T')[0]}
+                      min={new Date().toISOString().split("T")[0]}
                     />
                   </div>
                 </div>
 
                 {/* Pricing & Supplier */}
                 <div className="space-y-4">
-                  <h4 className="text-sm font-medium text-muted-foreground border-b pb-2">Pricing & Supplier</h4>
+                  <h4 className="text-sm font-medium text-muted-foreground border-b pb-2">
+                    Pricing & Supplier
+                  </h4>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="cost">Cost Per Unit ($)</Label>
-                      <Input 
-                        id="cost" 
-                        name="cost" 
-                        type="number" 
-                        step="0.01" 
+                      <Input
+                        id="cost"
+                        name="cost"
+                        type="number"
+                        step="0.01"
                         min="0"
                         placeholder="0.00"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="price">Selling Price Per Unit ($)</Label>
-                      <Input 
-                        id="price" 
-                        name="price" 
-                        type="number" 
-                        step="0.01" 
+                      <Input
+                        id="price"
+                        name="price"
+                        type="number"
+                        step="0.01"
                         min="0"
                         placeholder="0.00"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="supplier">Supplier</Label>
-                      <Input 
-                        id="supplier" 
-                        name="supplier" 
+                      <Input
+                        id="supplier"
+                        name="supplier"
                         placeholder="e.g., VetSource, Patterson"
                       />
                     </div>
@@ -579,14 +711,22 @@ export default function InventoryPage() {
                 </div>
 
                 {/* Controlled substance section */}
-                <div className="relative border p-4 pt-6 rounded-md bg-yellow-50/30 border-yellow-200" id="controlled-substance-fields">
+                <div
+                  className="relative border p-4 pt-6 rounded-md bg-yellow-50/30 border-yellow-200"
+                  id="controlled-substance-fields"
+                >
                   <div className="absolute -top-3 left-3 inline-flex items-center gap-1">
-                    <Badge variant="outline" className="bg-yellow-500 hover:bg-yellow-500 text-white font-medium border-yellow-500">
+                    <Badge
+                      variant="outline"
+                      className="bg-yellow-500 hover:bg-yellow-500 text-white font-medium border-yellow-500"
+                    >
                       <ShoppingBag className="h-3.5 w-3.5 mr-1" />
                       MARKETPLACE ADD-ON
                     </Badge>
                   </div>
-                  <h4 className="text-sm font-medium text-muted-foreground border-b pb-2 mb-4">Controlled Substance Information</h4>
+                  <h4 className="text-sm font-medium text-muted-foreground border-b pb-2 mb-4">
+                    Controlled Substance Information
+                  </h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="deaSchedule">DEA Schedule</Label>
@@ -595,39 +735,66 @@ export default function InventoryPage() {
                           <SelectValue placeholder="Select schedule" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">None (Not Controlled)</SelectItem>
-                          <SelectItem value="schedule_i">Schedule I (CI)</SelectItem>
-                          <SelectItem value="schedule_ii">Schedule II (CII)</SelectItem>
-                          <SelectItem value="schedule_iii">Schedule III (CIII)</SelectItem>
-                          <SelectItem value="schedule_iv">Schedule IV (CIV)</SelectItem>
-                          <SelectItem value="schedule_v">Schedule V (CV)</SelectItem>
+                          <SelectItem value="none">
+                            None (Not Controlled)
+                          </SelectItem>
+                          <SelectItem value="schedule_i">
+                            Schedule I (CI)
+                          </SelectItem>
+                          <SelectItem value="schedule_ii">
+                            Schedule II (CII)
+                          </SelectItem>
+                          <SelectItem value="schedule_iii">
+                            Schedule III (CIII)
+                          </SelectItem>
+                          <SelectItem value="schedule_iv">
+                            Schedule IV (CIV)
+                          </SelectItem>
+                          <SelectItem value="schedule_v">
+                            Schedule V (CV)
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="flex items-end mb-2">
                       <div className="flex items-center space-x-2">
-                        <Checkbox id="requiresSpecialAuth" name="requiresSpecialAuth" disabled />
-                        <Label htmlFor="requiresSpecialAuth" className="font-normal">
+                        <Checkbox
+                          id="requiresSpecialAuth"
+                          name="requiresSpecialAuth"
+                          disabled
+                        />
+                        <Label
+                          htmlFor="requiresSpecialAuth"
+                          className="font-normal"
+                        >
                           Requires Special Authorization
                         </Label>
                       </div>
                     </div>
                   </div>
                   <p className="text-sm text-yellow-800 mt-2">
-                    Controlled Substance Tracking is a marketplace add-on feature. 
-                    <Link href="/marketplace" className="underline font-medium ml-1">Upgrade in Marketplace</Link>
+                    Controlled Substance Tracking is a marketplace add-on
+                    feature.
+                    <Link
+                      href="/marketplace"
+                      className="underline font-medium ml-1"
+                    >
+                      Upgrade in Marketplace
+                    </Link>
                   </p>
                 </div>
               </div>
               <DialogFooter>
-                <Button 
-                  type="button" 
-                  variant="outline" 
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={() => {
                     setAddItemDialogOpen(false);
                     // Clear form and errors when cancel is clicked
                     setTimeout(() => {
-                      const form = document.getElementById('add-item-form') as HTMLFormElement;
+                      const form = document.getElementById(
+                        "add-item-form"
+                      ) as HTMLFormElement;
                       form?.reset();
                       setFormErrors({});
                     }, 100);
@@ -636,10 +803,7 @@ export default function InventoryPage() {
                 >
                   Cancel
                 </Button>
-                <Button 
-                  type="submit" 
-                  disabled={addInventoryMutation.isPending}
-                >
+                <Button type="submit" disabled={addInventoryMutation.isPending}>
                   {addInventoryMutation.isPending ? (
                     <>
                       <Spinner className="mr-2 h-4 w-4" />
@@ -674,7 +838,9 @@ export default function InventoryPage() {
             <CardDescription>Items below minimum quantity</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-amber-600">{lowStockItems}</div>
+            <div className="text-3xl font-bold text-amber-600">
+              {lowStockItems}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -688,7 +854,11 @@ export default function InventoryPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="all" className="mb-6" onValueChange={setCategoryFilter}>
+      <Tabs
+        defaultValue="all"
+        className="mb-6"
+        onValueChange={setCategoryFilter}
+      >
         <div className="flex justify-between items-center mb-4">
           <TabsList>
             <TabsTrigger value="all">All Items</TabsTrigger>
@@ -698,7 +868,12 @@ export default function InventoryPage() {
             <TabsTrigger value="drug-interactions" className="relative">
               <div className="flex items-center gap-2">
                 <span>Drug Interactions</span>
-                <Badge variant="outline" className="bg-yellow-500 hover:bg-yellow-500 text-white">MARKETPLACE</Badge>
+                <Badge
+                  variant="outline"
+                  className="bg-yellow-500 hover:bg-yellow-500 text-white"
+                >
+                  MARKETPLACE
+                </Badge>
               </div>
             </TabsTrigger>
           </TabsList>
@@ -714,14 +889,15 @@ export default function InventoryPage() {
           </div>
         </div>
 
-        <StockAlerts onRestock={(itemId) => {
-          // Find the item and open the restock dialog
-          const item = inventoryItems?.find(item => item.id === itemId);
-          if (item) {
-            // Navigate to item page or handle restock directly
-            window.location.href = `/inventory/${itemId}`;
-          }
-        }} />
+        <StockAlerts
+          onRestock={(itemId) => {
+            // Find the item and open the adjustment dialog
+            const item = inventoryItems?.find((item) => item.id === itemId);
+            if (item) {
+              handleOpenAdjustDialog(item);
+            }
+          }}
+        />
 
         <TabsContent value="all" className="m-0">
           <InventoryTable
@@ -732,9 +908,10 @@ export default function InventoryPage() {
             selectedItems={selectedItems}
             setSelectedItems={setSelectedItems}
             setBatchActionDialogOpen={setBatchActionDialogOpen}
+            onAdjustClick={handleOpenAdjustDialog}
           />
         </TabsContent>
-        
+
         <TabsContent value="medication" className="m-0">
           <InventoryTable
             items={filteredItems}
@@ -744,9 +921,10 @@ export default function InventoryPage() {
             selectedItems={selectedItems}
             setSelectedItems={setSelectedItems}
             setBatchActionDialogOpen={setBatchActionDialogOpen}
+            onAdjustClick={handleOpenAdjustDialog}
           />
         </TabsContent>
-        
+
         <TabsContent value="supply" className="m-0">
           <InventoryTable
             items={filteredItems}
@@ -756,9 +934,10 @@ export default function InventoryPage() {
             selectedItems={selectedItems}
             setSelectedItems={setSelectedItems}
             setBatchActionDialogOpen={setBatchActionDialogOpen}
+            onAdjustClick={handleOpenAdjustDialog}
           />
         </TabsContent>
-        
+
         <TabsContent value="equipment" className="m-0">
           <InventoryTable
             items={filteredItems}
@@ -768,6 +947,7 @@ export default function InventoryPage() {
             selectedItems={selectedItems}
             setSelectedItems={setSelectedItems}
             setBatchActionDialogOpen={setBatchActionDialogOpen}
+            onAdjustClick={handleOpenAdjustDialog}
           />
         </TabsContent>
 
@@ -779,7 +959,7 @@ export default function InventoryPage() {
             description="The Drug Interactions feature helps identify potential conflicts between medications in your inventory. Purchase this add-on to enhance patient safety and streamline medication management."
             addOnId="drug-interactions"
           />
-          
+
           {/* Sample UI mockup of what the feature would look like */}
           <div className="mt-6 opacity-60 pointer-events-none">
             <div className="flex items-center justify-between mb-4">
@@ -799,7 +979,8 @@ export default function InventoryPage() {
               <CardHeader>
                 <CardTitle>Select Medications to Check</CardTitle>
                 <CardDescription>
-                  Choose two or more medications to analyze potential interactions
+                  Choose two or more medications to analyze potential
+                  interactions
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -812,8 +993,12 @@ export default function InventoryPage() {
                           <SelectValue placeholder="Select medication" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="med1">Rimadyl (Carprofen)</SelectItem>
-                          <SelectItem value="med2">Apoquel (Oclacitinib)</SelectItem>
+                          <SelectItem value="med1">
+                            Rimadyl (Carprofen)
+                          </SelectItem>
+                          <SelectItem value="med2">
+                            Apoquel (Oclacitinib)
+                          </SelectItem>
                           <SelectItem value="med3">Buprenorphine</SelectItem>
                         </SelectContent>
                       </Select>
@@ -825,8 +1010,12 @@ export default function InventoryPage() {
                           <SelectValue placeholder="Select medication" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="med1">Rimadyl (Carprofen)</SelectItem>
-                          <SelectItem value="med2">Apoquel (Oclacitinib)</SelectItem>
+                          <SelectItem value="med1">
+                            Rimadyl (Carprofen)
+                          </SelectItem>
+                          <SelectItem value="med2">
+                            Apoquel (Oclacitinib)
+                          </SelectItem>
                           <SelectItem value="med3">Buprenorphine</SelectItem>
                         </SelectContent>
                       </Select>
@@ -853,16 +1042,21 @@ export default function InventoryPage() {
       </Tabs>
 
       {/* Batch Action Dialog */}
-      <Dialog open={batchActionDialogOpen} onOpenChange={setBatchActionDialogOpen}>
+      <Dialog
+        open={batchActionDialogOpen}
+        onOpenChange={setBatchActionDialogOpen}
+      >
         <DialogContent>
           <form onSubmit={handleBatchAction}>
             <DialogHeader>
-              <DialogTitle>Batch Actions for {selectedItems.length} Items</DialogTitle>
+              <DialogTitle>
+                Batch Actions for {selectedItems.length} Items
+              </DialogTitle>
               <DialogDescription>
                 Choose an action to perform on the selected inventory items.
               </DialogDescription>
             </DialogHeader>
-            
+
             <div className="py-4 space-y-4">
               <div className="flex flex-col space-y-2">
                 <Label>Action Type</Label>
@@ -887,7 +1081,7 @@ export default function InventoryPage() {
                   </Button>
                 </div>
               </div>
-              
+
               {batchAction === "adjust" && (
                 <div className="space-y-2">
                   <Label htmlFor="quantityChange">Quantity Change</Label>
@@ -913,34 +1107,111 @@ export default function InventoryPage() {
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Warning</AlertTitle>
                   <AlertDescription>
-                    This will permanently delete {selectedItems.length} items from inventory. 
-                    This action cannot be undone.
+                    This will permanently delete {selectedItems.length} items
+                    from inventory. This action cannot be undone.
                   </AlertDescription>
                 </Alert>
               )}
             </div>
-            
+
             <DialogFooter>
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 onClick={() => setBatchActionDialogOpen(false)}
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 type="submit"
                 variant={batchAction === "delete" ? "destructive" : "default"}
-                disabled={batchAdjustMutation.isPending || batchDeleteMutation.isPending}
+                disabled={
+                  batchAdjustMutation.isPending || batchDeleteMutation.isPending
+                }
               >
-                {batchAdjustMutation.isPending || batchDeleteMutation.isPending ? (
+                {batchAdjustMutation.isPending ||
+                batchDeleteMutation.isPending ? (
                   <>
                     <span className="mr-2">Processing</span>
                     <Spinner className="h-4 w-4" />
                   </>
+                ) : batchAction === "delete" ? (
+                  "Delete Items"
                 ) : (
-                  batchAction === "delete" ? "Delete Items" : "Update Stock"
+                  "Update Stock"
                 )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Single Item Adjustment Dialog */}
+      <Dialog open={adjustDialogOpen} onOpenChange={setAdjustDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Adjust Stock - {selectedItem?.name}</DialogTitle>
+            <DialogDescription>
+              Current stock: {selectedItem?.quantity}{" "}
+              {selectedItem?.unit || "units"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitAdjustment} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="adjustType">Transaction Type</Label>
+              <Select value={adjustType} onValueChange={setAdjustType}>
+                <SelectTrigger id="adjustType">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="add">Add Stock</SelectItem>
+                  <SelectItem value="remove">Remove Stock</SelectItem>
+                  <SelectItem value="use">Use/Consume</SelectItem>
+                  <SelectItem value="expired">Mark as Expired</SelectItem>
+                  <SelectItem value="lost">Mark as Lost/Damaged</SelectItem>
+                  <SelectItem value="adjustment">Manual Adjustment</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="adjustQuantity">Quantity</Label>
+              <Input
+                id="adjustQuantity"
+                type="number"
+                min="1"
+                value={adjustQuantity}
+                onChange={(e) => setAdjustQuantity(e.target.value)}
+                placeholder="Enter quantity"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="adjustNotes">Notes (Optional)</Label>
+              <Textarea
+                id="adjustNotes"
+                value={adjustNotes}
+                onChange={(e) => setAdjustNotes(e.target.value)}
+                placeholder="Add any notes about this adjustment..."
+                rows={3}
+              />
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAdjustDialogOpen(false)}
+                disabled={adjustItemMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={adjustItemMutation.isPending}>
+                {adjustItemMutation.isPending
+                  ? "Adjusting..."
+                  : "Confirm Adjustment"}
               </Button>
             </DialogFooter>
           </form>
@@ -958,24 +1229,26 @@ interface InventoryTableProps {
   selectedItems?: number[];
   setSelectedItems?: (ids: number[]) => void;
   setBatchActionDialogOpen?: (open: boolean) => void;
+  onAdjustClick?: (item: any) => void;
 }
 
-function InventoryTable({ 
-  items, 
-  isLoading, 
-  isError, 
+function InventoryTable({
+  items,
+  isLoading,
+  isError,
   getStockStatus,
   selectedItems = [],
   setSelectedItems,
-  setBatchActionDialogOpen
+  setBatchActionDialogOpen,
+  onAdjustClick,
 }: InventoryTableProps) {
   const hasSelectionEnabled = !!setSelectedItems;
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!setSelectedItems) return;
-    
+
     if (e.target.checked) {
-      setSelectedItems(items.map(item => item.id));
+      setSelectedItems(items.map((item) => item.id));
     } else {
       setSelectedItems([]);
     }
@@ -983,16 +1256,17 @@ function InventoryTable({
 
   const handleSelectItem = (id: number, selected: boolean) => {
     if (!setSelectedItems) return;
-    
+
     if (selected) {
       setSelectedItems([...selectedItems, id]);
     } else {
-      setSelectedItems(selectedItems.filter(itemId => itemId !== id));
+      setSelectedItems(selectedItems.filter((itemId) => itemId !== id));
     }
   };
 
-  const allSelected = hasSelectionEnabled && 
-    items.length > 0 && 
+  const allSelected =
+    hasSelectionEnabled &&
+    items.length > 0 &&
     selectedItems.length === items.length;
 
   if (isLoading) {
@@ -1029,37 +1303,45 @@ function InventoryTable({
 
   return (
     <div>
-                <PermissionButton resource={"inventory" as any} action={"CREATE" as any}>
+      {/* <PermissionButton resource={"inventory" as any} action={"CREATE" as any}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add Item
-                </PermissionButton>
+                </PermissionButton> */}
       {hasSelectionEnabled && selectedItems.length > 0 && (
         <div className="bg-muted p-4 mb-4 rounded-md flex justify-between items-center">
           <div>
-            <span className="font-medium">{selectedItems.length} items selected</span>
+            <span className="font-medium">
+              {selectedItems.length} items selected
+            </span>
           </div>
           <div className="flex space-x-2">
-            <Button variant="outline" size="sm" onClick={() => setSelectedItems([])}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedItems([])}
+            >
               Clear Selection
             </Button>
-            <Button 
-              variant="default" 
-              size="sm" 
-              onClick={() => setBatchActionDialogOpen && setBatchActionDialogOpen(true)}
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() =>
+                setBatchActionDialogOpen && setBatchActionDialogOpen(true)
+              }
             >
               Batch Actions
             </Button>
           </div>
         </div>
       )}
-    
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               {hasSelectionEnabled && (
                 <TableHead className="w-[50px]">
-                  <input 
+                  <input
                     type="checkbox"
                     className="h-4 w-4"
                     checked={allSelected}
@@ -1081,16 +1363,21 @@ function InventoryTable({
             {items.map((item) => {
               const stockStatus = getStockStatus(item);
               const isSelected = selectedItems.includes(item.id);
-              
+
               return (
-                <TableRow key={item.id} className={isSelected ? "bg-muted/50" : undefined}>
+                <TableRow
+                  key={item.id}
+                  className={isSelected ? "bg-muted/50" : undefined}
+                >
                   {hasSelectionEnabled && (
                     <TableCell>
-                      <input 
+                      <input
                         type="checkbox"
                         className="h-4 w-4"
                         checked={isSelected}
-                        onChange={(e) => handleSelectItem(item.id, e.target.checked)}
+                        onChange={(e) =>
+                          handleSelectItem(item.id, e.target.checked)
+                        }
                       />
                     </TableCell>
                   )}
@@ -1106,10 +1393,20 @@ function InventoryTable({
                   </TableCell>
                   <TableCell>{item.type}</TableCell>
                   <TableCell className="text-right">{item.quantity}</TableCell>
-                  <TableCell className="text-right">{item.unit || '-'}</TableCell>
-                  <TableCell className="text-right">{item.minQuantity || '-'}</TableCell>
                   <TableCell className="text-right">
-                    {item.price ? `$${parseFloat(Array.isArray(item.price) ? item.price[0] : item.price || "0").toFixed(2)}` : '-'}
+                    {item.unit || "-"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {item.minQuantity || "-"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {item.price
+                      ? `$${parseFloat(
+                          Array.isArray(item.price)
+                            ? item.price[0]
+                            : item.price || "0"
+                        ).toFixed(2)}`
+                      : "-"}
                   </TableCell>
                   <TableCell>
                     <StockStatusBadge status={stockStatus} />
@@ -1117,9 +1414,19 @@ function InventoryTable({
                   <TableCell className="text-right">
                     <div className="flex justify-end space-x-2">
                       <Button variant="outline" size="sm" asChild>
-                        <Link href={`/admin/inventory/${item.id}` as unknown as string}>Details</Link>
+                        <Link
+                          href={
+                            `/admin/inventory/${item.id}` as unknown as string
+                          }
+                        >
+                          Details
+                        </Link>
                       </Button>
-                      <Button variant="outline" size="sm">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onAdjustClick?.(item)}
+                      >
                         Adjust
                       </Button>
                     </div>
@@ -1137,12 +1444,12 @@ function InventoryTable({
 function StockStatusBadge({ status }: { status: string }) {
   switch (status) {
     case "out":
-      return (
-        <Badge variant="destructive">Out of Stock</Badge>
-      );
+      return <Badge variant="destructive">Out of Stock</Badge>;
     case "critical":
       return (
-        <Badge variant="destructive" className="bg-red-400">Critical</Badge>
+        <Badge variant="destructive" className="bg-red-400">
+          Critical
+        </Badge>
       );
     case "low":
       return (

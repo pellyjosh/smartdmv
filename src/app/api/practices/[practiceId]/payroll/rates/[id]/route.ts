@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-import { payRates } from '@/db/schemas/financeSchema';
+import { payRates, workHours } from '@/db/schemas/financeSchema';
 import { eq, and } from 'drizzle-orm';
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ practiceId: string; id: string }> | { practiceId: string; id: string } }) {
@@ -41,6 +41,22 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ prac
     if (practiceId !== parseInt(userPractice.practiceId)) return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     const id = Number(resolvedParams.id);
   const tenantDb = await getCurrentTenantDb();
+  
+  // Check if this pay rate is referenced by any work hours records
+  const referencingWorkHours = await tenantDb
+    .select()
+    .from(workHours)
+    .where(eq(workHours.payRateId, id));
+  
+  if (referencingWorkHours.length > 0) {
+    return NextResponse.json({ 
+      error: 'Cannot delete pay rate', 
+      message: 'This pay rate is currently being used in work hours records.',
+      workHoursCount: referencingWorkHours.length,
+      workHoursIds: referencingWorkHours.map((wh: any) => wh.id)
+    }, { status: 400 });
+  }
+  
   const [deleted] = await tenantDb.delete(payRates).where(and(eq(payRates.id, id), eq(payRates.practiceId, practiceId))).returning();
     if (!deleted) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });

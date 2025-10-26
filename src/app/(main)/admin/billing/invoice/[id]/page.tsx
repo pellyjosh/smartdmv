@@ -160,16 +160,38 @@ export default function InvoiceDetailPage() {
     enabled: !!practiceId,
   });
 
-  const formatCurrency = (amount: number, currencyCode?: string) => {
+  const formatCurrency = (
+    amount: number | string | null | undefined,
+    currencyCode?: string
+  ) => {
+    // Normalize amount to a number safely
+    let num = 0;
+    if (amount === null || amount === undefined) {
+      num = 0;
+    } else if (typeof amount === "number") {
+      num = amount;
+    } else {
+      // Try to parse strings (including numeric strings)
+      const parsed = parseFloat(String(amount).replace(/,/g, ""));
+      num = isNaN(parsed) ? 0 : parsed;
+    }
+
+    const decimals =
+      typeof practiceCurrency?.decimals === "number"
+        ? practiceCurrency.decimals
+        : 2;
     const code = currencyCode || (practiceCurrency && practiceCurrency.code);
-    if (!code) return (amount || 0).toFixed(practiceCurrency?.decimals ?? 2);
+
+    if (!code) return num.toFixed(decimals);
     try {
       return new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: code,
-      }).format(amount);
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      }).format(num);
     } catch (e) {
-      return `${code} ${amount.toFixed(2)}`;
+      return `${code} ${num.toFixed(decimals)}`;
     }
   };
 
@@ -335,7 +357,9 @@ export default function InvoiceDetailPage() {
       });
 
       // Get the invoice content element (exclude print:hidden elements)
-      const invoiceElement = document.querySelector(".max-w-4xl") as HTMLElement;
+      const invoiceElement = document.querySelector(
+        ".max-w-4xl"
+      ) as HTMLElement;
 
       if (!invoiceElement) {
         throw new Error("Invoice content not found");
@@ -350,27 +374,23 @@ export default function InvoiceDetailPage() {
           scale: 2,
           useCORS: true,
           letterRendering: true,
-          allowTaint: false
+          allowTaint: false,
         },
         jsPDF: {
           unit: "in",
           format: "letter",
-          orientation: "portrait" as const
-        }
+          orientation: "portrait" as const,
+        },
       };
 
       // Generate and download PDF
-      await html2pdf()
-        .set(options)
-        .from(invoiceElement)
-        .save();
+      await html2pdf().set(options).from(invoiceElement).save();
 
       // Show success toast
       toast({
         title: "PDF Downloaded",
         description: `Invoice ${invoice.invoiceNumber} has been downloaded successfully`,
       });
-
     } catch (error) {
       console.error("PDF generation error:", error);
       toast({
@@ -662,7 +682,10 @@ export default function InvoiceDetailPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {formatCurrency(item.total + item.taxAmount)}
+                      {formatCurrency(
+                        (Number(item.total) || 0) +
+                          (Number(item.taxAmount) || 0)
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

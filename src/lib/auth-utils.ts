@@ -53,6 +53,15 @@ async function getUserPracticeId(user: any, db: any): Promise<string | undefined
   const hasPracticeRole = await hasAnyRole(user.role, ['CLIENT', 'PRACTICE_ADMINISTRATOR', 'VETERINARIAN', 'PRACTICE_MANAGER']);
   if (hasPracticeRole) {
     const practiceId = user.practiceId || user.currentPracticeId;
+    
+    // For CLIENT role, it's OK to not have a practice ID (they can browse/book any practice)
+    if (user.role === 'CLIENT' && !practiceId) {
+      if (process.env.DEBUG_AUTH === 'true') {
+        console.log(`[AUTH_UTILS getUserPracticeId] CLIENT user has no assigned practice - OK for browsing`);
+      }
+      return undefined; // This is valid for CLIENTs
+    }
+    
     console.log(`[AUTH_UTILS getUserPracticeId] Practice role user using practice ID: ${practiceId}`);
     return practiceId ? practiceId.toString() : undefined;
   }
@@ -325,13 +334,18 @@ export async function getUserPractice(request: NextRequest): Promise<UserPractic
     // Use the same logic as UserContext
     const practiceId = await getUserPracticeId(userData, db);
 
-    if (!practiceId) {
+    // For CLIENT users without a practice, return user info with empty practiceId
+    // (they can still browse practices and book appointments)
+    if (!practiceId && userData.role !== 'CLIENT') {
+      if (process.env.DEBUG_AUTH === 'true') {
+        console.log(`[AUTH_UTILS getUserPractice] No practice ID for non-CLIENT role: ${userData.role}`);
+      }
       return null;
     }
 
     return {
       userId: userRecord.id,
-      practiceId: practiceId,
+      practiceId: practiceId || '', // Empty string for CLIENTs without assigned practice
       userRole: userRecord.role,
       email: userRecord.email,
       user: userData,

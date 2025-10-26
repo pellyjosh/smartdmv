@@ -40,6 +40,21 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
     const { userId, rateType, rate, effectiveDate, description } = body;
     if (!userId || !rateType || rate == null || !effectiveDate) return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
   const tenantDb = await getCurrentTenantDb();
+  
+  // Check if user already has a pay rate
+  const existingRate = await tenantDb
+    .select()
+    .from(payRates)
+    .where(and(eq(payRates.practiceId, practiceId), eq(payRates.userId, Number(userId))))
+    .limit(1);
+  
+  if (existingRate.length > 0) {
+    return NextResponse.json({ 
+      error: 'Duplicate pay rate', 
+      message: 'This user already has a pay rate. Please update the existing rate instead.' 
+    }, { status: 400 });
+  }
+  
   const [created] = await tenantDb.insert(payRates).values({
       practiceId,
       userId: Number(userId),

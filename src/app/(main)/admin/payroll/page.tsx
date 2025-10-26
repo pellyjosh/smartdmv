@@ -295,6 +295,12 @@ function PayRatesTab({
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
+  const [deleteConfirmRate, setDeleteConfirmRate] = useState<any>(null);
+  const [workHoursConflict, setWorkHoursConflict] = useState<{
+    rate: any;
+    count: number;
+    workHoursIds: number[];
+  } | null>(null);
   const form = useForm<z.infer<typeof payRateSchema>>({
     resolver: zodResolver(payRateSchema),
     defaultValues: {
@@ -372,15 +378,70 @@ function PayRatesTab({
   const del = useMutation({
     mutationFn: async (id: number) => {
       const res = await apiRequest("DELETE", `${base}/rates/${id}`);
-      return res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        // If work hours conflict, store the data and show dialog
+        if (data.workHoursCount) {
+          const rate = deleteConfirmRate;
+          setDeleteConfirmRate(null);
+          setWorkHoursConflict({
+            rate,
+            count: data.workHoursCount,
+            workHoursIds: data.workHoursIds,
+          });
+          throw new Error("Work hours conflict"); // Will be caught by onError
+        }
+        throw new Error(
+          data.message || data.error || "Failed to delete pay rate"
+        );
+      }
+      return data;
     },
     onSuccess: () => {
       toast({ title: "Pay rate deleted" });
+      setDeleteConfirmRate(null);
       qc.invalidateQueries({ queryKey: [base, "rates"] });
     },
-    onError: (e: any) =>
-      toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => {
+      if (e.message !== "Work hours conflict") {
+        toast({
+          title: "Error",
+          description: e.message,
+          variant: "destructive",
+        });
+      }
+    },
   });
+
+  // Delete work hours attached to a pay rate
+  const deleteWorkHoursMutation = useMutation({
+    mutationFn: async (workHoursIds: number[]) => {
+      await Promise.all(
+        workHoursIds.map((id) =>
+          apiRequest(
+            "DELETE",
+            `/api/practices/${practiceId}/payroll/work-hours/${id}`
+          )
+        )
+      );
+    },
+    onSuccess: async () => {
+      // After deleting work hours, try deleting the pay rate again
+      if (workHoursConflict?.rate) {
+        await del.mutateAsync(workHoursConflict.rate.id);
+        setWorkHoursConflict(null);
+        qc.invalidateQueries({ queryKey: [base, "work-hours"] });
+      }
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Error",
+        description: e.message || "Failed to delete work hours",
+        variant: "destructive",
+      });
+    },
+  });
+
   const submit = (data: any) =>
     editing ? update.mutate(data) : create.mutate(data);
   return (
@@ -470,9 +531,7 @@ function PayRatesTab({
                           <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() => {
-                              if (confirm("Delete pay rate?")) del.mutate(r.id);
-                            }}
+                            onClick={() => setDeleteConfirmRate(r)}
                           >
                             Delete
                           </Button>
@@ -631,6 +690,107 @@ function PayRatesTab({
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={!!deleteConfirmRate}
+        onOpenChange={() => setDeleteConfirmRate(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Pay Rate?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the pay rate for{" "}
+              {deleteConfirmRate?.name}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmRate(null)}
+              disabled={del.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => del.mutate(deleteConfirmRate?.id)}
+              disabled={del.isPending}
+            >
+              {del.isPending && (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              )}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Work Hours Conflict Dialog */}
+      <Dialog
+        open={!!workHoursConflict}
+        onOpenChange={() => setWorkHoursConflict(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cannot Delete Pay Rate</DialogTitle>
+            <DialogDescription>
+              This pay rate is currently being used in{" "}
+              {workHoursConflict?.count} work hours record
+              {workHoursConflict?.count !== 1 ? "s" : ""}. You must remove these
+              work hours records before deleting the pay rate.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground mb-2">
+              What would you like to do?
+            </p>
+            <div className="space-y-2">
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => {
+                  // Navigate to work hours tab
+                  setWorkHoursConflict(null);
+                  toast({
+                    title: "Info",
+                    description: `Please remove the ${workHoursConflict?.count} work hours records manually from the Work Hours tab.`,
+                  });
+                }}
+              >
+                Cancel - I'll remove them manually
+              </Button>
+              <Button
+                variant="destructive"
+                className="w-full justify-start"
+                onClick={() => {
+                  if (workHoursConflict?.workHoursIds) {
+                    deleteWorkHoursMutation.mutate(
+                      workHoursConflict.workHoursIds
+                    );
+                  }
+                }}
+                disabled={deleteWorkHoursMutation.isPending}
+              >
+                {deleteWorkHoursMutation.isPending && (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                )}
+                Delete all {workHoursConflict?.count} work hours records and the
+                pay rate
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setWorkHoursConflict(null)}
+              disabled={deleteWorkHoursMutation.isPending}
+            >
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

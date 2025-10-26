@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { practices } from '@/db/schema';
 import { getUserPractice } from '@/lib/auth-utils';
-import { eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 
 // GET /api/user-practices - Get practices accessible to the current user
 export async function GET(request: NextRequest) {
@@ -15,8 +15,20 @@ export async function GET(request: NextRequest) {
     // Get the tenant-specific database
     const tenantDb = await getCurrentTenantDb();
 
-    // For now, just return the user's current practice
-    // In the future, this could be expanded to handle administrators with multiple practices
+    // CLIENT users without a specific practice can see all practices
+    if (userPractice.userRole === 'CLIENT' && !userPractice.practiceId) {
+      const allPractices = await tenantDb
+        .select()
+        .from(practices)
+        .orderBy(asc(practices.name));
+      return NextResponse.json(allPractices);
+    }
+
+    // For users with a specific practice, return that practice
+    if (!userPractice.practiceId) {
+      return NextResponse.json({ error: 'No practice assigned' }, { status: 404 });
+    }
+
     const practice = await tenantDb.query.practices.findFirst({
       where: eq(practices.id, parseInt(userPractice.practiceId)),
     });

@@ -21,6 +21,7 @@ interface StockAlertsProps {
 
 export function StockAlerts({ onRestock }: StockAlertsProps) {
   const [expanded, setExpanded] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Fetch low stock items
   const {
@@ -40,49 +41,56 @@ export function StockAlerts({ onRestock }: StockAlertsProps) {
   });
 
   // Categorize low stock items by severity
-  const { criticalItems, lowItems, expiredItems, expiringItems } = lowStockItems?.reduce(
-    (acc, item) => {
-      // Check if item is expired
-      if (item.expiryDate && new Date(item.expiryDate) < new Date()) {
-        acc.expiredItems.push(item);
-        return acc;
-      }
-
-      // Check if item is expiring within 30 days
-      if (item.expiryDate) {
-        const expiryDate = new Date(item.expiryDate);
-        const thirtyDaysFromNow = new Date();
-        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-        
-        if (expiryDate <= thirtyDaysFromNow) {
-          acc.expiringItems.push(item);
+  const { criticalItems, lowItems, expiredItems, expiringItems } =
+    lowStockItems?.reduce(
+      (acc, item) => {
+        // Check if item is expired
+        if (item.expiryDate && new Date(item.expiryDate) < new Date()) {
+          acc.expiredItems.push(item);
           return acc;
         }
-      }
 
-      // Check critical stock (at or below 50% of min quantity)
-      if (item.minQuantity && item.quantity <= item.minQuantity * 0.5) {
-        acc.criticalItems.push(item);
+        // Check if item is expiring within 30 days
+        if (item.expiryDate) {
+          const expiryDate = new Date(item.expiryDate);
+          const thirtyDaysFromNow = new Date();
+          thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+          if (expiryDate <= thirtyDaysFromNow) {
+            acc.expiringItems.push(item);
+            return acc;
+          }
+        }
+
+        // Check critical stock (at or below 50% of min quantity)
+        if (item.minQuantity && item.quantity <= item.minQuantity * 0.5) {
+          acc.criticalItems.push(item);
+          return acc;
+        }
+
+        // Regular low stock
+        acc.lowItems.push(item);
         return acc;
+      },
+      {
+        criticalItems: [] as Inventory[],
+        lowItems: [] as Inventory[],
+        expiredItems: [] as Inventory[],
+        expiringItems: [] as Inventory[],
       }
-
-      // Regular low stock
-      acc.lowItems.push(item);
-      return acc;
-    },
-    { 
-      criticalItems: [] as Inventory[], 
-      lowItems: [] as Inventory[], 
-      expiredItems: [] as Inventory[],
-      expiringItems: [] as Inventory[]
-    }
-  ) || { criticalItems: [], lowItems: [], expiredItems: [], expiringItems: [] };
+    ) || {
+      criticalItems: [],
+      lowItems: [],
+      expiredItems: [],
+      expiringItems: [],
+    };
 
   // Total number of alerts
-  const totalAlerts = (criticalItems?.length || 0) + 
-                     (lowItems?.length || 0) + 
-                     (expiredItems?.length || 0) + 
-                     (expiringItems?.length || 0);
+  const totalAlerts =
+    (criticalItems?.length || 0) +
+    (lowItems?.length || 0) +
+    (expiredItems?.length || 0) +
+    (expiringItems?.length || 0);
 
   // Show a compact alert if not expanded
   if (!expanded) {
@@ -231,12 +239,28 @@ export function StockAlerts({ onRestock }: StockAlertsProps) {
       </CardContent>
 
       <CardFooter className="flex justify-between">
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
-          Refresh Alerts
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            setIsRefreshing(true);
+            await refetch();
+            setIsRefreshing(false);
+          }}
+          disabled={isRefreshing}
+        >
+          {isRefreshing ? (
+            <>
+              <Spinner className="mr-2 h-4 w-4" />
+              Refreshing...
+            </>
+          ) : (
+            "Refresh Alerts"
+          )}
         </Button>
-        <Button variant="link" size="sm" asChild>
+        {/* <Button variant="link" size="sm" asChild>
           <Link href="/inventory">View All Inventory</Link>
-        </Button>
+        </Button> */}
       </CardFooter>
     </Card>
   );
@@ -252,7 +276,7 @@ function StockAlertItem({ item, severity, onRestock }: StockAlertItemProps) {
   // Format expiry date if present
   const formatExpiryDate = (date: Date | null) => {
     if (!date) return "N/A";
-    
+
     const expiryDate = new Date(date);
     return expiryDate.toLocaleDateString();
   };
@@ -277,13 +301,17 @@ function StockAlertItem({ item, severity, onRestock }: StockAlertItemProps) {
   const getAlertMessage = () => {
     switch (severity) {
       case "critical":
-        return `Critical: ${item.quantity} of ${item.minQuantity} ${item.unit || "units"} left`;
+        return `Critical: ${item.quantity} of ${item.minQuantity} ${
+          item.unit || "units"
+        } left`;
       case "expired":
         return `Expired on ${formatExpiryDate(item.expiryDate)}`;
       case "expiring":
         return `Expires on ${formatExpiryDate(item.expiryDate)}`;
       case "low":
-        return `Low: ${item.quantity} of ${item.minQuantity} ${item.unit || "units"} left`;
+        return `Low: ${item.quantity} of ${item.minQuantity} ${
+          item.unit || "units"
+        } left`;
       default:
         return "";
     }
@@ -302,21 +330,25 @@ function StockAlertItem({ item, severity, onRestock }: StockAlertItemProps) {
       </div>
       <div className="flex items-center gap-2">
         <Badge className={getBadgeClass()}>
-          {severity === "expired" 
-            ? "Expired" 
-            : severity === "expiring" 
-              ? "Expiring Soon" 
-              : severity === "critical" 
-                ? "Critical" 
-                : "Low Stock"}
+          {severity === "expired"
+            ? "Expired"
+            : severity === "expiring"
+            ? "Expiring Soon"
+            : severity === "critical"
+            ? "Critical"
+            : "Low Stock"}
         </Badge>
-        <Link href={`/inventory/${item.id}`}>
+        <Link href={`/admin/inventory/${item.id}`}>
           <Button variant="ghost" size="sm">
             Details
           </Button>
         </Link>
         {onRestock && (
-          <Button variant="outline" size="sm" onClick={() => onRestock(item.id)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onRestock(item.id)}
+          >
             Restock
           </Button>
         )}

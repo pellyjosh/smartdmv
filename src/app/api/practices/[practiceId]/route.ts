@@ -21,10 +21,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const resolvedParams = await params;
     const practiceId = resolvedParams.practiceId;
     
-    // For administrators and super admins, allow access to any practice for now
-    // TODO: Implement proper practice access checking based on administrator_accessible_practices
-    if (userPractice.user.role === 'ADMINISTRATOR' || userPractice.user.role === 'SUPER_ADMIN') {
+    // Authorization logic:
+    // - SUPER_ADMIN and CLIENT can access any practice (clients need to view practice details for booking)
+    // - ADMINISTRATOR can access practices they manage
+    // - Other roles can only access their assigned practice
+    if (userPractice.user.role === 'SUPER_ADMIN' || userPractice.user.role === 'CLIENT') {
+      // Allow full access
+    } else if (userPractice.user.role === 'ADMINISTRATOR') {
       // Allow access - administrators can access any practice they're switching to
+      // TODO: Implement proper practice access checking based on administrator_accessible_practices
     } else {
       // For other roles, verify user has access to this specific practice
       if (practiceId !== userPractice.practiceId) {
