@@ -7,7 +7,7 @@ import { ownerDb } from '@/owner/db/config';
 import { tenantBillingTransactions, ownerPaymentConfigurations } from '@/owner/db/schema';
 import { eq } from 'drizzle-orm';
 import { verifyPaystackPayment } from '@/lib/payments/providers/paystack';
-import { getTenantDb } from '@/tenant/db-manager';
+import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { practiceAddons } from '@/db/schema';
 import crypto from 'crypto';
 
@@ -163,18 +163,10 @@ export async function GET(req: NextRequest) {
       .where(eq(tenants.id, transaction.tenantId))
       .limit(1);
 
-    if (!tenant) {
-      console.error('[OWNER PAYMENT VERIFY] Tenant not found:', transaction.tenantId);
-      return NextResponse.redirect(
-        new URL('/marketplace?payment=error&message=Tenant not found', req.url)
-      );
-    }
-
     // Activate addon subscription in tenant DB
     if (transaction.addonId && transaction.subscriptionId) {
       try {
-        // Get tenant DB connection using tenant ID (convert to string)
-        const tenantDb = await getTenantDb(transaction.tenantId.toString());
+        const tenantDb = await getCurrentTenantDb();
         
         await tenantDb
           .update(practiceAddons)
@@ -197,25 +189,11 @@ export async function GET(req: NextRequest) {
     const host = req.headers.get('host') || 'localhost:9002';
     const protocol = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
     
-    // Build tenant subdomain URL
+    // Use tenant subdomain if available, otherwise use current host
     let redirectHost = host;
-    if (tenant.subdomain) {
-      if (host.includes('localhost')) {
-        // For localhost, prepend subdomain: innova.localhost:9002
-        const [hostname, port] = host.split(':');
-        redirectHost = port ? `${tenant.subdomain}.${hostname}:${port}` : `${tenant.subdomain}.${hostname}`;
-      } else {
-        // For production, replace first subdomain or prepend to domain
-        const parts = host.split('.');
-        if (parts.length > 2) {
-          // Has subdomain, replace it
-          parts[0] = tenant.subdomain;
-          redirectHost = parts.join('.');
-        } else {
-          // No subdomain, add it
-          redirectHost = `${tenant.subdomain}.${host}`;
-        }
-      }
+    if (tenant?.subdomain) {
+      const baseDomain = host.replace(/^[^.]+\./, ''); // Remove subdomain from host
+      redirectHost = `${tenant.subdomain}.${baseDomain}`;
     }
     
     const redirectUrl = `${protocol}://${redirectHost}/marketplace?payment=success&message=Payment completed successfully`;

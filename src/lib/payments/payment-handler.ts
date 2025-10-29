@@ -97,6 +97,167 @@ async function decryptApiKey(encryptedKey: string): Promise<string> {
  * 3. Gets the practice's API keys for that provider from tenant DB
  * 4. Creates payment with that provider
  */
+export async function createPayment(params: PaymentParams): Promise<PaymentResponse> {
+  try {
+    const { practiceId, amount, email, description, metadata } = params;
+
+    // STEP 1: Get practice info from tenant DB
+    const tenantDb = await getCurrentTenantDb();
+    const [practice] = await tenantDb
+      .select({
+        id: practices.id,
+        defaultCurrencyId: practices.defaultCurrencyId,
+      })
+      .from(practices)
+      .where(eq(practices.id, practiceId))
+      .limit(1);
+
+    if (!practice) {
+      return { success: false, provider: 'none', error: 'Practice not found' };
+    }
+
+    if (!practice.defaultCurrencyId) {
+      return { success: false, provider: 'none', error: 'No currency configured for this practice' };
+    }
+
+    // Get actual currency code from currencies table
+    const currency = await tenantDb.query.currencies.findFirst({
+      where: (c: any, { eq }: any) => eq(c.id, practice.defaultCurrencyId),
+    });
+
+    if (!currency) {
+      return { success: false, provider: 'none', error: 'Currency not found' };
+    }
+
+    const currencyCode = (currency as any).code; // e.g., 'USD', 'NGN', 'GHS'
+
+    console.log('[PAYMENT HANDLER] Practice:', practiceId, 'Currency:', currencyCode);
+
+    // STEP 2: Find which provider supports this currency from Owner DB
+    // First, get the provider that supports this currency (join with paymentProviders table)
+    const [providerInfo] = await ownerDb
+      .select({
+        providerId: providerCurrencySupport.providerId,
+        currencyCode: providerCurrencySupport.currencyCode,
+        providerCode: paymentProviders.code,
+      })
+      .from(providerCurrencySupport)
+      .innerJoin(paymentProviders, eq(providerCurrencySupport.providerId, paymentProviders.id))
+      .where(
+        and(
+          eq(providerCurrencySupport.currencyCode, currencyCode),
+          eq(providerCurrencySupport.isActive, true),
+          eq(paymentProviders.status, 'active')
+        )
+      )
+      .orderBy(asc(paymentProviders.priority))
+      .limit(1);
+
+    console.log('[PAYMENT HANDLER] Provider info for currency:', currencyCode, providerInfo);
+
+    if (!providerInfo) {
+      return {
+        success: false,
+        provider: 'none',
+        error: `No payment provider configured for currency ${currencyCode}`
+      };
+    }
+
+    const providerCode = providerInfo.providerCode; // 'stripe' or 'paystack'
+
+    console.log('[PAYMENT HANDLER] Selected provider:', providerCode);
+
+    // STEP 3: Get practice's API keys for this provider from tenant DB
+    const [practiceProvider] = await tenantDb
+      .select()
+      .from(practicePaymentProviders)
+      .where(
+        and(
+          eq(practicePaymentProviders.practiceId, practiceId),
+          eq(practicePaymentProviders.providerCode, providerCode),
+          eq(practicePaymentProviders.isEnabled, true)
+        )
+      )
+      .limit(1);
+
+    console.log('[PAYMENT HANDLER] Practice provider config:', practiceProvider ? 'Found' : 'Not found');
+
+    if (!practiceProvider) {
+      return {
+        success: false,
+        provider: providerCode,
+        error: `${providerCode} not configured for this practice. Please configure API keys in Practice Settings > Payment Gateway.`
+      };
+    }
+
+    // Decrypt API keys
+    const secretKey = practiceProvider.secretKey
+      ? await decryptApiKey(practiceProvider.secretKey)
+      : '';
+    const publicKey = practiceProvider.publicKey || null;
+
+    // STEP 4: Create payment with the selected provider
+    if (providerCode === 'stripe') {
+      const result = await createStripePayment({
+        secretKey,
+        publicKey,
+        amount,
+        currency: currencyCode,
+        email,
+        description,
+        metadata,
+      });
+
+      return {
+        success: result.success,
+        paymentUrl: result.clientSecret,
+        paymentId: result.paymentId,
+        provider: 'stripe',
+        error: result.error,
+      };
+    } else if (providerCode === 'paystack') {
+      // Build callback URL with invoice ID for verification
+      // Use tenant-specific URL if provided, otherwise fallback to env var
+      const baseUrl = params.callbackBaseUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
+      const callbackUrl = `${baseUrl}/api/payments/verify?provider=paystack&invoiceId=${metadata?.invoiceId || ''}`;
+
+      console.log('[PAYMENT HANDLER] Paystack callback URL:', callbackUrl);
+
+      const result = await createPaystackPayment({
+        secretKey,
+        publicKey,
+        amount,
+        currency: currencyCode,
+        email,
+        description,
+        metadata,
+        callbackUrl,
+      });
+
+      return {
+        success: result.success,
+        paymentUrl: result.authorizationUrl,
+        paymentId: result.paymentId,
+        provider: 'paystack',
+        error: result.error,
+      };
+    }
+
+    return {
+      success: false,
+      provider: providerCode,
+      error: `Provider ${providerCode} not implemented`
+    };
+
+  } catch (error) {
+    console.error('Payment creation error:', error);
+    return {
+      success: false,
+      provider: 'unknown',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
 
 /**
  * Create marketplace payment using OWNER payment configuration
