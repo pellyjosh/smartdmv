@@ -10,10 +10,10 @@ import { z } from 'zod';
 
 // GET /api/billing/invoices - Get invoices for current client
 export async function GET(request: NextRequest) {
-  // Get the tenant-specific database
-  const tenantDb = await getCurrentTenantDb();
-
   try {
+    // Get the tenant-specific database
+    const tenantDb = await getCurrentTenantDb();
+    
     const user = await getCurrentUser(request);
     
     if (!user) {
@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
       whereConditions.push(eq(invoices.status, status as any));
     }
 
+    console.log('[API /billing/invoices] Fetching invoices for client:', user.id);
+
     const userInvoices = await tenantDb.query.invoices.findMany({
       where: and(...whereConditions),
       with: {
@@ -48,12 +50,15 @@ export async function GET(request: NextRequest) {
       orderBy: [desc(invoices.createdAt)],
     });
 
+    console.log('[API /billing/invoices] Found invoices:', userInvoices.length);
+
     return NextResponse.json(userInvoices);
 
   } catch (error) {
-    console.error('[API] Error fetching invoices:', error);
+    console.error('[API /billing/invoices] Error fetching invoices:', error);
+    console.error('[API /billing/invoices] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     return NextResponse.json(
-      { error: 'Failed to fetch invoices' },
+      { error: 'Failed to fetch invoices', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

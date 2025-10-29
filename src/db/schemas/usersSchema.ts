@@ -1,6 +1,6 @@
 
 // schema/usersSchema.ts
-import { dbTable, text, timestamp, primaryKey, primaryKeyId, foreignKeyInt, foreignKeyText } from '@/db/db.config';
+import { dbTable, text, timestamp, primaryKey, primaryKeyId, foreignKeyInt, foreignKeyText, boolean } from '@/db/db.config';
 import { relations, sql } from 'drizzle-orm';
 import { practices } from './practicesSchema';
 import { sessions } from './sessionsSchema';
@@ -43,6 +43,9 @@ export const users = dbTable('users', {
   emergencyContactName: text('emergency_contact_name'),
   emergencyContactPhone: text('emergency_contact_phone'),
   emergencyContactRelationship: text('emergency_contact_relationship'),
+  smsOptOut: boolean('sms_opt_out').default(false),
+  isActive: boolean('is_active').default(true).notNull(),
+  deletedAt: timestamp('deleted_at', { mode: 'date' }),
   role: text('role', { enum: userRoleEnumValues as [string, ...string[]] }).notNull(),
   practiceId: foreignKeyInt('practice_id').references(() => practices.id, { onDelete: 'set null' }),
   currentPracticeId: foreignKeyInt('current_practice_id').references(() => practices.id, { onDelete: 'set null' }),
@@ -104,6 +107,9 @@ export interface User {
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
   emergencyContactRelationship: string | null;
+  smsOptOut: boolean | null;
+  isActive: boolean;
+  deletedAt: Date | null;
   role: UserRole;
   practiceId: number | null;
   currentPracticeId: number | null;

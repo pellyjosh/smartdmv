@@ -40,6 +40,15 @@ export async function createPaystackPayment(
     // Convert to smallest currency unit (kobo for NGN, cents for others)
     const amountInKobo = Math.round(params.amount * 100);
 
+    console.log('[PAYSTACK] Initializing payment:', {
+      amount: params.amount,
+      amountInKobo,
+      currency: params.currency,
+      email: params.email,
+      hasSecretKey: !!params.secretKey,
+      secretKeyPrefix: params.secretKey?.substring(0, 7),
+    });
+
     // Paystack transaction initialization
     const response = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
@@ -57,9 +66,18 @@ export async function createPaystackPayment(
       }),
     });
 
+    console.log('[PAYSTACK] Response status:', response.status);
+
     const data = await response.json();
 
+    console.log('[PAYSTACK] Response data:', {
+      status: data.status,
+      message: data.message,
+      hasData: !!data.data,
+    });
+
     if (!data.status) {
+      console.error('[PAYSTACK] Payment initialization failed:', data.message);
       return {
         success: false,
         error: data.message || 'Paystack initialization failed',

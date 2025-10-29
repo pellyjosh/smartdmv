@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 import { ownerDb } from '@/db/owner-db';
-import { tenants } from '@/db/owner-schema';
+import { tenants } from '@/owner/db/schemas/ownerSchema';
 import { eq, or } from 'drizzle-orm';
 import { getTenantDb, TenantConnectionConfig } from '@/db/tenant-db';
 import { dbCache } from '@/lib/encrypted-db-cache';

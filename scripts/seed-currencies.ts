@@ -2,7 +2,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { ownerDb } from '@/db/owner-db';
-import { tenants } from '@/db/owner-schema';
+import { tenants } from '@/owner/db/schemas/ownerSchema';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/db/schema';
 

@@ -103,6 +103,16 @@ export async function GET(request: Request) {
         response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
         return response;
       }
+
+      // Check if account is deactivated
+      if (userRecord.isActive === false || userRecord.deletedAt !== null) {
+        console.warn(`[API ME] User account is deactivated: ${userRecord.email}. Deleting session and clearing cookie.`);
+        await contextualDb.delete(sessionsTable).where(eq(sessionsTable.id, sessionId));
+        const response = NextResponse.json(null, { status: 200 });
+        response.cookies.set(HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME, '', { httpOnly: true, maxAge: 0, path: '/' });
+        return response;
+      }
+
       console.log('[API ME] User record found for session:', userRecord.email);
 
       let userData: any;
@@ -151,6 +161,16 @@ export async function GET(request: Request) {
           id: userRecord.id.toString(),
           email: Array.isArray(userRecord.email) ? userRecord.email[0] : userRecord.email,
           name: Array.isArray(userRecord.name) ? userRecord.name[0] : userRecord.name || undefined,
+          username: userRecord.username,
+          phone: userRecord.phone || undefined,
+          address: userRecord.address || undefined,
+          city: userRecord.city || undefined,
+          state: userRecord.state || undefined,
+          zipCode: userRecord.zipCode || undefined,
+          country: userRecord.country || undefined,
+          emergencyContactName: userRecord.emergencyContactName || undefined,
+          emergencyContactPhone: userRecord.emergencyContactPhone || undefined,
+          emergencyContactRelationship: userRecord.emergencyContactRelationship || undefined,
           role: 'ADMINISTRATOR',
           accessiblePracticeIds,
           currentPracticeId: currentPracticeId!, // Should be guaranteed to be set now
@@ -180,6 +200,16 @@ export async function GET(request: Request) {
           id: userRecord.id.toString(),
           email: Array.isArray(userRecord.email) ? userRecord.email[0] : userRecord.email,
           name: Array.isArray(userRecord.name) ? userRecord.name[0] : userRecord.name || undefined,
+          username: userRecord.username,
+          phone: userRecord.phone || undefined,
+          address: userRecord.address || undefined,
+          city: userRecord.city || undefined,
+          state: userRecord.state || undefined,
+          zipCode: userRecord.zipCode || undefined,
+          country: userRecord.country || undefined,
+          emergencyContactName: userRecord.emergencyContactName || undefined,
+          emergencyContactPhone: userRecord.emergencyContactPhone || undefined,
+          emergencyContactRelationship: userRecord.emergencyContactRelationship || undefined,
           role: 'SUPER_ADMIN',
           accessiblePracticeIds,
           currentPracticeId: currentPracticeId!, // Should be guaranteed to be set now
@@ -194,6 +224,16 @@ export async function GET(request: Request) {
           id: userRecord.id.toString(),
           email: Array.isArray(userRecord.email) ? userRecord.email[0] : userRecord.email,
           name: Array.isArray(userRecord.name) ? userRecord.name[0] : userRecord.name || undefined,
+          username: userRecord.username,
+          phone: userRecord.phone || undefined,
+          address: userRecord.address || undefined,
+          city: userRecord.city || undefined,
+          state: userRecord.state || undefined,
+          zipCode: userRecord.zipCode || undefined,
+          country: userRecord.country || undefined,
+          emergencyContactName: userRecord.emergencyContactName || undefined,
+          emergencyContactPhone: userRecord.emergencyContactPhone || undefined,
+          emergencyContactRelationship: userRecord.emergencyContactRelationship || undefined,
           role: 'PRACTICE_ADMINISTRATOR',
           practiceId: userRecord.practiceId!.toString(),
           roles: assignedRoles,
@@ -207,6 +247,16 @@ export async function GET(request: Request) {
           id: userRecord.id.toString(),
           email: Array.isArray(userRecord.email) ? userRecord.email[0] : userRecord.email,
           name: Array.isArray(userRecord.name) ? userRecord.name[0] : userRecord.name|| undefined,
+          username: userRecord.username,
+          phone: userRecord.phone || undefined,
+          address: userRecord.address || undefined,
+          city: userRecord.city || undefined,
+          state: userRecord.state || undefined,
+          zipCode: userRecord.zipCode || undefined,
+          country: userRecord.country || undefined,
+          emergencyContactName: userRecord.emergencyContactName || undefined,
+          emergencyContactPhone: userRecord.emergencyContactPhone || undefined,
+          emergencyContactRelationship: userRecord.emergencyContactRelationship || undefined,
           role: 'CLIENT',
           practiceId: userRecord.practiceId!.toString(),
           roles: assignedRoles,
@@ -220,6 +270,16 @@ export async function GET(request: Request) {
           id: userRecord.id.toString(),
           email: Array.isArray(userRecord.email) ? userRecord.email[0] : userRecord.email,
           name: Array.isArray(userRecord.name) ? userRecord.name[0] : userRecord.name || undefined,
+          username: userRecord.username,
+          phone: userRecord.phone || undefined,
+          address: userRecord.address || undefined,
+          city: userRecord.city || undefined,
+          state: userRecord.state || undefined,
+          zipCode: userRecord.zipCode || undefined,
+          country: userRecord.country || undefined,
+          emergencyContactName: userRecord.emergencyContactName || undefined,
+          emergencyContactPhone: userRecord.emergencyContactPhone || undefined,
+          emergencyContactRelationship: userRecord.emergencyContactRelationship || undefined,
           role: 'VETERINARIAN',
           practiceId: userRecord.practiceId!.toString(),
           roles: assignedRoles,
@@ -233,13 +293,46 @@ export async function GET(request: Request) {
           id: userRecord.id.toString(),
           email: Array.isArray(userRecord.email) ? userRecord.email[0] : userRecord.email,
           name: Array.isArray(userRecord.name) ? userRecord.name[0] : userRecord.name || undefined,
+          username: userRecord.username,
+          phone: userRecord.phone || undefined,
+          address: userRecord.address || undefined,
+          city: userRecord.city || undefined,
+          state: userRecord.state || undefined,
+          zipCode: userRecord.zipCode || undefined,
+          country: userRecord.country || undefined,
+          emergencyContactName: userRecord.emergencyContactName || undefined,
+          emergencyContactPhone: userRecord.emergencyContactPhone || undefined,
+          emergencyContactRelationship: userRecord.emergencyContactRelationship || undefined,
           role: 'PRACTICE_MANAGER',
           practiceId: userRecord.practiceId!.toString(),
           roles: assignedRoles,
         };
       } else {
-        console.error(`[API ME] Unknown user role for ${userRecord.email}: ${userRecord.role}. Clearing cookie and returning null.`);
-        throw new Error(`Unknown user role: ${userRecord.role}`);
+        // Handle other roles (TECHNICIAN, RECEPTIONIST, ACCOUNTANT, CASHIER, OFFICE_MANAGER, etc.)
+        // All other roles should have a practiceId
+        if (!userRecord.practiceId) {
+          console.warn(`[API ME] User ${userRecord.email} with role ${userRecord.role} is not associated with a practice. Returning null.`);
+          throw new Error(`${userRecord.role} not associated with a practice`);
+        }
+        userData = {
+          id: userRecord.id.toString(),
+          email: Array.isArray(userRecord.email) ? userRecord.email[0] : userRecord.email,
+          name: Array.isArray(userRecord.name) ? userRecord.name[0] : userRecord.name || undefined,
+          username: userRecord.username,
+          phone: userRecord.phone || undefined,
+          address: userRecord.address || undefined,
+          city: userRecord.city || undefined,
+          state: userRecord.state || undefined,
+          zipCode: userRecord.zipCode || undefined,
+          country: userRecord.country || undefined,
+          emergencyContactName: userRecord.emergencyContactName || undefined,
+          emergencyContactPhone: userRecord.emergencyContactPhone || undefined,
+          emergencyContactRelationship: userRecord.emergencyContactRelationship || undefined,
+          role: userRecord.role as any,
+          practiceId: userRecord.practiceId!.toString(),
+          roles: assignedRoles,
+        };
+        console.log(`[API ME] Handled user with role: ${userRecord.role}`);
       }
       
       return userData;

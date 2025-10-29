@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { Pool } from 'pg';
 import { ownerDb } from '@/db/owner-db';
-import { tenants, ownerUsers, ownerSessions } from '@/db/owner-schema';
+import { tenants, ownerUsers, ownerSessions } from '@/owner/db/schemas/ownerSchema';
 import { eq, and, gt } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 

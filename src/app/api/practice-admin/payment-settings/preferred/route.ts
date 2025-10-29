@@ -47,13 +47,20 @@ export async function POST(req: NextRequest) {
     // First, unset all providers as default for this practice
     await tenantDb
       .update(practicePaymentProviders)
-      .set({ isDefault: false })
+      .set({ 
+        isDefault: false,
+        updatedAt: new Date(),
+      })
       .where(eq(practicePaymentProviders.practiceId, practiceId));
 
     // Then set the selected gateway as default
     const result = await tenantDb
       .update(practicePaymentProviders)
-      .set({ isDefault: true, isEnabled: true })
+      .set({ 
+        isDefault: true, 
+        isEnabled: true,
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(practicePaymentProviders.practiceId, practiceId),

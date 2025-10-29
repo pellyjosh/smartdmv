@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { ownerDb } from '@/db/owner-db.config';
-import { tenants, tenantUsage } from '@/db/owner-schema';
+import { tenants, tenantUsage } from '@/owner/db/schemas/ownerSchema';
 import { count, eq, gte } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {

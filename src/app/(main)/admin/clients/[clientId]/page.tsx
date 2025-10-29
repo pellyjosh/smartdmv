@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -9,7 +9,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
-// UI Components
+import { compressImage, validateImageFile } from "@/lib/image-utils";
 import {
   Card,
   CardContent,
@@ -43,8 +43,105 @@ import {
 } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Edit, Phone, Mail, UserCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Edit,
+  Phone,
+  Mail,
+  UserCircle,
+  PlusCircle,
+  Loader2,
+  Camera,
+  X,
+  Check,
+  ChevronsUpDown,
+} from "lucide-react";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { useUser } from "@/context/UserContext";
+import { useTenantInfo } from "@/hooks/use-tenant-info";
+import { getPetAvatarColors } from "@/lib/utils";
+import { SimpleCustomFieldSelect } from "@/components/form/simple-custom-field-select";
+import { useCustomFields } from "@/hooks/use-custom-fields";
 import { queryClient } from "@/lib/queryClient";
+
+// Predefined lists for dropdowns
+const speciesList = [
+  { value: "Dog", label: "Dog" },
+  { value: "Cat", label: "Cat" },
+  { value: "Bird", label: "Bird" },
+  { value: "Rabbit", label: "Rabbit" },
+  { value: "Hamster", label: "Hamster" },
+  { value: "Guinea Pig", label: "Guinea Pig" },
+  { value: "Ferret", label: "Ferret" },
+  { value: "Reptile", label: "Reptile" },
+  { value: "Fish", label: "Fish" },
+  { value: "Other", label: "Other" },
+];
+
+const breedsList: Record<string, { value: string; label: string }[]> = {
+  Dog: [
+    { value: "Mixed Breed", label: "Mixed Breed" },
+    { value: "Labrador Retriever", label: "Labrador Retriever" },
+    { value: "German Shepherd", label: "German Shepherd" },
+    { value: "Golden Retriever", label: "Golden Retriever" },
+    { value: "Beagle", label: "Beagle" },
+    { value: "Poodle", label: "Poodle" },
+    { value: "Rottweiler", label: "Rottweiler" },
+    { value: "Yorkshire Terrier", label: "Yorkshire Terrier" },
+    { value: "Dachshund", label: "Dachshund" },
+  ],
+  Cat: [
+    { value: "Domestic Shorthair", label: "Domestic Shorthair" },
+    { value: "Domestic Longhair", label: "Domestic Longhair" },
+    { value: "Siamese", label: "Siamese" },
+    { value: "Persian", label: "Persian" },
+    { value: "Maine Coon", label: "Maine Coon" },
+    { value: "Ragdoll", label: "Ragdoll" },
+  ],
+};
+
+const genderList = [
+  { value: "Male", label: "Male" },
+  { value: "Female", label: "Female" },
+  { value: "Male (Neutered)", label: "Male (Neutered)" },
+  { value: "Female (Spayed)", label: "Female (Spayed)" },
+  { value: "Unknown", label: "Unknown" },
+];
+
+const colorList = [
+  { value: "Black", label: "Black" },
+  { value: "White", label: "White" },
+  { value: "Brown", label: "Brown" },
+  { value: "Gray", label: "Gray" },
+  { value: "Tan", label: "Tan" },
+  { value: "Golden", label: "Golden" },
+  { value: "Cream", label: "Cream" },
+  { value: "Orange", label: "Orange" },
+  { value: "Red", label: "Red" },
+  { value: "Blue", label: "Blue" },
+  { value: "Black & White", label: "Black & White" },
+  { value: "Brown & White", label: "Brown & White" },
+  { value: "Calico", label: "Calico" },
+  { value: "Tabby", label: "Tabby" },
+  { value: "Brindle", label: "Brindle" },
+  { value: "Spotted", label: "Spotted" },
+  { value: "Merle", label: "Merle" },
+  { value: "Tricolor", label: "Tricolor" },
+  { value: "Other", label: "Other" },
+];
 
 // Client form schema
 const clientEditFormSchema = z.object({
@@ -68,6 +165,90 @@ const clientEditFormSchema = z.object({
 });
 
 type ClientEditFormValues = z.infer<typeof clientEditFormSchema>;
+
+// Pet form schema
+const petFormSchema = z.object({
+  name: z.string().min(2, { message: "Name must be at least 2 characters" }),
+  species: z.string().min(2, { message: "Species is required" }),
+  breed: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+  weight: z.string().optional(),
+  allergies: z.string().optional(),
+  color: z.string().optional(),
+  gender: z.string().optional(),
+  microchipNumber: z.string().optional(),
+  pet_type: z.string().optional(), // For Pet Information custom field
+  ownerId: z.string({ message: "Owner is required" }),
+  practiceId: z.string({ message: "Practice is required" }),
+  // photoPath is handled separately via file upload
+});
+
+type PetFormValues = z.infer<typeof petFormSchema>;
+
+// Combobox component for searchable dropdown
+function ComboboxSelect({
+  options,
+  value,
+  onValueChange,
+  placeholder,
+  className,
+  emptyMessage = "No option found.",
+}: {
+  options: { value: string; label: string }[];
+  value: string | undefined;
+  onValueChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+  emptyMessage?: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("w-full justify-between", className)}
+        >
+          {value
+            ? options.find((option) => option.value === value)?.label
+            : placeholder || "Select option..."}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-full p-0">
+        <Command>
+          <CommandInput
+            placeholder={`Search ${placeholder?.toLowerCase() || "options"}...`}
+          />
+          <CommandEmpty>{emptyMessage}</CommandEmpty>
+          <CommandGroup className="max-h-60 overflow-y-auto">
+            {options.map((option) => (
+              <CommandItem
+                key={option.value}
+                value={option.value}
+                onSelect={(currentValue) => {
+                  onValueChange(currentValue === value ? "" : currentValue);
+                  setOpen(false);
+                }}
+              >
+                <Check
+                  className={cn(
+                    "mr-2 h-4 w-4",
+                    value === option.value ? "opacity-100" : "opacity-0"
+                  )}
+                />
+                {option.label}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function ClientDetailPage() {
   const params = useParams();
@@ -387,9 +568,16 @@ export default function ClientDetailPage() {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Clients
           </Link>
         </Button>
-        <Button onClick={() => setIsEditDialogOpen(true)}>
-          <Edit className="mr-2 h-4 w-4" /> Edit Client
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href={`/admin/clients?addPet=${clientId}`}>
+              <PlusCircle className="mr-2 h-4 w-4" /> Add New Pet
+            </Link>
+          </Button>
+          <Button onClick={() => setIsEditDialogOpen(true)}>
+            <Edit className="mr-2 h-4 w-4" /> Edit Client
+          </Button>
+        </div>
       </div>
 
       {/* Client Information Card */}

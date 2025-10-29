@@ -8,10 +8,10 @@ import { z } from 'zod';
 
 // GET /api/billing/payment-methods - Get saved payment methods for current client
 export async function GET(request: NextRequest) {
-  // Get the tenant-specific database
-  const tenantDb = await getCurrentTenantDb();
-
   try {
+    // Get the tenant-specific database
+    const tenantDb = await getCurrentTenantDb();
+    
     const user = await getCurrentUser(request);
     
     if (!user) {
@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied. Client access required.' }, { status: 403 });
     }
 
+    console.log('[API /billing/payment-methods] Fetching payment methods for client:', user.id);
+
     const userPaymentMethods = await tenantDb.query.paymentMethods.findMany({
       where: and(
         eq(paymentMethods.clientId, user.id),
@@ -30,6 +32,8 @@ export async function GET(request: NextRequest) {
       ),
       orderBy: [desc(paymentMethods.createdAt)],
     });
+
+    console.log('[API /billing/payment-methods] Found payment methods:', userPaymentMethods.length);
 
     // Remove sensitive data before sending to client
     const sanitizedPaymentMethods = userPaymentMethods.map(pm => ({
@@ -52,9 +56,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(sanitizedPaymentMethods);
 
   } catch (error) {
-    console.error('[API] Error fetching payment methods:', error);
+    console.error('[API /billing/payment-methods] Error fetching payment methods:', error);
+    console.error('[API /billing/payment-methods] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     return NextResponse.json(
-      { error: 'Failed to fetch payment methods' },
+      { error: 'Failed to fetch payment methods', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

@@ -1,7 +1,7 @@
 // src/app/api/owner/auth/logout/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { ownerDb } from '@/db/owner-db.config';
-import { ownerSessions } from '@/db/owner-schema';
+import { ownerSessions } from '@/owner/db/schemas/ownerSchema';
 import { eq } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {

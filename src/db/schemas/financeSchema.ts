@@ -19,8 +19,8 @@ export const expenses = dbTable('expenses', {
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   // Legacy text currency (kept for backward compatibility)
   currency: text('currency').notNull().default(sql`'USD'`),
-  // Reference to currencies table (preferred)
-  currencyId: foreignKeyInt('currency_id').default(1).references(() => currencies.id),
+  // Reference to currencies table (required)
+  currencyId: foreignKeyInt('currency_id').notNull().references(() => currencies.id),
   category: text('category').notNull(), // e.g., supplies, utilities, payroll_adjustment
   subcategory: text('subcategory'),
   description: text('description'),
@@ -89,8 +89,8 @@ export const refunds = dbTable('refunds', {
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   // Legacy text currency
   currency: text('currency').notNull().default(sql`'USD'`),
-  // Preferred FK to currencies
-  currencyId: foreignKeyInt('currency_id').default(1).references(() => currencies.id),
+  // Currency reference (required)
+  currencyId: foreignKeyInt('currency_id').notNull().references(() => currencies.id),
   reason: text('reason').notNull(),
   status: text('status', { enum: ['pending', 'approved', 'rejected', 'processed', 'failed', 'void'] }).notNull().default(sql`'pending'`),
   issuedAt: timestamp('issued_at', { mode: 'date' }).notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -199,8 +199,8 @@ export const payroll = dbTable('payroll', {
   netAmount: decimal('net_amount', { precision: 12, scale: 2 }).notNull(),
   // Legacy text currency
   currency: text('currency').notNull().default(sql`'USD'`),
-  // Preferred FK to currencies
-  currencyId: foreignKeyInt('currency_id').default(1).references(() => currencies.id),
+  // Currency reference (required)
+  currencyId: foreignKeyInt('currency_id').notNull().references(() => currencies.id),
   deductions: text('deductions'), // JSON string representing deduction breakdown
   taxes: text('taxes'), // JSON string representing tax breakdown
   status: text('status', { enum: ['pending', 'processing', 'paid', 'failed', 'void'] }).notNull().default(sql`'pending'`),

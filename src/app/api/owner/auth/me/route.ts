@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { ownerDb } from '@/db/owner-db.config';
-import { ownerUsers, ownerSessions, tenants } from '@/db/owner-schema';
+import { ownerUsers, ownerSessions, tenants } from '@/owner/db/schemas/ownerSchema';
 import { eq, and, gt, count } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {

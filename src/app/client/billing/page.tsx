@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/hooks/use-toast";
 import { useBillingData, type Invoice, type Payment } from "@/lib/billing-api";
 import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -64,6 +65,7 @@ import { format } from "@/lib/date-utils";
 export default function BillingPage() {
   const { user } = useUser();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
   const billingHooks = useBillingData();
   const { practiceCurrency } = useCurrencyFormatter();
   const currencySymbol = practiceCurrency?.symbol;
@@ -150,6 +152,37 @@ export default function BillingPage() {
 
   const overdueBills = invoices.filter((inv) => inv.status === "overdue");
 
+  // Handle payment status from URL parameters (after redirect from payment gateway)
+  useEffect(() => {
+    const paymentStatus = searchParams.get("payment");
+    const message = searchParams.get("message");
+
+    if (paymentStatus === "success") {
+      toast({
+        title: "Payment Successful!",
+        description: message || "Your payment has been processed successfully.",
+        variant: "default",
+      });
+      // Refresh data to show updated invoice status
+      refetchInvoices?.();
+      refetchPayments?.();
+
+      // Clear URL parameters
+      window.history.replaceState({}, "", "/client/billing");
+    } else if (paymentStatus === "failed" || paymentStatus === "error") {
+      toast({
+        title: "Payment Failed",
+        description:
+          message ||
+          "There was an issue processing your payment. Please try again.",
+        variant: "destructive",
+      });
+
+      // Clear URL parameters
+      window.history.replaceState({}, "", "/client/billing");
+    }
+  }, [searchParams, toast, refetchInvoices, refetchPayments]);
+
   const handlePayInvoice = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
     setPaymentForm((prev) => ({
@@ -157,8 +190,8 @@ export default function BillingPage() {
       amount: parseFloat(invoice.totalAmount),
     }));
 
-    // Automatically process payment using the new payment handler
-    processPaymentWithHandler(invoice);
+    // Show invoice details for confirmation first
+    setShowInvoiceDetailsDialog(true);
   };
 
   /**
@@ -398,7 +431,10 @@ Description: ${invoice.description}
 Services:
 ${invoice.items
   .map(
-    (item) => `- ${item.description}: ${currencySymbol}${parseFloat(item.subtotal).toFixed(2)}`
+    (item) =>
+      `- ${item.description}: ${currencySymbol}${parseFloat(
+        item.subtotal
+      ).toFixed(2)}`
   )
   .join("\n")}
 
@@ -542,7 +578,8 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-900">
-              {currencySymbol}{totalOutstanding.toFixed(2)}
+              {currencySymbol}
+              {totalOutstanding.toFixed(2)}
             </div>
             <p className="text-xs text-red-700 mt-1">
               {invoices.filter((inv) => inv.status !== "paid").length} unpaid
@@ -630,7 +667,8 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
                 </CardHeader>
                 <CardContent>
                   <p className="text-red-700 mb-4">
-                    You have {overdueBills.length} overdue bill(s) totaling {currencySymbol}
+                    You have {overdueBills.length} overdue bill(s) totaling{" "}
+                    {currencySymbol}
                     {overdueBills
                       .reduce(
                         (sum, inv) => sum + parseFloat(inv.totalAmount),
@@ -653,102 +691,124 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
 
             {/* Invoices List */}
             <div className="space-y-4">
-              {invoices.map((invoice) => (
-                <Card
-                  key={invoice.id}
-                  className={
-                    invoice.status === "overdue" ? "border-red-200" : ""
-                  }
-                >
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-lg">
-                          {invoice.invoiceNumber}
-                        </CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                          Service Date:{" "}
-                          {format(new Date(invoice.issueDate), "MMM d, YYYY")} •
-                          Due:{" "}
-                          {format(new Date(invoice.dueDate), "MMM d, YYYY")}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xl font-bold">
-                          {currencySymbol}{parseFloat(invoice.totalAmount).toFixed(2)}
+              {invoices.length > 0 ? (
+                invoices.map((invoice) => (
+                  <Card
+                    key={invoice.id}
+                    className={
+                      invoice.status === "overdue" ? "border-red-200" : ""
+                    }
+                  >
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <CardTitle className="text-lg">
+                            {invoice.invoiceNumber}
+                          </CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            Service Date:{" "}
+                            {format(new Date(invoice.issueDate), "MMM d, YYYY")}{" "}
+                            • Due:{" "}
+                            {format(new Date(invoice.dueDate), "MMM d, YYYY")}
+                          </p>
                         </div>
-                        {getStatusBadge(invoice.status)}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        {invoice.pet && (
-                          <div>
-                            <span className="text-muted-foreground">Pet:</span>
-                            <span className="ml-2 font-medium">
-                              {invoice.pet.name}
-                            </span>
+                        <div className="text-right">
+                          <div className="text-xl font-bold">
+                            {currencySymbol}
+                            {parseFloat(invoice.totalAmount).toFixed(2)}
                           </div>
-                        )}
-                        <div className="col-span-2">
-                          <span className="text-muted-foreground">
-                            Description:
-                          </span>
-                          <span className="ml-2">{invoice.description}</span>
+                          {getStatusBadge(invoice.status)}
                         </div>
                       </div>
-
-                      {/* Services Breakdown */}
-                      <div className="border-t pt-3">
-                        <h5 className="font-medium text-sm mb-2">Services:</h5>
-                        <div className="space-y-1">
-                          {invoice.items.map((item) => (
-                            <div
-                              key={item.id}
-                              className="flex justify-between text-sm"
-                            >
-                              <span>{item.description}</span>
-                              <span>
-                                {currencySymbol}{parseFloat(item.subtotal).toFixed(2)}
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          {invoice.pet && (
+                            <div>
+                              <span className="text-muted-foreground">
+                                Pet:
+                              </span>
+                              <span className="ml-2 font-medium">
+                                {invoice.pet.name}
                               </span>
                             </div>
-                          ))}
+                          )}
+                          <div className="col-span-2">
+                            <span className="text-muted-foreground">
+                              Description:
+                            </span>
+                            <span className="ml-2">{invoice.description}</span>
+                          </div>
+                        </div>
+
+                        {/* Services Breakdown */}
+                        <div className="border-t pt-3">
+                          <h5 className="font-medium text-sm mb-2">
+                            Services:
+                          </h5>
+                          <div className="space-y-1">
+                            {invoice.items.map((item) => (
+                              <div
+                                key={item.id}
+                                className="flex justify-between text-sm"
+                              >
+                                <span>{item.description}</span>
+                                <span>
+                                  {currencySymbol}
+                                  {parseFloat(item.subtotal).toFixed(2)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewInvoiceDetails(invoice)}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Details
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDownloadInvoicePDF(invoice)}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download PDF
-                    </Button>
-                    {invoice.status !== "paid" && (
+                    </CardContent>
+                    <CardFooter className="flex gap-2">
                       <Button
+                        variant="outline"
                         size="sm"
-                        onClick={() => handlePayInvoice(invoice)}
-                        className="ml-auto"
+                        onClick={() => handleViewInvoiceDetails(invoice)}
                       >
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Pay Now
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Details
                       </Button>
-                    )}
-                  </CardFooter>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownloadInvoicePDF(invoice)}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download PDF
+                      </Button>
+                      {invoice.status !== "paid" && (
+                        <Button
+                          size="sm"
+                          onClick={() => handlePayInvoice(invoice)}
+                          className="ml-auto"
+                        >
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          Pay Now
+                        </Button>
+                      )}
+                    </CardFooter>
+                  </Card>
+                ))
+              ) : (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                    <Receipt className="h-16 w-16 text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">
+                      No Invoices Yet
+                    </h3>
+                    <p className="text-muted-foreground max-w-md">
+                      You don't have any invoices at the moment. Once you
+                      receive services from the clinic, your invoices will
+                      appear here.
+                    </p>
+                  </CardContent>
                 </Card>
-              ))}
+              )}
             </div>
           </div>
         </TabsContent>
@@ -756,51 +816,70 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
         {/* Payment History Tab */}
         <TabsContent value="payments">
           <div className="space-y-4">
-            {payments.map((payment) => (
-              <Card key={payment.id}>
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-lg">
-                        {payment.paymentNumber}
-                      </CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        {format(new Date(payment.paymentDate), "MMM d, YYYY")} •{" "}
-                        {payment.paymentMethod
-                          .replace("_", " ")
-                          .replace(/\b\w/g, (l) => l.toUpperCase())}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xl font-bold">
-                        {currencySymbol}{parseFloat(payment.amount).toFixed(2)}
+            {payments.length > 0 ? (
+              payments.map((payment) => (
+                <Card key={payment.id}>
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg">
+                          {payment.paymentNumber}
+                        </CardTitle>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(payment.paymentDate), "MMM d, YYYY")}{" "}
+                          •{" "}
+                          {payment.paymentMethod
+                            .replace("_", " ")
+                            .replace(/\b\w/g, (l) => l.toUpperCase())}
+                        </p>
                       </div>
-                      <Badge className="bg-green-50 text-green-700 border-green-200">
-                        {payment.status}
-                      </Badge>
+                      <div className="text-right">
+                        <div className="text-xl font-bold">
+                          {currencySymbol}
+                          {parseFloat(payment.amount).toFixed(2)}
+                        </div>
+                        <Badge className="bg-green-50 text-green-700 border-green-200">
+                          {payment.status}
+                        </Badge>
+                      </div>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-sm">
-                    <span className="text-muted-foreground">For Invoice:</span>
-                    <span className="ml-2 font-medium">
-                      {payment.invoice?.invoiceNumber || "N/A"}
-                    </span>
-                  </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">
+                        For Invoice:
+                      </span>
+                      <span className="ml-2 font-medium">
+                        {payment.invoice?.invoiceNumber || "N/A"}
+                      </span>
+                    </div>
+                  </CardContent>
+                  <CardFooter>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewReceipt(payment)}
+                    >
+                      <Receipt className="h-4 w-4 mr-2" />
+                      View Receipt
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))
+            ) : (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                  <DollarSign className="h-16 w-16 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    No Payment History
+                  </h3>
+                  <p className="text-muted-foreground max-w-md">
+                    You haven't made any payments yet. Your payment history will
+                    be displayed here once you start making payments.
+                  </p>
                 </CardContent>
-                <CardFooter>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleViewReceipt(payment)}
-                  >
-                    <Receipt className="h-4 w-4 mr-2" />
-                    View Receipt
-                  </Button>
-                </CardFooter>
               </Card>
-            ))}
+            )}
           </div>
         </TabsContent>
 
@@ -1086,7 +1165,9 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
             </DialogTitle>
             <DialogDescription>
               {selectedInvoice &&
-                `Pay invoice ${selectedInvoice.invoiceNumber} for ${currencySymbol}${parseFloat(
+                `Pay invoice ${
+                  selectedInvoice.invoiceNumber
+                } for ${currencySymbol}${parseFloat(
                   selectedInvoice.totalAmount
                 ).toFixed(2)}`}
             </DialogDescription>
@@ -1179,7 +1260,8 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               <CreditCard className="h-4 w-4 mr-2" />
-              Pay {currencySymbol}{paymentForm.amount.toFixed(2)}
+              Pay {currencySymbol}
+              {paymentForm.amount.toFixed(2)}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1610,16 +1692,19 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
                           <td className="p-3">{item.description}</td>
                           <td className="p-3 text-right">{item.quantity}</td>
                           <td className="p-3 text-right">
-                            {currencySymbol}{parseFloat(item.unitPrice).toFixed(2)}
+                            {currencySymbol}
+                            {parseFloat(item.unitPrice).toFixed(2)}
                           </td>
                           <td className="p-3 text-right">
-                            {currencySymbol}{parseFloat(item.discountAmount).toFixed(2)}
+                            {currencySymbol}
+                            {parseFloat(item.discountAmount).toFixed(2)}
                           </td>
                           <td className="p-3 text-right">
                             {item.taxable === "yes" ? "Yes" : "No"}
                           </td>
                           <td className="p-3 text-right font-medium">
-                            {currencySymbol}{parseFloat(item.subtotal).toFixed(2)}
+                            {currencySymbol}
+                            {parseFloat(item.subtotal).toFixed(2)}
                           </td>
                         </tr>
                       ))}
@@ -1635,19 +1720,22 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
                     <div className="flex justify-between">
                       <span>Subtotal:</span>
                       <span>
-                        {currencySymbol}{parseFloat(selectedInvoice.subtotal).toFixed(2)}
+                        {currencySymbol}
+                        {parseFloat(selectedInvoice.subtotal).toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span>Tax:</span>
                       <span>
-                        {currencySymbol}{parseFloat(selectedInvoice.taxAmount).toFixed(2)}
+                        {currencySymbol}
+                        {parseFloat(selectedInvoice.taxAmount).toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between border-t pt-2 font-bold text-lg">
                       <span>Total:</span>
                       <span>
-                        {currencySymbol}{parseFloat(selectedInvoice.totalAmount).toFixed(2)}
+                        {currencySymbol}
+                        {parseFloat(selectedInvoice.totalAmount).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -1679,7 +1767,8 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
                           </div>
                           <div className="text-right">
                             <div className="font-medium">
-                              {currencySymbol}{parseFloat(payment.amount).toFixed(2)}
+                              {currencySymbol}
+                              {parseFloat(payment.amount).toFixed(2)}
                             </div>
                             <Badge className="bg-green-50 text-green-700 border-green-200">
                               {payment.status}
@@ -1695,17 +1784,24 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
 
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Close</Button>
+              <Button variant="outline" disabled={isProcessingPayment}>
+                Close
+              </Button>
             </DialogClose>
             {selectedInvoice && selectedInvoice.status !== "paid" && (
               <Button
-                onClick={() => {
-                  setShowInvoiceDetailsDialog(false);
-                  handlePayInvoice(selectedInvoice);
-                }}
+                onClick={() => processPaymentWithHandler(selectedInvoice)}
+                disabled={isProcessingPayment}
               >
+                {isProcessingPayment && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
                 <CreditCard className="h-4 w-4 mr-2" />
-                Pay Invoice
+                {isProcessingPayment
+                  ? "Processing..."
+                  : `Pay ${currencySymbol}${parseFloat(
+                      selectedInvoice.totalAmount
+                    ).toFixed(2)}`}
               </Button>
             )}
             {selectedInvoice && (
@@ -1715,6 +1811,7 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
                   setShowInvoiceDetailsDialog(false);
                   handleDownloadInvoicePDF(selectedInvoice);
                 }}
+                disabled={isProcessingPayment}
               >
                 <Download className="h-4 w-4 mr-2" />
                 Download PDF
@@ -1824,7 +1921,10 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center text-lg font-bold">
                   <span>Amount Paid:</span>
-                  <span>{currencySymbol}{parseFloat(selectedPayment.amount).toFixed(2)}</span>
+                  <span>
+                    {currencySymbol}
+                    {parseFloat(selectedPayment.amount).toFixed(2)}
+                  </span>
                 </div>
               </div>
 
@@ -1858,39 +1958,184 @@ Total: ${currencySymbol}${parseFloat(invoice.totalAmount).toFixed(2)}
               variant="outline"
               onClick={() => {
                 if (selectedPayment) {
-                  // Create downloadable receipt
+                  // Create HTML for PDF
                   const content = `
-PAYMENT RECEIPT
-Receipt Number: ${selectedPayment.paymentNumber}
-Payment Date: ${format(new Date(selectedPayment.paymentDate), "MMM d, YYYY")}
-Amount: ${currencySymbol}${parseFloat(selectedPayment.amount).toFixed(2)}
-Payment Method: ${selectedPayment.paymentMethod
-                    .replace("_", " ")
-                    .replace(/\b\w/g, (l) => l.toUpperCase())}
-Status: ${selectedPayment.status}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Payment Receipt - ${selectedPayment.paymentNumber}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      color: #333;
+    }
+    .header {
+      text-align: center;
+      border-bottom: 2px solid #000;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    .header p {
+      margin: 5px 0;
+      color: #666;
+    }
+    .section {
+      margin-bottom: 25px;
+    }
+    .section h3 {
+      font-size: 16px;
+      margin-bottom: 10px;
+      color: #000;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 5px;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+    .label {
+      color: #666;
+      font-weight: normal;
+    }
+    .value {
+      font-weight: bold;
+      color: #000;
+    }
+    .total {
+      border-top: 2px solid #000;
+      margin-top: 20px;
+      padding-top: 15px;
+    }
+    .total .row {
+      font-size: 20px;
+      font-weight: bold;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #ddd;
+      font-size: 12px;
+      color: #666;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      background-color: #10b981;
+      color: white;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>PAYMENT RECEIPT</h1>
+    <p>Thank you for your payment</p>
+  </div>
 
-${
-  selectedPayment.invoice
-    ? `Invoice: ${selectedPayment.invoice.invoiceNumber}`
-    : ""
-}
-${selectedPayment.notes ? `Notes: ${selectedPayment.notes}` : ""}
-                `;
+  <div class="section">
+    <h3>Payment Information</h3>
+    <div class="row">
+      <span class="label">Receipt Number:</span>
+      <span class="value">${selectedPayment.paymentNumber}</span>
+    </div>
+    <div class="row">
+      <span class="label">Payment Date:</span>
+      <span class="value">${format(
+        new Date(selectedPayment.paymentDate),
+        "MMM d, YYYY"
+      )}</span>
+    </div>
+    <div class="row">
+      <span class="label">Payment Method:</span>
+      <span class="value">${selectedPayment.paymentMethod
+        .replace("_", " ")
+        .replace(/\b\w/g, (l: string) => l.toUpperCase())}</span>
+    </div>
+    <div class="row">
+      <span class="label">Status:</span>
+      <span class="badge">${selectedPayment.status}</span>
+    </div>
+  </div>
 
-                  const blob = new Blob([content], { type: "text/plain" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `receipt_${selectedPayment.paymentNumber}.txt`;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(url);
+  ${
+    selectedPayment.invoice
+      ? `
+  <div class="section">
+    <h3>Invoice Information</h3>
+    <div class="row">
+      <span class="label">Invoice Number:</span>
+      <span class="value">${selectedPayment.invoice.invoiceNumber}</span>
+    </div>
+    <div class="row">
+      <span class="label">Service:</span>
+      <span class="value">${selectedPayment.invoice.description}</span>
+    </div>
+  </div>
+  `
+      : ""
+  }
+
+  ${
+    selectedPayment.notes
+      ? `
+  <div class="section">
+    <h3>Notes</h3>
+    <p>${selectedPayment.notes}</p>
+  </div>
+  `
+      : ""
+  }
+
+  <div class="total">
+    <div class="row">
+      <span>Amount Paid:</span>
+      <span>${currencySymbol}${parseFloat(selectedPayment.amount).toFixed(
+                    2
+                  )}</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>This is an electronic receipt. Please save this for your records.</p>
+    <p>If you have any questions, please contact our billing department.</p>
+  </div>
+</body>
+</html>
+                  `;
+
+                  // Create a new window and print
+                  const printWindow = window.open(
+                    "",
+                    "",
+                    "height=800,width=800"
+                  );
+                  if (printWindow) {
+                    printWindow.document.write(content);
+                    printWindow.document.close();
+                    printWindow.focus();
+
+                    // Wait for content to load then print
+                    setTimeout(() => {
+                      printWindow.print();
+                      printWindow.close();
+                    }, 250);
+                  }
                 }
               }}
             >
               <Download className="h-4 w-4 mr-2" />
-              Download Receipt
+              Download PDF
             </Button>
           </DialogFooter>
         </DialogContent>

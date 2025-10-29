@@ -1,7 +1,7 @@
 // src/lib/owner-auth.ts
 import { NextRequest } from 'next/server';
 import { ownerDb } from '@/db/owner-db.config';
-import { ownerUsers, ownerSessions } from '@/db/owner-schema';
+import { ownerUsers, ownerSessions } from '@/owner/db/schemas/ownerSchema';
 import { eq, and, gt } from 'drizzle-orm';
 
 export interface OwnerUser {

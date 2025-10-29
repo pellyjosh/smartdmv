@@ -6,7 +6,7 @@
  */
 
 import { ownerDb } from '../db/owner-db.config';
-import { tenants } from '../db/owner-schema';
+import { tenants } from '../owner/db/schemas/ownerSchema';
 import { getTenantDb, TenantConnectionConfig } from '../db/tenant-db';
 import { appointments } from '../db/schemas/appointmentsSchema';
 import { eq, and, lt, inArray } from 'drizzle-orm';

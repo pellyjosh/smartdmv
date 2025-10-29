@@ -4,7 +4,7 @@
 import 'dotenv/config';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { paymentProviders, providerCurrencySupport } from '../src/db/owner-schema';
+import { paymentProviders, providerCurrencySupport } from '../src/owner/db/schemas/ownerSchema';
 
 const OWNER_DATABASE_URL = process.env.OWNER_DATABASE_URL;
 

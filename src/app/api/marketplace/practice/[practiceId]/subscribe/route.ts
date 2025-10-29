@@ -1,10 +1,11 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-;
-import { practiceAddons, addons } from "@/db/schema";
+import { practiceAddons, addons, practices } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth-utils";
+import { createMarketplacePayment } from '@/lib/payments/payment-handler';
+import { ownerDb } from '@/owner/db/config';
 
 export async function POST(
   request: NextRequest,
@@ -79,13 +80,152 @@ export async function POST(
       return NextResponse.json({ error: 'Practice already has an active subscription to this addon.' }, { status: 409 });
     }
 
-    // Create new subscription (without payment processing for now)
+    // Get practice details for billing
+    const practice = await tenantDb.query.practices.findFirst({
+      where: eq(practices.id, practiceId)
+    });
+
+    if (!practice) {
+      return NextResponse.json({ error: 'Practice not found.' }, { status: 404 });
+    }
+
+    // Get company/tenant ID from headers or context
+    const subdomain = request.headers.get('x-tenant-id') || 'smartvet'; // Fallback for development
+    
+    // TODO: Get actual tenant ID from owner database using subdomain
+    // For now, we'll use a placeholder
+    const tenantId = 1; // This should be fetched from owner DB based on subdomain
+
+    // Calculate addon price based on tier and billing cycle
+    let addonPrice = 0;
+    
+    // Try to get price from pricing tiers first
+    if (addon.pricingTiers && typeof addon.pricingTiers === 'object') {
+      const tierPricing = (addon.pricingTiers as any)[tier];
+      if (tierPricing) {
+        // Use monthly or yearly price from tier
+        addonPrice = billingCycle === 'yearly' 
+          ? parseFloat(tierPricing.yearlyPrice || tierPricing.price || '0')
+          : parseFloat(tierPricing.monthlyPrice || tierPricing.price || '0');
+      }
+    }
+    
+    // Fallback to legacy price field
+    if (addonPrice === 0 && addon.price) {
+      addonPrice = parseFloat(addon.price);
+      
+      // Apply tier multipliers for legacy pricing
+      if (tier === 'PREMIUM') {
+        addonPrice *= 1.5; // 50% more for premium
+      } else if (tier === 'ENTERPRISE') {
+        addonPrice *= 2; // Double for enterprise
+      }
+      
+      // Apply yearly discount for legacy pricing
+      if (billingCycle === 'yearly') {
+        addonPrice *= 10; // 10 months worth (2 months free)
+      }
+    }
+
+    console.log('[SUBSCRIBE] Calculated price:', {
+      tier,
+      billingCycle,
+      addonPrice,
+      hasPricingTiers: !!addon.pricingTiers,
+      hasLegacyPrice: !!addon.price,
+    });
+
+    if (addonPrice === 0) {
+      return NextResponse.json({ 
+        error: 'Addon pricing not configured. Please contact support.',
+      }, { status: 400 });
+    }
+
+    // Get practice currency (default to USD if not set)
+    const practiceCurrency = await tenantDb.query.currencies.findFirst({
+      where: (c: any, { eq }: any) => eq(c.id, practice.defaultCurrencyId),
+    });
+    const currency = (practiceCurrency as any)?.code || 'USD';
+
+    // Get practice admin email for payment
+    const practiceAdmin = await tenantDb.query.users.findFirst({
+      where: (u: any, { eq, and }: any) => and(
+        eq(u.practiceId, practiceId),
+        eq(u.role, 'PRACTICE_ADMINISTRATOR')
+      ),
+    });
+
+    const email = (practiceAdmin as any)?.email || user.email;
+
+    // Process payment through owner's payment gateway
+    const paymentResult = await createMarketplacePayment({
+      tenantId,
+      practiceId,
+      amount: addonPrice,
+      currency,
+      email,
+      description: `${addon.name} - ${tier} tier (${billingCycle})`,
+      metadata: {
+        practiceName: practice.name,
+        addonSlug: addon.slug,
+        tier,
+        billingCycle,
+      },
+      addonId,
+    });
+
+    // If payment requires redirect (Paystack, etc), create PENDING subscription and return payment URL
+    if (paymentResult.paymentUrl) {
+      // Create pending subscription that will be activated after payment
+      const currentDate = new Date();
+      const newSubscription = await tenantDb.insert(practiceAddons).values({
+        practiceId,
+        addonId,
+        subscriptionTier: tier,
+        billingCycle,
+        paymentStatus: 'PENDING',
+        isActive: false,
+        startDate: currentDate,
+        lastActivatedAt: currentDate, // Set to current date for NOT NULL constraint
+        createdAt: currentDate,
+        updatedAt: currentDate
+      }).returning();
+
+      // Update transaction with subscription ID
+      const { tenantBillingTransactions } = await import('@/owner/db/schema');
+      await ownerDb
+        .update(tenantBillingTransactions)
+        .set({ subscriptionId: newSubscription[0].id })
+        .where(eq(tenantBillingTransactions.id, paymentResult.transactionId!));
+
+      console.log(`Created PENDING subscription ${newSubscription[0].id} for transaction ${paymentResult.transactionId}`);
+
+      return NextResponse.json({
+        success: true,
+        requiresAction: true,
+        paymentUrl: paymentResult.paymentUrl,
+        message: 'Redirecting to payment gateway',
+        transactionId: paymentResult.transactionId,
+        reference: paymentResult.paymentId,
+        subscriptionId: newSubscription[0].id,
+      }, { status: 202 }); // 202 Accepted - Payment pending
+    }
+
+    // If payment failed completely, don't create subscription
+    if (!paymentResult.success) {
+      return NextResponse.json({
+        error: 'Payment failed',
+        message: paymentResult.error || 'Unable to process payment',
+      }, { status: 402 }); // 402 Payment Required
+    }
+
+    // Payment succeeded immediately (e.g., Stripe with saved card) - create ACTIVE subscription
     const newSubscription = await tenantDb.insert(practiceAddons).values({
       practiceId,
       addonId,
       subscriptionTier: tier,
       billingCycle,
-      paymentStatus: 'ACTIVE', // Set as active since we're bypassing payment for now
+      paymentStatus: 'ACTIVE',
       isActive: true,
       startDate: new Date(),
       lastActivatedAt: new Date(),
@@ -93,11 +233,18 @@ export async function POST(
       updatedAt: new Date()
     }).returning();
 
-    console.log(`Created subscription for practice ${practiceId} to addon ${addonId}`);
+    console.log(`Created subscription for practice ${practiceId} to addon ${addonId} with payment transaction ${paymentResult.transactionId}`);
 
     return NextResponse.json({ 
+      success: true,
       message: 'Successfully subscribed to addon',
-      subscription: newSubscription[0]
+      subscription: newSubscription[0],
+      transaction: {
+        id: paymentResult.transactionId,
+        amount: addonPrice,
+        currency,
+      },
+      paymentUrl: paymentResult.paymentUrl, // Include payment URL if customer needs to complete payment
     }, { status: 201 });
 
   } catch (error) {

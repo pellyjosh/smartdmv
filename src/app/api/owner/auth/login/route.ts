@@ -1,7 +1,7 @@
 // src/app/api/owner/auth/login/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { ownerDb } from '@/db/owner-db.config';
-import { ownerUsers, ownerSessions } from '@/db/owner-schema';
+import { ownerUsers, ownerSessions } from '@/owner/db/schemas/ownerSchema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';

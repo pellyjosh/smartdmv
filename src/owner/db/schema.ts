@@ -1,40 +1,67 @@
 // src/owner/db/schema.ts
 import {
-  companies,
-  companyDatabases,
-  companyUsers,
-  subscriptions,
-  billingHistory,
-  companiesRelations,
-  companyDatabasesRelations,
-  companyUsersRelations,
-  subscriptionsRelations,
-  billingHistoryRelations,
-} from './schemas/companiesSchema';
+  ownerUsers,
+  tenants,
+  tenantDomains,
+  subscriptionPlans,
+  tenantSubscriptions,
+  tenantUsage,
+  ownerSessions,
+  systemSettings,
+  paymentProviders,
+  providerCurrencySupport,
+  tenantsRelations,
+  tenantDomainsRelations,
+  tenantSubscriptionsRelations,
+  tenantUsageRelations,
+  ownerSessionsRelations,
+  paymentProvidersRelations,
+  providerCurrencySupportRelations,
+} from './schemas/ownerSchema';
 
 import {
-  paymentProviders,
-  providerCurrencySupport,
-  paymentProvidersRelations,
-  providerCurrencySupportRelations,
-} from '@/db/owner-schema';
+  ownerPaymentConfigurations,
+  tenantBillingTransactions,
+  ownerPaymentConfigurationsRelations,
+  tenantBillingTransactionsRelations,
+} from './schemas/paymentConfigSchema';
 
 export const ownerSchema = {
-  companies,
-  companyDatabases,
-  companyUsers,
-  subscriptions,
-  billingHistory,
-  companiesRelations,
-  companyDatabasesRelations,
-  companyUsersRelations,
-  subscriptionsRelations,
-  billingHistoryRelations,
+  // User Management
+  ownerUsers,
+  ownerSessions,
+  
+  // Tenant Management
+  tenants,
+  tenantDomains,
+  tenantUsage,
+  
+  // Subscriptions
+  subscriptionPlans,
+  tenantSubscriptions,
+  
+  // Payment Infrastructure
   paymentProviders,
   providerCurrencySupport,
+  ownerPaymentConfigurations,
+  tenantBillingTransactions,
+  
+  // System
+  systemSettings,
+  
+  // Relations
+  tenantsRelations,
+  tenantDomainsRelations,
+  tenantSubscriptionsRelations,
+  tenantUsageRelations,
+  ownerSessionsRelations,
   paymentProvidersRelations,
   providerCurrencySupportRelations,
+  ownerPaymentConfigurationsRelations,
+  tenantBillingTransactionsRelations,
 };
 
 // Export all schemas and types
-export * from './schemas/companiesSchema';
+export * from './schemas/ownerSchema';
+export * from './schemas/paymentConfigSchema';
+

@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         id: true,
         name: true,
       },
-      orderBy: (practices, { asc }) => [asc(practices.name)],
+      orderBy: (practices: { name: any; }, { asc }: any) => [asc(practices.name)],
     });
 
     return NextResponse.json(allPractices);

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ownerDb } from '@/db/owner-db';
-import { tenants } from '@/db/owner-schema';
+import { tenants } from '@/owner/db/schemas/ownerSchema';
 import { eq, or } from 'drizzle-orm';
 
 export interface MiddlewareTenant {

@@ -3,7 +3,7 @@ config();
 
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import * as ownerSchema from './owner-schema';
+import * as ownerSchema from '../owner/db/schemas/ownerSchema';
 
 // For AWS RDS with self-signed certificates, disable TLS rejection
 if (process.env.OWNER_DATABASE_URL?.includes('amazonaws.com')) {

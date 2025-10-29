@@ -238,6 +238,17 @@ export default function PetSOAPNotesPage() {
     }
   }, [petError, toast]);
 
+  // Handle notes errors
+  useEffect(() => {
+    if (notesError) {
+      toast({
+        title: "Error loading SOAP notes",
+        description: "Could not load the pet's medical records. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [notesError, toast]);
+
   if (!isPractitioner) {
     return (
       <div className="container mx-auto p-4">

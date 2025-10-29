@@ -32,6 +32,15 @@ export const runtime = 'nodejs';
  */
 export async function POST(req: NextRequest) {
   try {
+    // Get tenant's domain from request headers
+    const host = req.headers.get('host');
+    const protocol = req.headers.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https');
+    const callbackBaseUrl = host ? `${protocol}://${host}` : undefined;
+
+    console.log('[PAYMENT CREATE] Request host:', host);
+    console.log('[PAYMENT CREATE] Protocol:', protocol);
+    console.log('[PAYMENT CREATE] Callback base URL:', callbackBaseUrl);
+
     // Parse request body
     const body = await req.json();
     const { practiceId, amount, email, description, metadata } = body;
@@ -71,6 +80,7 @@ export async function POST(req: NextRequest) {
       email,
       description,
       metadata,
+      callbackBaseUrl, // Pass tenant's URL for callback
     });
 
     // Handle errors

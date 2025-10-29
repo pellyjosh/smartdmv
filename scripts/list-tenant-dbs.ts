@@ -4,7 +4,7 @@
  * Lists all tenants and their database information from the owner database
  */
 import { ownerDb } from '@/db/owner-db';
-import { tenants } from '@/db/owner-schema';
+import { tenants } from '@/owner/db/schemas/ownerSchema';
 import { asc, eq } from 'drizzle-orm';
 
 async function listTenantDbs() {

@@ -31,6 +31,8 @@
     "db:owner:migrate": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx drizzle-kit migrate --config=drizzle.owner.config.ts",
     "db:owner:studio": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx drizzle-kit studio --config=drizzle.owner.config.ts",
     "db:owner:seed": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx scripts/setup-owner-database.ts",
+    "db:owner:payment": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx scripts/seed-owner-payment-config.ts",
+    "db:owner:payment:quick": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx scripts/seed-owner-payment-quick.ts",
     "db:tenant:generate": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx drizzle-kit generate --config=drizzle.config.ts",
     "db:tenant:push": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx scripts/tenant-migrate-all.ts --action=push",
     "db:tenant:migrate": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx scripts/tenant-migrate-all.ts --action=migrate",

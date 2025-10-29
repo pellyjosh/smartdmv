@@ -1,7 +1,7 @@
 // src/db/owner-db.config.ts
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import * as ownerSchema from './owner-schema';
+import * as ownerSchema from '../owner/db/schemas/ownerSchema';
 
 // Owner database connection - separate database for owner operations
 const ownerConnectionString = process.env.OWNER_DATABASE_URL || process.env.DATABASE_URL;
@@ -39,4 +39,4 @@ const ownerPool = new Pool(poolConfig);
 export const ownerDb = drizzle(ownerPool, { schema: ownerSchema });
 
 // Export the owner schema for use in owner operations
-export * from './owner-schema';
+export * from '../owner/db/schemas/ownerSchema';

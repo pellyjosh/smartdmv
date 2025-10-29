@@ -1,7 +1,7 @@
 // src/lib/tenant-context.ts
 import { headers } from 'next/headers';
 import { ownerDb } from '@/db/owner-db.config';
-import { tenants } from '@/db/owner-schema';
+import { tenants } from '@/owner/db/schemas/ownerSchema';
 import { getTenantDb } from '@/db/tenant-db.config';
 import { eq } from 'drizzle-orm';
 import path from 'path';

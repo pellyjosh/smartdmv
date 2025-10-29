@@ -20,12 +20,11 @@ function normalizeConnectionString(conn: string): string {
 const connectionString = normalizeConnectionString(process.env.OWNER_DATABASE_URL!);
 
 export default {
-  schema: './src/db/owner-schema.ts',
-  out: './src/db/migrations/owner',
+  schema: './src/owner/db/schema.ts',
+  out: './src/owner/db/migrations',
   dialect: 'postgresql',
  dbCredentials: {
     url: connectionString,
-    ssl: { rejectUnauthorized: false }
   },
   verbose: true,
   strict: true,

@@ -60,6 +60,9 @@ import {
   BadgeCheck,
   CircleDollarSign,
   CreditCardIcon,
+  AlertCircle,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -789,6 +792,10 @@ const PracticeGatewaySettingsTab = () => {
   const [showStripeApiForm, setShowStripeApiForm] = useState(false);
   const [showPaystackApiForm, setShowPaystackApiForm] = useState(false);
 
+  // State for password visibility toggles
+  const [showStripeSecretKey, setShowStripeSecretKey] = useState(false);
+  const [showPaystackSecretKey, setShowPaystackSecretKey] = useState(false);
+
   // Fetch available gateways from Owner DB
   const { data: availableGateways, isLoading: isLoadingGateways } = useQuery({
     queryKey: ["/api/practice-admin/available-gateways"],
@@ -796,7 +803,7 @@ const PracticeGatewaySettingsTab = () => {
       const res = await fetch("/api/practice-admin/available-gateways");
       if (!res.ok) throw new Error("Failed to fetch available gateways");
       const data = await res.json();
-      return data.providers || [];
+      return data; // Return full response with providers and currencyCode
     },
     staleTime: 60000, // 1 minute
   });
@@ -831,11 +838,13 @@ const PracticeGatewaySettingsTab = () => {
       z.object({
         publishableKey: z.string().min(1, "Publishable key is required"),
         secretKey: z.string().min(1, "Secret key is required"),
+        environment: z.enum(["sandbox", "production"]).default("sandbox"),
       })
     ),
     defaultValues: {
       publishableKey: "",
       secretKey: "",
+      environment: "sandbox" as "sandbox" | "production",
     },
   });
 
@@ -845,11 +854,13 @@ const PracticeGatewaySettingsTab = () => {
       z.object({
         publicKey: z.string().min(1, "Public key is required"),
         secretKey: z.string().min(1, "Secret key is required"),
+        environment: z.enum(["sandbox", "production"]).default("sandbox"),
       })
     ),
     defaultValues: {
       publicKey: "",
       secretKey: "",
+      environment: "sandbox" as "sandbox" | "production",
     },
   });
 
@@ -858,6 +869,7 @@ const PracticeGatewaySettingsTab = () => {
     mutationFn: async (credentials: {
       publishableKey: string;
       secretKey: string;
+      environment: "sandbox" | "production";
     }) => {
       const response = await fetch(
         "/api/practice-admin/payments/stripe/connect",
@@ -876,6 +888,12 @@ const PracticeGatewaySettingsTab = () => {
         description: "Your Stripe API keys have been saved successfully.",
       });
       setShowStripeApiForm(false);
+      stripeForm.reset();
+      setShowStripeSecretKey(false);
+      // Refetch payment settings to update the UI
+      queryClient.invalidateQueries({
+        queryKey: ["/api/practice-admin/payment-settings"],
+      });
       queryClient.invalidateQueries({
         queryKey: ["/api/practice-admin/payments/stripe/status"],
       });
@@ -894,6 +912,8 @@ const PracticeGatewaySettingsTab = () => {
     mutationFn: async (credentials: {
       publicKey: string;
       secretKey: string;
+      webhookSecret: string;
+      environment: "sandbox" | "production";
     }) => {
       const response = await fetch(
         "/api/practice-admin/payments/paystack/connect",
@@ -912,6 +932,12 @@ const PracticeGatewaySettingsTab = () => {
         description: "Your Paystack API keys have been saved successfully.",
       });
       setShowPaystackApiForm(false);
+      paystackForm.reset();
+      setShowPaystackSecretKey(false);
+      // Refetch payment settings to update the UI
+      queryClient.invalidateQueries({
+        queryKey: ["/api/practice-admin/payment-settings"],
+      });
       queryClient.invalidateQueries({
         queryKey: ["/api/practice-admin/payments/paystack/status"],
       });
@@ -990,6 +1016,16 @@ const PracticeGatewaySettingsTab = () => {
     );
   };
 
+  // Get provider environment
+  const getProviderEnvironment = (
+    providerCode: string
+  ): "sandbox" | "production" | null => {
+    const provider = practicePaymentSettings?.configuredProviders?.find(
+      (p: any) => p.providerCode === providerCode
+    );
+    return provider?.environment || null;
+  };
+
   const isLoading = isLoadingGateways || isLoadingSettings;
 
   return (
@@ -1013,19 +1049,26 @@ const PracticeGatewaySettingsTab = () => {
                 Select which payment gateway your practice will primarily use
                 for processing payments. Configure API keys below before
                 selecting a preferred gateway.
+                {availableGateways?.currencyCode && (
+                  <span className="block mt-2 text-sm font-medium text-primary">
+                    Showing providers that support{" "}
+                    {availableGateways.currencyCode} currency
+                  </span>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="font-medium">Available payment gateways:</div>
-                {availableGateways && availableGateways.length > 0 ? (
+                {availableGateways?.providers &&
+                availableGateways.providers.length > 0 ? (
                   <>
                     <RadioGroup
                       value={selectedGateway}
                       onValueChange={handleGatewayChange}
                       className="grid grid-cols-1 gap-4 md:grid-cols-2"
                     >
-                      {availableGateways.map((gateway: any) => {
+                      {availableGateways.providers.map((gateway: any) => {
                         const isConfigured = isProviderConfigured(gateway.code);
                         return (
                           <div key={gateway.code}>
@@ -1068,6 +1111,12 @@ const PracticeGatewaySettingsTab = () => {
                               <div className="mt-2 text-xs text-muted-foreground w-full text-left">
                                 {gateway.description ||
                                   `Secure payments with ${gateway.name}`}
+                                {gateway.currencySupport?.isRecommended && (
+                                  <span className="block mt-1 text-primary font-medium">
+                                    ⭐ Recommended for{" "}
+                                    {availableGateways.currencyCode}
+                                  </span>
+                                )}
                               </div>
                               {isConfigured ? (
                                 <div className="mt-2 w-full">
@@ -1105,8 +1154,23 @@ const PracticeGatewaySettingsTab = () => {
                     </div>
                   </>
                 ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No payment gateways available. Contact system administrator.
+                  <div className="text-center py-8">
+                    {availableGateways?.error ? (
+                      <div className="text-yellow-600">
+                        <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                        <p className="font-medium">{availableGateways.error}</p>
+                      </div>
+                    ) : (
+                      <div className="text-muted-foreground">
+                        <p>No payment gateways available for your currency.</p>
+                        {availableGateways?.currencyCode && (
+                          <p className="text-sm mt-2">
+                            Currently configured currency:{" "}
+                            <strong>{availableGateways.currencyCode}</strong>
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1124,9 +1188,11 @@ const PracticeGatewaySettingsTab = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
-                {availableGateways &&
-                  availableGateways.map((gateway: any) => {
+                {availableGateways?.providers &&
+                availableGateways.providers.length > 0 ? (
+                  availableGateways.providers.map((gateway: any) => {
                     const isConfigured = isProviderConfigured(gateway.code);
+                    const environment = getProviderEnvironment(gateway.code);
 
                     if (gateway.code === "stripe") {
                       return (
@@ -1141,12 +1207,35 @@ const PracticeGatewaySettingsTab = () => {
                                 <h3 className="text-lg font-medium">
                                   {gateway.name} API Keys
                                 </h3>
-                                {isConfigured && (
-                                  <p className="text-xs text-green-600 flex items-center mt-1">
-                                    <CheckCircle className="h-3 w-3 mr-1" />
-                                    Keys configured
-                                  </p>
-                                )}
+                                <div className="flex items-center gap-2 mt-1">
+                                  {isConfigured && (
+                                    <p className="text-xs text-green-600 flex items-center">
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                      Keys configured
+                                    </p>
+                                  )}
+                                  {environment && (
+                                    <span
+                                      className={`text-xs px-2 py-0.5 rounded-full flex items-center ${
+                                        environment === "sandbox"
+                                          ? "bg-orange-100 text-orange-700"
+                                          : "bg-green-100 text-green-700"
+                                      }`}
+                                    >
+                                      {environment === "sandbox" ? (
+                                        <>
+                                          <AlertCircle className="h-3 w-3 mr-1" />
+                                          Test Mode
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle className="h-3 w-3 mr-1" />
+                                          Live Mode
+                                        </>
+                                      )}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             <Button
@@ -1201,15 +1290,101 @@ const PracticeGatewaySettingsTab = () => {
                                     <FormItem>
                                       <FormLabel>Stripe Secret Key</FormLabel>
                                       <FormControl>
-                                        <Input
-                                          {...field}
-                                          type="password"
-                                          placeholder="sk_live_..."
-                                        />
+                                        <div className="relative">
+                                          <Input
+                                            {...field}
+                                            type={
+                                              showStripeSecretKey
+                                                ? "text"
+                                                : "password"
+                                            }
+                                            placeholder="sk_live_..."
+                                            className="pr-10"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setShowStripeSecretKey(
+                                                !showStripeSecretKey
+                                              )
+                                            }
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                          >
+                                            {showStripeSecretKey ? (
+                                              <EyeOff className="h-4 w-4" />
+                                            ) : (
+                                              <Eye className="h-4 w-4" />
+                                            )}
+                                          </button>
+                                        </div>
                                       </FormControl>
                                       <FormDescription>
                                         Your Stripe secret key (starts with sk_)
                                         - will be encrypted
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={stripeForm.control}
+                                  name="environment"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Environment</FormLabel>
+                                      <Select
+                                        onValueChange={field.onChange}
+                                        defaultValue={field.value}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="Select environment" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="sandbox">
+                                            <div className="flex items-center space-x-2">
+                                              <AlertCircle className="h-4 w-4 text-orange-500" />
+                                              <div>
+                                                <div className="font-medium">
+                                                  Sandbox (Test Mode)
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                  No real payments processed
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </SelectItem>
+                                          <SelectItem value="production">
+                                            <div className="flex items-center space-x-2">
+                                              <CheckCircle className="h-4 w-4 text-green-500" />
+                                              <div>
+                                                <div className="font-medium">
+                                                  Production (Live Mode)
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                  Real payments will be
+                                                  processed
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <FormDescription>
+                                        {field.value === "sandbox" ? (
+                                          <span className="text-orange-600 flex items-center">
+                                            <AlertCircle className="h-3 w-3 mr-1" />
+                                            Test mode - No real payments will be
+                                            processed
+                                          </span>
+                                        ) : (
+                                          <span className="text-green-600 flex items-center">
+                                            <CheckCircle className="h-3 w-3 mr-1" />
+                                            Live mode - Real payments will be
+                                            processed
+                                          </span>
+                                        )}
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>
@@ -1245,12 +1420,35 @@ const PracticeGatewaySettingsTab = () => {
                                 <h3 className="text-lg font-medium">
                                   {gateway.name} API Keys
                                 </h3>
-                                {isConfigured && (
-                                  <p className="text-xs text-green-600 flex items-center mt-1">
-                                    <CheckCircle className="h-3 w-3 mr-1" />
-                                    Keys configured
-                                  </p>
-                                )}
+                                <div className="flex items-center gap-2 mt-1">
+                                  {isConfigured && (
+                                    <p className="text-xs text-green-600 flex items-center">
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                      Keys configured
+                                    </p>
+                                  )}
+                                  {environment && (
+                                    <span
+                                      className={`text-xs px-2 py-0.5 rounded-full flex items-center ${
+                                        environment === "sandbox"
+                                          ? "bg-orange-100 text-orange-700"
+                                          : "bg-green-100 text-green-700"
+                                      }`}
+                                    >
+                                      {environment === "sandbox" ? (
+                                        <>
+                                          <AlertCircle className="h-3 w-3 mr-1" />
+                                          Test Mode
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle className="h-3 w-3 mr-1" />
+                                          Live Mode
+                                        </>
+                                      )}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             <Button
@@ -1303,15 +1501,102 @@ const PracticeGatewaySettingsTab = () => {
                                     <FormItem>
                                       <FormLabel>Paystack Secret Key</FormLabel>
                                       <FormControl>
-                                        <Input
-                                          {...field}
-                                          type="password"
-                                          placeholder="sk_live_..."
-                                        />
+                                        <div className="relative">
+                                          <Input
+                                            {...field}
+                                            type={
+                                              showPaystackSecretKey
+                                                ? "text"
+                                                : "password"
+                                            }
+                                            placeholder="sk_live_..."
+                                            className="pr-10"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setShowPaystackSecretKey(
+                                                !showPaystackSecretKey
+                                              )
+                                            }
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                          >
+                                            {showPaystackSecretKey ? (
+                                              <EyeOff className="h-4 w-4" />
+                                            ) : (
+                                              <Eye className="h-4 w-4" />
+                                            )}
+                                          </button>
+                                        </div>
                                       </FormControl>
                                       <FormDescription>
                                         Your Paystack secret key (starts with
-                                        sk_) - will be encrypted
+                                        sk_) - will be encrypted and used for
+                                        API calls and webhook verification
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={paystackForm.control}
+                                  name="environment"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Environment</FormLabel>
+                                      <Select
+                                        onValueChange={field.onChange}
+                                        defaultValue={field.value}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="Select environment" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="sandbox">
+                                            <div className="flex items-center space-x-2">
+                                              <AlertCircle className="h-4 w-4 text-orange-500" />
+                                              <div>
+                                                <div className="font-medium">
+                                                  Sandbox (Test Mode)
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                  No real payments processed
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </SelectItem>
+                                          <SelectItem value="production">
+                                            <div className="flex items-center space-x-2">
+                                              <CheckCircle className="h-4 w-4 text-green-500" />
+                                              <div>
+                                                <div className="font-medium">
+                                                  Production (Live Mode)
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                  Real payments will be
+                                                  processed
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <FormDescription>
+                                        {field.value === "sandbox" ? (
+                                          <span className="text-orange-600 flex items-center">
+                                            <AlertCircle className="h-3 w-3 mr-1" />
+                                            Test mode - No real payments will be
+                                            processed
+                                          </span>
+                                        ) : (
+                                          <span className="text-green-600 flex items-center">
+                                            <CheckCircle className="h-3 w-3 mr-1" />
+                                            Live mode - Real payments will be
+                                            processed
+                                          </span>
+                                        )}
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>
@@ -1355,7 +1640,18 @@ const PracticeGatewaySettingsTab = () => {
                         </div>
                       </div>
                     );
-                  })}
+                  })
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <p>No payment gateways available to configure.</p>
+                    {availableGateways?.currencyCode && (
+                      <p className="text-sm mt-2">
+                        Configure payment providers that support{" "}
+                        <strong>{availableGateways.currencyCode}</strong>
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

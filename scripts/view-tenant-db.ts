@@ -4,7 +4,7 @@
  * Launches Drizzle Studio for a specific tenant's database
  */
 import { ownerDb } from '@/db/owner-db';
-import { tenants } from '@/db/owner-schema';
+import { tenants } from '@/owner/db/schemas/ownerSchema';
 import { eq } from 'drizzle-orm';
 import { spawn } from 'child_process';
 import fs from 'fs';

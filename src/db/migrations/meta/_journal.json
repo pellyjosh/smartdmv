@@ -127,6 +127,27 @@
       "when": 1761490175629,
       "tag": "0017_gigantic_speedball",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1761699297988,
+      "tag": "0018_slow_vengeance",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1761702057350,
+      "tag": "0019_open_glorian",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1761703643714,
+      "tag": "0020_brown_manta",
+      "breakpoints": true
     }
   ]
 }

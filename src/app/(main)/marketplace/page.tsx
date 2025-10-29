@@ -5,40 +5,66 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ShoppingCart, Star, StarHalf, Download, Check, Shield, CreditCard } from "lucide-react";
+import {
+  Loader2,
+  ShoppingCart,
+  Star,
+  StarHalf,
+  Download,
+  Check,
+  Shield,
+  CreditCard,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/UserContext";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 
 const AddonCategory = {
   CLIENT_PORTAL: "CLIENT_PORTAL",
-  AI: "AI", 
+  AI: "AI",
   ADMINISTRATIVE: "ADMINISTRATIVE",
   COMMUNICATION: "COMMUNICATION",
-  FINANCIAL: "FINANCIAL"
+  FINANCIAL: "FINANCIAL",
 };
 
 const MarketplacePage = () => {
   const router = useRouter();
   const { toast } = useToast();
   const { user, userPracticeId } = useUser();
+  const { format: formatCurrency, practiceCurrency } = useCurrencyFormatter();
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [selectedAddon, setSelectedAddon] = useState<number | null>(null);
   const [isSubscribeDialogOpen, setIsSubscribeDialogOpen] = useState(false);
-  const [selectedBillingCycle, setSelectedBillingCycle] = useState<string>("monthly");
+  const [selectedBillingCycle, setSelectedBillingCycle] =
+    useState<string>("monthly");
   const [addonToSubscribe, setAddonToSubscribe] = useState<any>(null);
 
   // Fetch all add-ons
   const { data: addons, isLoading: addonsLoading } = useQuery({
     queryKey: ["/api/marketplace/addons"],
     queryFn: async () => {
-      const response = await fetch('/api/marketplace/addons');
-      if (!response.ok) throw new Error('Failed to fetch add-ons');
+      const response = await fetch("/api/marketplace/addons");
+      if (!response.ok) throw new Error("Failed to fetch add-ons");
       return response.json();
     },
     refetchOnWindowFocus: false,
@@ -48,27 +74,40 @@ const MarketplacePage = () => {
   const { data: featuredAddons, isLoading: featuredLoading } = useQuery({
     queryKey: ["/api/marketplace/addons/featured"],
     queryFn: async () => {
-      const response = await fetch('/api/marketplace/addons/featured');
-      if (!response.ok) throw new Error('Failed to fetch featured add-ons');
+      const response = await fetch("/api/marketplace/addons/featured");
+      if (!response.ok) throw new Error("Failed to fetch featured add-ons");
       return response.json();
     },
     refetchOnWindowFocus: false,
   });
 
   // Fetch practice add-ons (user's subscriptions)
-  const { data: practiceAddons, isLoading: practiceAddonsLoading, refetch: refetchPracticeAddons, error: practiceAddonsError } = useQuery({
+  const {
+    data: practiceAddons,
+    isLoading: practiceAddonsLoading,
+    refetch: refetchPracticeAddons,
+    error: practiceAddonsError,
+  } = useQuery({
     queryKey: ["/api/marketplace/practice"],
     queryFn: async () => {
-      console.log(`[Marketplace] Fetching practice addons for userPracticeId: ${userPracticeId}`);
-      const response = await fetch('/api/marketplace/practice');
-      console.log(`[Marketplace] Practice addons response status: ${response.status}`);
-      
+      console.log(
+        `[Marketplace] Fetching practice addons for userPracticeId: ${userPracticeId}`
+      );
+      const response = await fetch("/api/marketplace/practice");
+      console.log(
+        `[Marketplace] Practice addons response status: ${response.status}`
+      );
+
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Marketplace] Practice addons API error: ${response.status} - ${errorText}`);
-        throw new Error(`Failed to fetch practice subscriptions: ${response.status} - ${errorText}`);
+        console.error(
+          `[Marketplace] Practice addons API error: ${response.status} - ${errorText}`
+        );
+        throw new Error(
+          `Failed to fetch practice subscriptions: ${response.status} - ${errorText}`
+        );
       }
-      
+
       const data = await response.json();
       console.log(`[Marketplace] Practice addons response data:`, data);
       return data;
@@ -76,7 +115,10 @@ const MarketplacePage = () => {
     enabled: !!userPracticeId,
     refetchOnWindowFocus: false,
     retry: (failureCount, error) => {
-      console.log(`[Marketplace] Practice addons query retry ${failureCount}:`, error);
+      console.log(
+        `[Marketplace] Practice addons query retry ${failureCount}:`,
+        error
+      );
       return failureCount < 2; // Retry up to 2 times
     },
   });
@@ -85,38 +127,42 @@ const MarketplacePage = () => {
   const hasSubscription = (addonId: number) => {
     console.log(`[Marketplace] Checking subscription for addon ID: ${addonId}`);
     console.log(`[Marketplace] Available practice addons:`, practiceAddons);
-    
+
     if (!practiceAddons || !Array.isArray(practiceAddons)) {
       console.log(`[Marketplace] No practice addons data available`);
       return false;
     }
-    
+
     const hasActiveSubscription = practiceAddons.some((subscription: any) => {
       console.log(`[Marketplace] Checking subscription:`, subscription);
-      
+
       // Check both possible field names (addonId and addOnId) for compatibility
       const subscriptionAddonId = subscription.addonId || subscription.addOnId;
       const isActive = subscription.isActive;
-      
-      console.log(`[Marketplace] Subscription addon ID: ${subscriptionAddonId}, looking for: ${addonId}, active: ${isActive}`);
-      
+
+      console.log(
+        `[Marketplace] Subscription addon ID: ${subscriptionAddonId}, looking for: ${addonId}, active: ${isActive}`
+      );
+
       return subscriptionAddonId === addonId && isActive;
     });
-    
-    console.log(`[Marketplace] Final result for addon ${addonId}: ${hasActiveSubscription}`);
+
+    console.log(
+      `[Marketplace] Final result for addon ${addonId}: ${hasActiveSubscription}`
+    );
     return hasActiveSubscription;
   };
 
   // Get pricing for an add-on
   const getAddonPricing = (addon: any) => {
     if (!addon) return { monthly: "0.00", yearly: "0.00" };
-    
+
     let pricing = { monthly: "0.00", yearly: "0.00" };
-    
+
     // Check if addon has pricing_tiers (new format)
     if (addon.pricing_tiers) {
       let pricingTiers;
-      if (typeof addon.pricing_tiers === 'string') {
+      if (typeof addon.pricing_tiers === "string") {
         try {
           pricingTiers = JSON.parse(addon.pricing_tiers);
         } catch (e) {
@@ -125,10 +171,13 @@ const MarketplacePage = () => {
       } else {
         pricingTiers = addon.pricing_tiers;
       }
-      
+
       if (pricingTiers.STANDARD) {
-        pricing.monthly = pricingTiers.STANDARD.monthlyPrice || addon.price || "0.00";
-        pricing.yearly = pricingTiers.STANDARD.yearlyPrice || (parseFloat(pricing.monthly) * 10).toFixed(2);
+        pricing.monthly =
+          pricingTiers.STANDARD.monthlyPrice || addon.price || "0.00";
+        pricing.yearly =
+          pricingTiers.STANDARD.yearlyPrice ||
+          (parseFloat(pricing.monthly) * 10).toFixed(2);
       }
     }
     // Fallback to legacy price
@@ -136,7 +185,7 @@ const MarketplacePage = () => {
       pricing.monthly = addon.price;
       pricing.yearly = (parseFloat(addon.price) * 10).toFixed(2); // 10x monthly for yearly (slight discount)
     }
-    
+
     return pricing;
   };
 
@@ -145,12 +194,13 @@ const MarketplacePage = () => {
     if (!userPracticeId) {
       toast({
         title: "Error",
-        description: "You need to be associated with a practice to subscribe to add-ons.",
+        description:
+          "You need to be associated with a practice to subscribe to add-ons.",
         variant: "destructive",
       });
       return;
     }
-    
+
     // Check if already subscribed
     if (hasSubscription(addon.id)) {
       toast({
@@ -159,7 +209,7 @@ const MarketplacePage = () => {
       });
       return;
     }
-    
+
     setAddonToSubscribe(addon);
     setSelectedBillingCycle("monthly");
     setIsSubscribeDialogOpen(true);
@@ -171,25 +221,44 @@ const MarketplacePage = () => {
       setIsSubscribeDialogOpen(false);
       return;
     }
-    
+
     setSelectedAddon(addonToSubscribe.id);
     setIsSubscribeDialogOpen(false);
 
     try {
-      const response = await fetch(`/api/marketplace/practice/${userPracticeId}/subscribe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          addonId: addonToSubscribe.id,
-          tier: "STANDARD",
-          billingCycle: selectedBillingCycle
-        })
-      });
+      const response = await fetch(
+        `/api/marketplace/practice/${userPracticeId}/subscribe`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            addonId: addonToSubscribe.id,
+            tier: "STANDARD",
+            billingCycle: selectedBillingCycle,
+          }),
+        }
+      );
 
-      if (!response.ok) throw new Error('Failed to subscribe');
+      const data = await response.json();
 
-      // Refresh the data
+      // If payment requires redirect (Paystack, etc)
+      if (response.status === 202 && data.paymentUrl) {
+        toast({
+          title: "Redirecting to Payment",
+          description: "You'll be redirected to complete your payment...",
+        });
+
+        // Redirect to payment gateway
+        setTimeout(() => {
+          window.location.href = data.paymentUrl;
+        }, 1500);
+        return;
+      }
+
+      if (!response.ok) throw new Error(data.error || "Failed to subscribe");
+
+      // Payment succeeded immediately - refresh the data
       refetchPracticeAddons();
 
       toast({
@@ -199,7 +268,10 @@ const MarketplacePage = () => {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to subscribe to the add-on.",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to subscribe to the add-on.",
         variant: "destructive",
       });
     }
@@ -217,14 +289,17 @@ const MarketplacePage = () => {
     setSelectedAddon(addonId);
 
     try {
-      const response = await fetch(`/api/marketplace/practice/${userPracticeId}/subscribe`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ addonId: addonId })
-      });
+      const response = await fetch(
+        `/api/marketplace/practice/${userPracticeId}/subscribe`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ addonId: addonId }),
+        }
+      );
 
-      if (!response.ok) throw new Error('Failed to cancel subscription');
+      if (!response.ok) throw new Error("Failed to cancel subscription");
 
       // Refresh the data
       refetchPracticeAddons();
@@ -278,11 +353,21 @@ const MarketplacePage = () => {
     const hasHalfStar = rating % 1 >= 0.5;
 
     for (let i = 0; i < fullStars; i++) {
-      stars.push(<Star key={`full-${i}`} className="w-4 h-4 fill-yellow-400 text-yellow-400" />);
+      stars.push(
+        <Star
+          key={`full-${i}`}
+          className="w-4 h-4 fill-yellow-400 text-yellow-400"
+        />
+      );
     }
 
     if (hasHalfStar) {
-      stars.push(<StarHalf key="half" className="w-4 h-4 fill-yellow-400 text-yellow-400" />);
+      stars.push(
+        <StarHalf
+          key="half"
+          className="w-4 h-4 fill-yellow-400 text-yellow-400"
+        />
+      );
     }
 
     const emptyStars = 5 - stars.length;
@@ -299,7 +384,9 @@ const MarketplacePage = () => {
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
           <p className="text-sm text-muted-foreground">
-            Loading{addonsLoading ? ' addons' : ''}{featuredLoading ? ' featured' : ''}{practiceAddonsLoading ? ' subscriptions' : ''}...
+            Loading{addonsLoading ? " addons" : ""}
+            {featuredLoading ? " featured" : ""}
+            {practiceAddonsLoading ? " subscriptions" : ""}...
           </p>
           {practiceAddonsError && (
             <p className="text-sm text-red-500 mt-2">
@@ -318,8 +405,6 @@ const MarketplacePage = () => {
         Extend your SmartDVM experience with powerful add-ons and integrations
       </p>
 
- 
-
       {/* Featured Add-ons */}
       {featuredAddons && featuredAddons.length > 0 && (
         <div className="mb-10">
@@ -328,7 +413,10 @@ const MarketplacePage = () => {
             {featuredAddons.map((addon: any) => {
               const pricing = getAddonPricing(addon);
               return (
-                <Card key={addon.id} className="overflow-hidden border-2 border-primary/20">
+                <Card
+                  key={addon.id}
+                  className="overflow-hidden border-2 border-primary/20"
+                >
                   {addon.coverImage && (
                     <div className="h-48 overflow-hidden">
                       <img
@@ -350,47 +438,60 @@ const MarketplacePage = () => {
                   <CardContent>
                     <div className="flex items-center mb-2">
                       {renderRating(4.5)}
-                      <span className="ml-2 text-sm text-muted-foreground">4.5 (24 reviews)</span>
+                      <span className="ml-2 text-sm text-muted-foreground">
+                        4.5 (24 reviews)
+                      </span>
                     </div>
                     <div className="mb-2">
                       <p className="text-sm flex justify-between">
-                        <span>Monthly:</span> 
-                        <span className="font-semibold">${pricing.monthly}</span>
+                        <span>Monthly:</span>
+                        <span className="font-semibold">
+                          {formatCurrency(parseFloat(pricing.monthly))}
+                        </span>
                       </p>
                       <p className="text-sm flex justify-between">
-                        <span>Yearly:</span> 
-                        <span className="font-semibold">${pricing.yearly}</span>
+                        <span>Yearly:</span>
+                        <span className="font-semibold">
+                          {formatCurrency(parseFloat(pricing.yearly))}
+                        </span>
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {addon.features && addon.features.slice(0, 3).map((feature: string, i: number) => (
-                        <Badge variant="outline" key={i} className="flex items-center gap-1">
-                          <Check className="h-3 w-3" />
-                          {feature}
-                        </Badge>
-                      ))}
+                      {addon.features &&
+                        addon.features
+                          .slice(0, 3)
+                          .map((feature: string, i: number) => (
+                            <Badge
+                              variant="outline"
+                              key={i}
+                              className="flex items-center gap-1"
+                            >
+                              <Check className="h-3 w-3" />
+                              {feature}
+                            </Badge>
+                          ))}
                     </div>
                   </CardContent>
                   <CardFooter className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      className="flex-1" 
+                    <Button
+                      variant="outline"
+                      className="flex-1"
                       onClick={() => router.push(`/marketplace/${addon.slug}`)}
                     >
                       View Details
                     </Button>
                     {hasSubscription(addon.id) ? (
-                      <Button 
-                        variant="outline" 
-                        className="flex-1" 
+                      <Button
+                        variant="outline"
+                        className="flex-1"
                         disabled={true}
                       >
                         <Check className="mr-2 h-4 w-4" />
                         Subscribed
                       </Button>
                     ) : (
-                      <Button 
-                        className="flex-1" 
+                      <Button
+                        className="flex-1"
                         onClick={() => openSubscribeDialog(addon)}
                         disabled={selectedAddon === addon.id}
                       >
@@ -413,16 +514,26 @@ const MarketplacePage = () => {
       <Separator className="my-8" />
 
       {/* All Add-ons with Category Tabs */}
-      <Tabs defaultValue="all" value={activeCategory} onValueChange={setActiveCategory}>
+      <Tabs
+        defaultValue="all"
+        value={activeCategory}
+        onValueChange={setActiveCategory}
+      >
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-semibold">Browse Add-ons</h2>
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="installed">Subscribed</TabsTrigger>
-            <TabsTrigger value={AddonCategory.CLIENT_PORTAL}>Client Portal</TabsTrigger>
+            <TabsTrigger value={AddonCategory.CLIENT_PORTAL}>
+              Client Portal
+            </TabsTrigger>
             <TabsTrigger value={AddonCategory.AI}>AI</TabsTrigger>
-            <TabsTrigger value={AddonCategory.ADMINISTRATIVE}>Administrative</TabsTrigger>
-            <TabsTrigger value={AddonCategory.COMMUNICATION}>Communication</TabsTrigger>
+            <TabsTrigger value={AddonCategory.ADMINISTRATIVE}>
+              Administrative
+            </TabsTrigger>
+            <TabsTrigger value={AddonCategory.COMMUNICATION}>
+              Communication
+            </TabsTrigger>
             <TabsTrigger value={AddonCategory.FINANCIAL}>Financial</TabsTrigger>
           </TabsList>
         </div>
@@ -437,59 +548,75 @@ const MarketplacePage = () => {
                     <CardHeader>
                       <div className="flex justify-between items-start">
                         <CardTitle>{addon.name}</CardTitle>
-                        <Badge variant="outline">{getCategoryLabel(addon.category)}</Badge>
+                        <Badge variant="outline">
+                          {getCategoryLabel(addon.category)}
+                        </Badge>
                       </div>
-                      <CardDescription>{addon.shortDescription}</CardDescription>
+                      <CardDescription>
+                        {addon.shortDescription}
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="flex items-center mb-2">
                         {renderRating(4)}
-                        <span className="ml-2 text-sm text-muted-foreground">4.0 (16 reviews)</span>
+                        <span className="ml-2 text-sm text-muted-foreground">
+                          4.0 (16 reviews)
+                        </span>
                       </div>
                       <div className="mb-2">
                         <p className="text-sm flex justify-between">
-                          <span>Monthly:</span> 
-                          <span className="font-semibold">${pricing.monthly}</span>
+                          <span>Monthly:</span>
+                          <span className="font-semibold">
+                            {formatCurrency(parseFloat(pricing.monthly))}
+                          </span>
                         </p>
                         <p className="text-sm flex justify-between">
-                          <span>Yearly:</span> 
-                          <span className="font-semibold">${pricing.yearly}</span>
+                          <span>Yearly:</span>
+                          <span className="font-semibold">
+                            {formatCurrency(parseFloat(pricing.yearly))}
+                          </span>
                         </p>
                       </div>
                       {addon.features && addon.features.length > 0 && (
                         <div className="mt-4">
-                          <h4 className="text-sm font-semibold mb-2">Key Features</h4>
+                          <h4 className="text-sm font-semibold mb-2">
+                            Key Features
+                          </h4>
                           <ul className="text-sm space-y-1">
-                            {addon.features.slice(0, 3).map((feature: string, i: number) => (
-                              <li key={i} className="flex items-start">
-                                <Check className="h-4 w-4 mr-2 text-green-500 shrink-0 mt-0.5" />
-                                <span>{feature}</span>
-                              </li>
-                            ))}
+                            {addon.features
+                              .slice(0, 3)
+                              .map((feature: string, i: number) => (
+                                <li key={i} className="flex items-start">
+                                  <Check className="h-4 w-4 mr-2 text-green-500 shrink-0 mt-0.5" />
+                                  <span>{feature}</span>
+                                </li>
+                              ))}
                           </ul>
                         </div>
                       )}
                     </CardContent>
                     <CardFooter className="flex flex-col gap-2">
-                      <Button 
-                        variant="outline" 
-                        className="w-full" 
-                        onClick={() => router.push(`/marketplace/${addon.slug}`)}
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() =>
+                          router.push(`/marketplace/${addon.slug}`)
+                        }
                       >
                         View Details
                       </Button>
                       {hasSubscription(addon.id) ? (
-                        <Button 
-                          variant="outline" 
-                          className="w-full" 
+                        <Button
+                          variant="outline"
+                          className="w-full"
                           disabled={true}
                         >
                           <Check className="mr-2 h-4 w-4" />
                           Subscribed
                         </Button>
                       ) : (
-                        <Button 
-                          className="w-full" 
+                        <Button
+                          className="w-full"
                           onClick={() => openSubscribeDialog(addon)}
                           disabled={selectedAddon === addon.id}
                         >
@@ -521,27 +648,33 @@ const MarketplacePage = () => {
       </Tabs>
 
       <Separator className="my-8" />
-      
+
       {/* Subscription Management Notice */}
       <div className="mt-10 mb-12 flex flex-col md:flex-row items-center justify-between p-6 bg-muted/30 rounded-lg border">
         <div className="flex flex-col md:flex-row items-center gap-4">
           <CreditCard className="h-10 w-10 text-primary" />
           <div className="text-center md:text-left">
             <h3 className="text-lg font-semibold">Manage Your Subscriptions</h3>
-            <p className="text-muted-foreground">View and manage your add-on subscriptions in the Practice Billing section</p>
+            <p className="text-muted-foreground">
+              View and manage your add-on subscriptions in the Practice Billing
+              section
+            </p>
           </div>
         </div>
-        <Button 
-          className="mt-4 md:mt-0" 
+        <Button
+          className="mt-4 md:mt-0"
           variant="outline"
-          onClick={() => window.location.href = "/practice-billing"}
+          onClick={() => (window.location.href = "/practice-billing")}
         >
           Manage Subscriptions
         </Button>
       </div>
 
       {/* Subscription Dialog */}
-      <Dialog open={isSubscribeDialogOpen} onOpenChange={setIsSubscribeDialogOpen}>
+      <Dialog
+        open={isSubscribeDialogOpen}
+        onOpenChange={setIsSubscribeDialogOpen}
+      >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Choose Subscription Plan</DialogTitle>
@@ -549,36 +682,54 @@ const MarketplacePage = () => {
           {addonToSubscribe && (
             <div className="py-4">
               <div className="mb-4">
-                <h3 className="text-lg font-semibold">{addonToSubscribe.name}</h3>
-                <p className="text-sm text-muted-foreground">{addonToSubscribe.shortDescription}</p>
+                <h3 className="text-lg font-semibold">
+                  {addonToSubscribe.name}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {addonToSubscribe.shortDescription}
+                </p>
               </div>
-              
-              <RadioGroup 
-                value={selectedBillingCycle} 
+
+              <RadioGroup
+                value={selectedBillingCycle}
                 onValueChange={setSelectedBillingCycle}
                 className="space-y-4"
               >
                 <div className="flex items-center justify-between space-x-2 rounded-md border p-4">
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="monthly" id="monthly" />
-                    <Label htmlFor="monthly" className="font-medium">Monthly</Label>
+                    <Label htmlFor="monthly" className="font-medium">
+                      Monthly
+                    </Label>
                   </div>
                   <div className="text-right">
-                    <div className="text-xl font-semibold">${getAddonPricing(addonToSubscribe).monthly}</div>
+                    <div className="text-xl font-semibold">
+                      {formatCurrency(
+                        parseFloat(getAddonPricing(addonToSubscribe).monthly)
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">per month</p>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center justify-between space-x-2 rounded-md border p-4">
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="yearly" id="yearly" />
                     <div>
-                      <Label htmlFor="yearly" className="font-medium">Yearly</Label>
-                      <p className="text-xs text-muted-foreground">Save approximately 20%</p>
+                      <Label htmlFor="yearly" className="font-medium">
+                        Yearly
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Save approximately 20%
+                      </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xl font-semibold">${getAddonPricing(addonToSubscribe).yearly}</div>
+                    <div className="text-xl font-semibold">
+                      {formatCurrency(
+                        parseFloat(getAddonPricing(addonToSubscribe).yearly)
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">per year</p>
                   </div>
                 </div>
@@ -586,12 +737,13 @@ const MarketplacePage = () => {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsSubscribeDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsSubscribeDialogOpen(false)}
+            >
               Cancel
             </Button>
-            <Button onClick={handleSubscribe}>
-              Subscribe
-            </Button>
+            <Button onClick={handleSubscribe}>Subscribe</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

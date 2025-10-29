@@ -21,7 +21,7 @@
  *  npm run db:tenant:push -- --dry-run
  */
 import { ownerDb } from '@/db/owner-db';
-import { tenants } from '@/db/owner-schema';
+import { tenants } from '@/owner/db/schemas/ownerSchema';
 import { asc } from 'drizzle-orm';
 import { writeFileSync, unlinkSync, existsSync } from 'fs';
 import path from 'path';

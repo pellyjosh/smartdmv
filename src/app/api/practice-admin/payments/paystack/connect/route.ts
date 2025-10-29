@@ -12,17 +12,33 @@ import crypto from 'crypto';
 const paystackConnectionSchema = z.object({
   publicKey: z.string().min(1, 'Public key is required'),
   secretKey: z.string().min(1, 'Secret key is required'),
+  environment: z.enum(['sandbox', 'production']).default('sandbox'),
 });
 
 // Simple encryption for demo (use a proper encryption library in production)
 function encryptKey(key: string): string {
   const algorithm = 'aes-256-cbc';
-  const encryptionKey = process.env.ENCRYPTION_KEY || 'default-key-change-in-production-32b';
+  const encryptionKey = process.env.APP_KEY;
+  if (!encryptionKey) {
+    throw new Error('APP_KEY environment variable is required for encryption');
+  }
+  
+  console.log('[ENCRYPT] APP_KEY length:', encryptionKey.length);
+  const keyBuffer = Buffer.from(encryptionKey, 'hex');
+  console.log('[ENCRYPT] Key buffer length:', keyBuffer.length, 'bytes (expected 32)');
+  
   const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv(algorithm, Buffer.from(encryptionKey.padEnd(32, '0').slice(0, 32)), iv);
+  console.log('[ENCRYPT] IV length:', iv.length, 'bytes');
+  
+  const cipher = crypto.createCipheriv(algorithm, keyBuffer, iv);
   let encrypted = cipher.update(key, 'utf8', 'hex');
   encrypted += cipher.final('hex');
-  return iv.toString('hex') + ':' + encrypted;
+  
+  const result = iv.toString('hex') + ':' + encrypted;
+  console.log('[ENCRYPT] Result format: iv:encrypted');
+  console.log('[ENCRYPT] Encryption successful');
+  
+  return result;
 }
 
 export async function POST(req: NextRequest) {
@@ -51,7 +67,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { publicKey, secretKey } = validation.data;
+    const { publicKey, secretKey, environment } = validation.data;
 
     // Get the tenant-specific database
     const tenantDb = await getCurrentTenantDb();
@@ -68,7 +84,7 @@ export async function POST(req: NextRequest) {
       )
       .limit(1);
 
-    // Encrypt the secret key
+    // Encrypt the secret key (will also be used for webhook verification)
     const encryptedSecretKey = encryptKey(secretKey);
 
     if (existing.length > 0) {
@@ -78,6 +94,7 @@ export async function POST(req: NextRequest) {
         .set({
           publicKey: publicKey,
           secretKey: encryptedSecretKey,
+          environment,
           isEnabled: true,
           updatedAt: new Date(),
         })
@@ -100,7 +117,7 @@ export async function POST(req: NextRequest) {
           publicKey: publicKey,
           secretKey: encryptedSecretKey,
           isEnabled: true,
-          environment: 'production',
+          environment,
           priority: '5',
           configuredBy: parseInt(userPractice.userId),
         })

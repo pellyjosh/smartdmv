@@ -2,6 +2,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { compressImage, validateImageFile } from "@/lib/image-utils";
 import {
@@ -314,6 +315,7 @@ export default function ClientsPage() {
   const { user, userPracticeId } = useUser();
   const tenantInfo = useTenantInfo();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
 
   // Use the custom fields hook to access field values from the database
   const {
@@ -887,6 +889,28 @@ export default function ClientsPage() {
       petForm.setValue("practiceId", String(userPracticeId));
     }
   }, [selectedClient, userPracticeId]);
+
+  // Handle URL parameters for navigation from client detail pages
+  useEffect(() => {
+    if (clients && clients.length > 0 && searchParams) {
+      const addPet = searchParams.get('addPet');
+      if (addPet) {
+        // Find the client with the matching ID
+        const clientToSelect = clients.find((client: User) => String(client.id) === String(addPet));
+        if (clientToSelect) {
+          // Select the client and open the add pet dialog
+          setSelectedClient(clientToSelect);
+          setIsAddPetDialogOpen(true);
+
+          // Clean up the URL by removing the parameter (optional)
+          // This prevents the dialog from reopening if user refreshes
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.delete('addPet');
+          window.history.replaceState({}, '', newUrl.toString());
+        }
+      }
+    }
+  }, [clients, searchParams]);
 
   // Create pet mutation
   const createPetMutation = useMutation({
@@ -2300,7 +2324,7 @@ export default function ClientsPage() {
                                     <span className="font-medium">
                                       SOAP Notes
                                     </span>
-                                    <Link href={`/pet-soap-notes/${pet.id}`}>
+                                    <Link href={`/admin/pet-soap-notes/${pet.id}`}>
                                       <Button variant="outline" size="sm">
                                         View All
                                       </Button>
@@ -2311,7 +2335,7 @@ export default function ClientsPage() {
                                     <span className="font-medium">
                                       Lab Results
                                     </span>
-                                    <Link href={`/pet-lab-results/${pet.id}`}>
+                                    <Link href={`/admin/pet-lab-results/${pet.id}`}>
                                       <Button variant="outline" size="sm">
                                         View All
                                       </Button>
@@ -2322,7 +2346,7 @@ export default function ClientsPage() {
                                     <span className="font-medium">
                                       Prescriptions
                                     </span>
-                                    <Link href={`/pet-prescriptions/${pet.id}`}>
+                                    <Link href={`/admin/pet-prescriptions/${pet.id}`}>
                                       <Button variant="outline" size="sm">
                                         View All
                                       </Button>
@@ -3142,17 +3166,17 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex justify-between items-center">
-            <CardTitle className="text-lg">Client Appointments</CardTitle>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/appointments">
-                <Calendar className="mr-2 h-4 w-4" />
-                Schedule New
-              </Link>
-            </Button>
-          </div>
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-lg">Client Appointments</CardTitle>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/admin/appointments?view=schedule">
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Schedule New
+                  </Link>
+                </Button>
+              </div>
           <CardDescription>
             Showing {appointments.length} appointment
             {appointments.length !== 1 ? "s" : ""}
@@ -3273,7 +3297,7 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
 
                     <div className="flex justify-end mt-3">
                       <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/appointments/${appointment.id}`}>
+                        <Link href={`/admin/appointments`}>
                           View Details
                           <ArrowUpRight className="ml-1 h-4 w-4" />
                         </Link>

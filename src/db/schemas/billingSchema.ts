@@ -44,7 +44,7 @@ export const invoices = dbTable('invoices', {
   invoiceNumber: text("invoice_number").notNull().unique(),
   description: text("description"),
   // Currency for the invoice (defaults to practice defaultCurrencyId)
-  currencyId: foreignKeyInt('currency_id').notNull().default(1).references(() => currencies.id),
+  currencyId: foreignKeyInt('currency_id').notNull().references(() => currencies.id),
   subtotal: decimal("subtotal").notNull(),
   taxAmount: decimal("tax_amount").notNull().default('0.00'),
   discountAmount: decimal("discount_amount").notNull().default('0.00'),
@@ -73,8 +73,8 @@ export const invoiceItems = dbTable('invoice_items', {
   description: text("description").notNull(),
   quantity: decimal("quantity").notNull().default('1'),
   unitPrice: decimal("unit_price").notNull(),
-  // Optional currency override for the line item
-  currencyId: foreignKeyInt('currency_id').default(1).references(() => currencies.id),
+  // Currency for the line item (required)
+  currencyId: foreignKeyInt('currency_id').notNull().references(() => currencies.id),
   subtotal: decimal("subtotal").notNull(),
   discountAmount: decimal("discount_amount").notNull().default('0.00'),
   taxable: text("taxable", { enum: ["yes", "no"] }).notNull().default(sql`'yes'`),
@@ -92,12 +92,11 @@ export const payments = dbTable('payments', {
   // Payment details
   paymentNumber: text("payment_number").notNull().unique(),
   amount: decimal("amount").notNull(),
-  // Currency for the payment (should match invoice.currencyId)
-  currencyId: foreignKeyInt('currency_id').notNull().default(1).references(() => currencies.id),
+  // Currency for the payment (should match invoice.currencyId) - required
+  currencyId: foreignKeyInt('currency_id').notNull().references(() => currencies.id),
   paymentMethod: text("payment_method", { 
     enum: ["cash", "credit_card", "debit_card", "check", "bank_transfer", "online", "other"] 
   }).notNull(),
-  
   // Payment processing info
   transactionId: text("transaction_id"), // From payment processor
   processorResponse: text("processor_response"), // JSON response from payment processor

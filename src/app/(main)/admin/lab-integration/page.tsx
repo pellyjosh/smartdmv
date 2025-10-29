@@ -184,9 +184,10 @@ const LabIntegrationPage = () => {
   const { user, isLoading: isUserLoading } = useUser();
   const [activeTab, setActiveTab] = useState("providers");
   const [selectedProvider, setSelectedProvider] = useState<LabProviderSettings | null>(null);
+  const [urlInitialized, setUrlInitialized] = useState(false);
   const [isAddingProvider, setIsAddingProvider] = useState(false);
+
   const [isAddingTest, setIsAddingTest] = useState(false);
-  const [selectedTest, setSelectedTest] = useState<any | null>(null);
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   const [selectedPet, setSelectedPet] = useState<any | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
@@ -196,6 +197,8 @@ const LabIntegrationPage = () => {
   const [selectedResult, setSelectedResult] = useState<any | null>(null);
   const [isViewingOrderDetails, setIsViewingOrderDetails] = useState(false);
   const [orderDetailsData, setOrderDetailsData] = useState<any | null>(null);
+  const [selectedTest, setSelectedTest] = useState<any | null>(null);
+
   const [resultParams, setResultParams] = useState<Array<{name: string, value: string, units: string, status: string}>>([
     { name: "", value: "", units: "", status: "normal" }
   ]);
@@ -359,8 +362,6 @@ const LabIntegrationPage = () => {
     retry: false,
     enabled: !!user && !!getPracticeId(),
   });
-  
-  // Transform pets data to petOptions for select input
   const petOptions = useMemo(() => {
     if (!pets || pets.length === 0) {
       return [];

@@ -40,6 +40,11 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
         throw new Error('User not found or password not set.');
       }
 
+      // Check if account is deactivated
+      if (dbUser.isActive === false || dbUser.deletedAt !== null) {
+        throw new Error('This account has been deactivated. Please contact support to restore your account.');
+      }
+
       const passwordMatch = bcrypt.compareSync(passwordInput, dbUser.password);
       if (!passwordMatch) {
         throw new Error('Invalid credentials. Please try again.');
