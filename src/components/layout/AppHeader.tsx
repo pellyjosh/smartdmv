@@ -1,9 +1,13 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AdministratorUser, ClientUser, PracticeAdminUser } from "@/context/UserContext";
+import type {
+  AdministratorUser,
+  ClientUser,
+  PracticeAdminUser,
+} from "@/context/UserContext";
 import { useUser } from "@/context/UserContext";
+import { useAuthWithOffline } from "@/hooks/use-auth-with-offline";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,9 +18,22 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { Building2, ChevronDown, LogOut, User as UserIcon, Settings, UserCog } from "lucide-react";
+import {
+  Building2,
+  ChevronDown,
+  LogOut,
+  User as UserIcon,
+  Settings,
+  UserCog,
+} from "lucide-react";
 import Link from "next/link";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useRoles } from "@/hooks/use-roles";
 import { NotificationBell } from "@/components/notifications/notification-bell";
@@ -37,9 +54,63 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({}: AppHeaderProps) {
-  const { user, logout, switchPractice, isLoading } = useUser();
+  // Use offline-aware authentication
+  const {
+    user: onlineUser,
+    logout,
+    switchPractice,
+    isLoading: onlineIsLoading,
+  } = useUser();
+  const {
+    user: offlineUser,
+    isOfflineMode,
+    isLoading: offlineIsLoading,
+  } = useAuthWithOffline();
+
+  // Use offline user if online user is not available
+  const user = onlineUser || offlineUser;
+  const isLoading = onlineIsLoading || offlineIsLoading;
+
+  // Debug user data
+  console.log("[AppHeader] User state:", {
+    hasOnlineUser: !!onlineUser,
+    hasOfflineUser: !!offlineUser,
+    isOfflineMode,
+    user: user
+      ? {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          practiceId: (user as any)?.practiceId,
+          currentPracticeId: (user as any)?.currentPracticeId,
+        }
+      : null,
+  });
+
   const [practices, setPractices] = useState<Practice[]>([]);
   const [practicesLoading, setPracticesLoading] = useState(false);
+
+  // Load practices from cache immediately if offline
+  useEffect(() => {
+    if (isOfflineMode && typeof window !== "undefined") {
+      const cached = localStorage.getItem("practices_cache");
+      if (cached) {
+        try {
+          const cacheData = JSON.parse(cached);
+          const practicesData = Array.isArray(cacheData)
+            ? cacheData
+            : cacheData.data;
+          console.log(
+            "[AppHeader] 🔄 Loaded practices from cache (offline mode):",
+            practicesData
+          );
+          setPractices(practicesData);
+        } catch (error) {
+          console.error("[AppHeader] Error parsing cached practices:", error);
+        }
+      }
+    }
+  }, [isOfflineMode]);
 
   const handleLogout = () => {
     logout();
@@ -47,7 +118,7 @@ export function AppHeader({}: AppHeaderProps) {
 
   const getInitials = (nameOrEmail: string | undefined): string => {
     if (!nameOrEmail) return "U";
-    const parts = nameOrEmail.split(' ');
+    const parts = nameOrEmail.split(" ");
     if (parts.length > 1 && parts[0] && parts[parts.length - 1]) {
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     }
@@ -58,19 +129,48 @@ export function AppHeader({}: AppHeaderProps) {
   useEffect(() => {
     const fetchPractices = async () => {
       if (!user) return;
-      
+
       setPracticesLoading(true);
       try {
-        const response = await fetch('/api/practices');
+        const response = await fetch("/api/practices");
         if (response.ok) {
           const practicesData = await response.json();
-          console.log('[AppHeader] Fetched practices data:', practicesData);
+          console.log("[AppHeader] Fetched practices data:", practicesData);
           setPractices(practicesData);
+
+          // Always update cache with fresh data when online
+          if (practicesData && typeof window !== "undefined") {
+            const cacheData = {
+              data: practicesData,
+              timestamp: Date.now(),
+              cachedAt: new Date().toISOString(),
+            };
+            localStorage.setItem("practices_cache", JSON.stringify(cacheData));
+            console.log(
+              "[AppHeader] ✅ Updated practices cache with fresh data"
+            );
+          }
         } else {
-          console.error('Failed to fetch practices:', response.statusText);
+          console.error("Failed to fetch practices:", response.statusText);
+          // Try to load from cache
+          const cached = localStorage.getItem("practices_cache");
+          if (cached) {
+            console.log("[AppHeader] API failed, using cached practices data");
+            const cacheData = JSON.parse(cached);
+            // Handle both old format (direct array) and new format (with metadata)
+            setPractices(Array.isArray(cacheData) ? cacheData : cacheData.data);
+          }
         }
       } catch (error) {
-        console.error('Error fetching practices:', error);
+        console.error("Error fetching practices:", error);
+        // If network error, try to load from cache
+        const cached = localStorage.getItem("practices_cache");
+        if (cached) {
+          console.log("[AppHeader] Network error, using cached practices data");
+          const cacheData = JSON.parse(cached);
+          // Handle both old format (direct array) and new format (with metadata)
+          setPractices(Array.isArray(cacheData) ? cacheData : cacheData.data);
+        }
       } finally {
         setPracticesLoading(false);
       }
@@ -80,42 +180,68 @@ export function AppHeader({}: AppHeaderProps) {
   }, [user]);
 
   // Helper function to get practice name by ID
-  const practiceId = Number((user as any)?.practiceId || (user as any)?.currentPracticeId || 0) || 0;
-  const { isPracticeAdmin, isClient, isSuperAdminAssigned, isPracticeAdminAssigned } = useRoles(practiceId);
+  const practiceId =
+    Number(
+      (user as any)?.practiceId || (user as any)?.currentPracticeId || 0
+    ) || 0;
+  const {
+    isPracticeAdmin,
+    isClient,
+    isSuperAdminAssigned,
+    isPracticeAdminAssigned,
+  } = useRoles(practiceId);
 
   const getPracticeName = (practiceId: string | number): string => {
-    console.log('[AppHeader] getPracticeName called with:', practiceId);
-    console.log('[AppHeader] Available practices:', practices);
-    const practice = practices.find(p => p.id.toString() === practiceId.toString());
-    console.log('[AppHeader] Found practice:', practice);
+    console.log("[AppHeader] getPracticeName called with:", practiceId);
+    console.log("[AppHeader] Available practices:", practices);
+    const practice = practices.find(
+      (p) => p.id.toString() === practiceId.toString()
+    );
+    console.log("[AppHeader] Found practice:", practice);
     const result = practice?.name || `Practice ${practiceId}`;
-    console.log('[AppHeader] Returning practice name:', result);
+    console.log("[AppHeader] Returning practice name:", result);
     return result;
   };
 
-  const adminUser = (user as any)?.role === 'ADMINISTRATOR' ? user as AdministratorUser : null;
-  const isMultiLocationEnabled = adminUser && adminUser.accessiblePracticeIds && adminUser.accessiblePracticeIds.length > 1;
+  // Support both ADMINISTRATOR and SUPER_ADMIN
+  const adminUser =
+    (user as any)?.role === "ADMINISTRATOR" ||
+    (user as any)?.role === "SUPER_ADMIN"
+      ? (user as AdministratorUser)
+      : null;
+  const isMultiLocationEnabled =
+    adminUser &&
+    adminUser.accessiblePracticeIds &&
+    adminUser.accessiblePracticeIds.length > 1;
 
   const handlePracticeChange = async (newPracticeId: string) => {
     if (switchPractice && adminUser) {
-      console.log('[AppHeader] Attempting to switch practice to:', newPracticeId);
+      console.log(
+        "[AppHeader] Attempting to switch practice to:",
+        newPracticeId
+      );
       await switchPractice(newPracticeId);
     }
   };
 
-  const assignedRoles = user && 'roles' in user ? (user as any).roles : undefined;
+  const assignedRoles =
+    user && "roles" in user ? (user as any).roles : undefined;
 
   const currentPracticeName =
     adminUser?.currentPracticeId ||
-    ((isPracticeAdmin(user?.role || '') || isPracticeAdminAssigned(assignedRoles)) && (user as PracticeAdminUser).practiceId) ||
-    (isClient(user?.role || '') && (user as ClientUser).practiceId) ||
-    'N/A';
+    ((isPracticeAdmin(user?.role || "") ||
+      isPracticeAdminAssigned(assignedRoles)) &&
+      (user as PracticeAdminUser).practiceId) ||
+    (isClient(user?.role || "") && (user as ClientUser).practiceId) ||
+    "N/A";
 
   // Log currentPracticeId for debugging
   if (adminUser) {
-    console.log('[AppHeader] Rendering. Current Practice ID from context:', adminUser.currentPracticeId);
+    console.log(
+      "[AppHeader] Rendering. Current Practice ID from context:",
+      adminUser.currentPracticeId
+    );
   }
-
 
   return (
     <header className="bg-card border-b border-border sticky top-0 z-30 h-16">
@@ -125,26 +251,33 @@ export function AppHeader({}: AppHeaderProps) {
             <Link href="/" className="flex items-center gap-2">
               <Building2 className="h-7 w-7 text-primary" />
               <h1 className="text-xl font-bold flex items-baseline">
-                <span className="text-foreground">Smart</span><span className="text-primary">DVM</span>
+                <span className="text-foreground">Smart</span>
+                <span className="text-primary">DVM</span>
               </h1>
             </Link>
 
             {isMultiLocationEnabled && adminUser && (
               <div className="ml-4 hidden sm:block">
-                 <Select
-                    key={`desktop-practice-select-${adminUser.currentPracticeId}`} // Key to force re-render
-                    value={adminUser.currentPracticeId}
-                    onValueChange={handlePracticeChange}
-                    disabled={isLoading || practicesLoading}
-                  >
+                <Select
+                  key={`desktop-practice-select-${adminUser.currentPracticeId}`} // Key to force re-render
+                  value={adminUser.currentPracticeId}
+                  onValueChange={handlePracticeChange}
+                  disabled={isLoading || practicesLoading}
+                >
                   <SelectTrigger className="w-auto min-w-[180px] h-9 text-sm">
                     <SelectValue placeholder="Select practice">
-                      {adminUser.currentPracticeId ? getPracticeName(adminUser.currentPracticeId) : 'Select practice'}
+                      {adminUser.currentPracticeId
+                        ? getPracticeName(adminUser.currentPracticeId)
+                        : "Select practice"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {adminUser.accessiblePracticeIds.map(practiceId => (
-                      <SelectItem key={practiceId} value={practiceId} className="text-sm">
+                    {adminUser.accessiblePracticeIds.map((practiceId) => (
+                      <SelectItem
+                        key={practiceId}
+                        value={practiceId}
+                        className="text-sm"
+                      >
                         {getPracticeName(practiceId)}
                       </SelectItem>
                     ))}
@@ -157,11 +290,14 @@ export function AppHeader({}: AppHeaderProps) {
           <div className="flex items-center gap-x-3">
             {/* Notification Bell */}
             <NotificationBell />
-            
+
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center gap-2 h-10 px-2 py-2 rounded-full focus-visible:ring-0 focus-visible:ring-offset-0">
+                  <Button
+                    variant="ghost"
+                    className="flex items-center gap-2 h-10 px-2 py-2 rounded-full focus-visible:ring-0 focus-visible:ring-offset-0"
+                  >
                     <Avatar className="h-8 w-8">
                       <AvatarFallback className="text-xs bg-muted">
                         {getInitials(user.name || user.email)}
@@ -176,8 +312,12 @@ export function AppHeader({}: AppHeaderProps) {
                 <DropdownMenuContent align="end" className="w-60">
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none text-foreground">{user.name || user.email}</p>
-                      <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                      <p className="text-sm font-medium leading-none text-foreground">
+                        {user.name || user.email}
+                      </p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {user.email}
+                      </p>
                       <div className="text-xs text-muted-foreground mt-1 flex items-center pt-1">
                         <Building2 className="h-3 w-3 mr-1.5" />
                         Practice: {getPracticeName(currentPracticeName)}
@@ -188,21 +328,29 @@ export function AppHeader({}: AppHeaderProps) {
 
                   {isMultiLocationEnabled && adminUser && (
                     <div className="sm:hidden px-2 py-1.5">
-                      <p className="text-xs font-medium text-muted-foreground mb-1.5">Switch Practice</p>
-                       <Select
-                          key={`mobile-practice-select-${adminUser.currentPracticeId}`} // Key to force re-render
-                          value={adminUser.currentPracticeId}
-                          onValueChange={handlePracticeChange}
-                          disabled={isLoading || practicesLoading}
-                        >
+                      <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                        Switch Practice
+                      </p>
+                      <Select
+                        key={`mobile-practice-select-${adminUser.currentPracticeId}`} // Key to force re-render
+                        value={adminUser.currentPracticeId}
+                        onValueChange={handlePracticeChange}
+                        disabled={isLoading || practicesLoading}
+                      >
                         <SelectTrigger className="w-full h-9 text-xs">
                           <SelectValue placeholder="Select practice">
-                            {adminUser.currentPracticeId ? getPracticeName(adminUser.currentPracticeId) : 'Select practice'}
+                            {adminUser.currentPracticeId
+                              ? getPracticeName(adminUser.currentPracticeId)
+                              : "Select practice"}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {adminUser.accessiblePracticeIds.map(practiceId => (
-                            <SelectItem key={practiceId} value={practiceId} className="text-xs">
+                          {adminUser.accessiblePracticeIds.map((practiceId) => (
+                            <SelectItem
+                              key={practiceId}
+                              value={practiceId}
+                              className="text-xs"
+                            >
                               {getPracticeName(practiceId)}
                             </SelectItem>
                           ))}
@@ -213,23 +361,33 @@ export function AppHeader({}: AppHeaderProps) {
                   )}
 
                   <DropdownMenuItem asChild>
-                    <Link href="/profile" className="flex w-full cursor-pointer items-center text-sm">
+                    <Link
+                      href="/profile"
+                      className="flex w-full cursor-pointer items-center text-sm"
+                    >
                       <UserIcon className="mr-2 h-4 w-4" />
                       Profile
                     </Link>
                   </DropdownMenuItem>
 
-                                  {(user as any)?.role === 'ADMINISTRATOR' && (
+                  {(user as any)?.role === "ADMINISTRATOR" && (
                     <DropdownMenuItem asChild>
-                      <Link href="/administrator" className="flex w-full cursor-pointer items-center text-sm">
+                      <Link
+                        href="/administrator"
+                        className="flex w-full cursor-pointer items-center text-sm"
+                      >
                         <UserCog className="mr-2 h-4 w-4" />
                         Admin Dashboard
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  {(isPracticeAdmin(user?.role || '') || isPracticeAdminAssigned(assignedRoles)) && (
-                     <DropdownMenuItem asChild>
-                      <Link href="/practice-administrator" className="flex w-full cursor-pointer items-center text-sm">
+                  {(isPracticeAdmin(user?.role || "") ||
+                    isPracticeAdminAssigned(assignedRoles)) && (
+                    <DropdownMenuItem asChild>
+                      <Link
+                        href="/practice-administrator"
+                        className="flex w-full cursor-pointer items-center text-sm"
+                      >
                         <UserCog className="mr-2 h-4 w-4" />
                         Practice Dashboard
                       </Link>
@@ -241,9 +399,9 @@ export function AppHeader({}: AppHeaderProps) {
                   <DropdownMenuItem
                     onClick={handleLogout}
                     className={cn(
-                        "text-sm cursor-pointer focus:bg-destructive/10 focus:text-destructive",
-                        "text-destructive hover:!text-destructive" // ensure destructive color on hover too
-                     )}
+                      "text-sm cursor-pointer focus:bg-destructive/10 focus:text-destructive",
+                      "text-destructive hover:!text-destructive" // ensure destructive color on hover too
+                    )}
                   >
                     <LogOut className="mr-2 h-4 w-4" />
                     Log out

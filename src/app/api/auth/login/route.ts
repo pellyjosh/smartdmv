@@ -77,8 +77,16 @@ export async function POST(request: Request) {
       expires: sessionExpiresAtDate,
     });
 
-    // Return the full user object to the client
-    return NextResponse.json({ user: userData, message: 'Signed in successfully!' });
+    // Return the full user object to the client with session info for offline caching
+    return NextResponse.json({ 
+      user: userData, 
+      message: 'Signed in successfully!',
+      session: {
+        id: sessionId,
+        expiresAt: sessionExpiresAtDate.toISOString(),
+        createdAt: new Date().toISOString(),
+      }
+    });
 
   } catch (error) {
     console.error('API login error details:');

@@ -63,16 +63,114 @@ export const PracticeProvider = ({ children }: { children: ReactNode }) => {
     refetch: refetchPractice,
   } = useQuery<Practice>({
     queryKey: ["/api/practices", userPracticeId],
-    enabled: !!userPracticeId,
+    enabled:
+      !!userPracticeId &&
+      userPracticeId !== "undefined" &&
+      userPracticeId !== "null" &&
+      !userPracticeId.includes("NONE"),
     queryFn: async () => {
-      console.log("Fetching practice with ID:", userPracticeId);
-      const response = await fetch(`/api/practices/${userPracticeId}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch practice: ${response.statusText}`);
+      if (
+        !userPracticeId ||
+        userPracticeId === "undefined" ||
+        userPracticeId === "null" ||
+        userPracticeId.includes("NONE")
+      ) {
+        throw new Error("Invalid practice ID");
       }
-      const data = await response.json();
-      console.log("Fetched practice data:", data);
-      return data;
+
+      console.log("Fetching practice with ID:", userPracticeId);
+
+      // Check if we're offline - if so, load from IndexedDB cache immediately
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+
+      if (isOffline) {
+        console.log(
+          "[usePractice] 🔌 Offline mode detected, loading from IndexedDB cache"
+        );
+        try {
+          const { indexedDBManager } = await import("@/lib/offline/db");
+          const cachedPractice = (await indexedDBManager.get(
+            "cache",
+            `practice_${userPracticeId}`
+          )) as { data?: Practice } | null;
+          if (cachedPractice?.data) {
+            console.log(
+              "[usePractice] ✅ Using cached practice from IndexedDB:",
+              cachedPractice.data.name
+            );
+            return cachedPractice.data;
+          }
+          console.warn(
+            "[usePractice] No cached practice found in IndexedDB for offline mode"
+          );
+          return null;
+        } catch (cacheError) {
+          console.error(
+            "[usePractice] Failed to load from IndexedDB cache:",
+            cacheError
+          );
+          return null;
+        }
+      }
+
+      // Online mode - try API with cache fallback
+      try {
+        const response = await fetch(`/api/practices/${userPracticeId}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch practice: ${response.statusText}`);
+        }
+        const data = await response.json();
+        console.log("Fetched practice data:", data);
+
+        // Cache the practice data for offline use
+        try {
+          const { indexedDBManager } = await import("@/lib/offline/db");
+          const cacheKey = `practice_${userPracticeId}`;
+          await indexedDBManager.put("cache", {
+            id: cacheKey,
+            key: cacheKey,
+            data: data,
+            timestamp: Date.now(),
+            expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+          });
+          console.log(
+            "[usePractice] Cached practice data for offline use:",
+            data.name
+          );
+        } catch (cacheError) {
+          console.warn(
+            "[usePractice] Failed to cache practice data:",
+            cacheError
+          );
+        }
+
+        return data;
+      } catch (error) {
+        console.warn(
+          "[usePractice] Failed to fetch practice from API, trying offline cache"
+        );
+        // Try to load from offline cache
+        try {
+          const { indexedDBManager } = await import("@/lib/offline/db");
+          const cachedPractice = (await indexedDBManager.get(
+            "cache",
+            `practice_${userPracticeId}`
+          )) as { data?: Practice } | null;
+          if (cachedPractice?.data) {
+            console.log(
+              "[usePractice] Loaded practice from offline cache:",
+              cachedPractice.data.name
+            );
+            return cachedPractice.data;
+          }
+        } catch (cacheError) {
+          console.error(
+            "[usePractice] Failed to load from offline cache:",
+            cacheError
+          );
+        }
+        throw error; // Re-throw if no cached data available
+      }
     },
   });
 

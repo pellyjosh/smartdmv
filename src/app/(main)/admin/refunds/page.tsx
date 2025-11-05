@@ -68,7 +68,7 @@ import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 
 // Schema
 const refundRequestSchema = z.object({
-  paymentId: z.string().min(1, "Payment ID is required"),
+  paymentId: z.string().min(1, "Payment is required"),
   amount: z.string().min(1, "Amount is required"),
   currency: z.string().min(1, "Currency is required").default("USD"),
   gatewayType: z.enum(["STRIPE", "PAYSTACK"]),
@@ -150,6 +150,19 @@ export default function RefundManagementPage() {
       clientId: undefined as any, // remains unset until user picks; select will treat '' as no selection
       reason: "",
       notes: "",
+    },
+  });
+
+  // Fetch eligible payments (completed or processing)
+  const { data: eligiblePayments, isLoading: paymentsLoading } = useQuery({
+    queryKey: [practiceId, "eligible-payments"],
+    enabled: !!practiceId,
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/practices/${practiceId}/payments/eligible-for-refund`
+      );
+      return res.json();
     },
   });
 
@@ -361,6 +374,7 @@ export default function RefundManagementPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Payment ID</TableHead>
+                      <TableHead>Client</TableHead>
                       <TableHead>Amount</TableHead>
                       <TableHead>Gateway</TableHead>
                       <TableHead>Status</TableHead>
@@ -371,8 +385,8 @@ export default function RefundManagementPage() {
                   <TableBody>
                     {filtered.map((r: any) => (
                       <TableRow key={r.id}>
-                        {/* <TableCell>{r.id}</TableCell> */}
                         <TableCell>{r.paymentId}</TableCell>
+                        <TableCell>{r.clientName || "Unknown"}</TableCell>
                         <TableCell>
                           {r.amount} {r.currency}
                         </TableCell>
@@ -415,12 +429,46 @@ export default function RefundManagementPage() {
                 name="paymentId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Payment ID</FormLabel>
+                    <FormLabel>Payment</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter payment ID" {...field} />
+                      <div>
+                        <Combobox
+                          disabled={paymentsLoading || !eligiblePayments}
+                          options={(eligiblePayments || []).map((p: any) => ({
+                            value: p.id.toString(),
+                            label: `${p.paymentNumber} - ${p.client?.name || "Unknown"} - ${formatCurrency(p.amount)} (${p.currency?.code || ""})`,
+                          }))}
+                          value={field.value}
+                          onSelect={(value) => {
+                            field.onChange(value);
+                            // Auto-populate other fields
+                            const selectedPayment = eligiblePayments?.find(
+                              (p: any) => p.id.toString() === value
+                            );
+                            if (selectedPayment) {
+                              form.setValue("amount", selectedPayment.amount);
+                              form.setValue("clientId", selectedPayment.client?.id);
+                              // Set gateway type based on payment method or default to STRIPE
+                              // You may need to adjust this logic based on your data
+                              const gateway = selectedPayment.paymentMethod?.toUpperCase().includes("PAYSTACK") 
+                                ? "PAYSTACK" 
+                                : "STRIPE";
+                              form.setValue("gatewayType", gateway as any);
+                            }
+                          }}
+                          placeholder={
+                            paymentsLoading
+                              ? "Loading payments..."
+                              : "Search payments..."
+                          }
+                          emptyText={
+                            paymentsLoading ? "Loading..." : "No eligible payments"
+                          }
+                        />
+                      </div>
                     </FormControl>
                     <FormDescription>
-                      The ID of the payment to be refunded
+                      Select a completed or processing payment to refund
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -434,8 +482,11 @@ export default function RefundManagementPage() {
                     <FormItem>
                       <FormLabel>Amount</FormLabel>
                       <FormControl>
-                        <Input placeholder="0.00" {...field} />
+                        <Input placeholder="0.00" {...field} readOnly className="bg-muted" />
                       </FormControl>
+                      <FormDescription>
+                        Auto-filled from selected payment
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -475,7 +526,7 @@ export default function RefundManagementPage() {
                     <FormControl>
                       <div>
                         <Combobox
-                          disabled={clientsLoading || !clients}
+                          disabled={true}
                           options={(clients || []).map((c: any) => ({
                             value: c.id.toString(),
                             label: c.name || c.email || `Client ${c.id}`,
@@ -484,17 +535,14 @@ export default function RefundManagementPage() {
                             field.value ? field.value.toString() : undefined
                           }
                           onSelect={(v) => field.onChange(parseInt(v))}
-                          placeholder={
-                            clientsLoading
-                              ? "Loading clients..."
-                              : "Select client..."
-                          }
-                          emptyText={
-                            clientsLoading ? "Loading..." : "No clients"
-                          }
+                          placeholder="Auto-filled from payment"
+                          emptyText="No client"
                         />
                       </div>
                     </FormControl>
+                    <FormDescription>
+                      Auto-filled from selected payment
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

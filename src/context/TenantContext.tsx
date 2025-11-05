@@ -10,6 +10,7 @@ import React, {
   useMemo,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getCachedTenantData } from "@/lib/offline/storage/tenant-storage";
 
 // --- Types ---
 interface TenantInfo {
@@ -141,6 +142,38 @@ const fetchTenantInfo = async (
     return cached;
   }
 
+  // Check if we're offline - if so, skip API call and load from IndexedDB immediately
+  const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+
+  if (isOffline) {
+    console.log(
+      "[TENANT] 🔌 Offline mode detected, loading from IndexedDB cache"
+    );
+    try {
+      const cachedTenant = await getCachedTenantData(identifier);
+      if (cachedTenant) {
+        console.log(
+          "[TENANT] ✅ Using cached tenant from IndexedDB:",
+          cachedTenant.name
+        );
+        // Also cache in sessionStorage for faster subsequent access
+        setTenantInSessionCache(identifier, cachedTenant as TenantInfo);
+        return cachedTenant as TenantInfo;
+      }
+      console.warn(
+        "[TENANT] No cached tenant found in IndexedDB for offline mode"
+      );
+      return null;
+    } catch (cacheError) {
+      console.error(
+        "[TENANT] Failed to load from IndexedDB cache:",
+        cacheError
+      );
+      return null;
+    }
+  }
+
+  // Online mode - try API with cache fallback
   try {
     const response = await fetch(`/api/tenant/resolve`, {
       method: "POST",
@@ -163,11 +196,64 @@ const fetchTenantInfo = async (
     // Cache the result in session storage
     if (tenantInfo) {
       setTenantInSessionCache(identifier, tenantInfo);
+
+      // Also cache to IndexedDB immediately for offline use
+      try {
+        const { cacheTenantData } = await import(
+          "@/lib/offline/storage/tenant-storage"
+        );
+        const cachedTenant: any = {
+          id: tenantInfo.id,
+          slug: tenantInfo.slug,
+          name: tenantInfo.name,
+          domain: tenantInfo.domain || null,
+          subdomain: identifier.includes(".")
+            ? identifier.split(".")[0]
+            : identifier,
+          status: tenantInfo.status,
+          databaseName: tenantInfo.databaseName,
+          storagePath: tenantInfo.storagePath,
+          settings: tenantInfo.settings || {
+            timezone: "UTC",
+            theme: "default",
+            features: [],
+          },
+        };
+        await cacheTenantData(cachedTenant);
+        console.log(
+          "[TENANT] ✅ Tenant data cached to IndexedDB:",
+          tenantInfo.name
+        );
+      } catch (cacheError) {
+        console.warn(
+          "[TENANT] ⚠️ Failed to cache tenant data to IndexedDB:",
+          cacheError
+        );
+      }
     }
 
     return tenantInfo;
   } catch (error) {
     console.error("Error fetching tenant info:", error);
+
+    // Try IndexedDB cache as offline fallback
+    // Only works if offline system was previously initialized
+    try {
+      console.log(
+        "[TENANT] 🔄 Attempting to load from IndexedDB cache (offline mode)"
+      );
+      const cachedTenant = await getCachedTenantData(identifier);
+      if (cachedTenant) {
+        console.log(
+          "[TENANT] ✅ Using cached tenant from IndexedDB:",
+          cachedTenant.name
+        );
+        return cachedTenant as TenantInfo;
+      }
+    } catch (cacheError) {
+      console.warn("[TENANT] Failed to load from IndexedDB cache:", cacheError);
+    }
+
     throw error;
   }
 };

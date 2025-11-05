@@ -21,6 +21,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const resolvedParams = await params;
     const practiceId = resolvedParams.practiceId;
     
+    // Validate practiceId - check if it's a valid number or numeric string
+    const practiceIdNum = parseInt(practiceId, 10);
+    if (isNaN(practiceIdNum) || practiceIdNum <= 0) {
+      console.error('[GET Practice] Invalid practiceId:', practiceId);
+      return NextResponse.json({ 
+        error: 'Invalid practice ID',
+        details: 'Practice ID must be a valid positive integer'
+      }, { status: 400 });
+    }
+    
     // Authorization logic:
     // - SUPER_ADMIN and CLIENT can access any practice (clients need to view practice details for booking)
     // - ADMINISTRATOR can access practices they manage
@@ -38,7 +48,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const practice = await tenantDb.query.practices.findFirst({
-      where: eq(practices.id, parseInt(practiceId, 10)),
+      where: eq(practices.id, practiceIdNum),
     });
 
     if (!practice) {

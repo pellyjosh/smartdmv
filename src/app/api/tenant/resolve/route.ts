@@ -92,71 +92,83 @@ export async function POST(request: NextRequest) {
 
     console.log(`[TENANT_RESOLVE] Cache miss, looking for tenant with identifier: ${tenantIdentifier}`);
 
-    // Query the owner database to find the tenant
-    const [tenant] = await ownerDb
-      .select({
-        id: tenants.id,
-        name: tenants.name,
-        subdomain: tenants.subdomain,
-        customDomain: tenants.customDomain,
-        status: tenants.status,
-        plan: tenants.plan,
-        settings: tenants.settings,
-        dbName: tenants.dbName,
-        storagePath: tenants.storagePath,
-      })
-      .from(tenants)
-      .where(
-        or(
-          eq(tenants.subdomain, tenantIdentifier),
-          eq(tenants.customDomain, identifier)
+    try {
+      // Query the owner database to find the tenant
+      const [tenant] = await ownerDb
+        .select({
+          id: tenants.id,
+          name: tenants.name,
+          subdomain: tenants.subdomain,
+          customDomain: tenants.customDomain,
+          status: tenants.status,
+          plan: tenants.plan,
+          settings: tenants.settings,
+          dbName: tenants.dbName,
+          storagePath: tenants.storagePath,
+        })
+        .from(tenants)
+        .where(
+          or(
+            eq(tenants.subdomain, tenantIdentifier),
+            eq(tenants.customDomain, identifier)
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    if (!tenant) {
-      console.log(`[TENANT_RESOLVE] Tenant not found for identifier: ${tenantIdentifier}`);
-      return NextResponse.json(
-        { error: "Tenant not found" },
-        { status: 404 }
-      );
+      if (!tenant) {
+        console.log(`[TENANT_RESOLVE] Tenant not found for identifier: ${tenantIdentifier}`);
+        
+        return NextResponse.json(
+          { error: "Tenant not found" },
+          { status: 404 }
+        );
+      }
+
+      // Check if tenant is active
+      if (tenant.status !== 'ACTIVE') {
+        console.log(`[TENANT_RESOLVE] Tenant not active: ${tenantIdentifier} (status: ${tenant.status})`);
+        return NextResponse.json(
+          { error: "Tenant is not active" },
+          { status: 403 }
+        );
+      }
+
+      console.log(`[TENANT_RESOLVE] Tenant resolved successfully: ${tenant.name}`);
+
+      // Transform the database record to match the TenantInfo interface
+      const tenantInfo = {
+        id: tenant.id.toString(),
+        slug: tenant.subdomain,
+        name: tenant.name,
+        domain: tenant.customDomain,
+        subdomain: tenant.subdomain,
+        status: tenant.status.toLowerCase() as "active" | "inactive" | "suspended",
+        databaseName: tenant.dbName,
+        storagePath: tenant.storagePath,
+        settings: {
+          timezone: 'UTC', // Can be added to schema later
+          theme: 'default', // Can be added to schema later
+          features: tenant.settings?.features || [],
+        },
+      };
+
+      // Cache the result in memory
+      setCachedTenant(tenantIdentifier, tenantInfo);
+
+      // Note: IndexedDB caching happens client-side in FastTenantContext
+      // Server-side API route cannot access IndexedDB
+
+      return NextResponse.json({ 
+        tenant: tenantInfo,
+        cached: false // Indicate this was a fresh fetch
+      });
+    } catch (dbError) {
+      console.error('[TENANT_RESOLVE] Database error:', dbError);
+      
+      // Server-side cannot access IndexedDB
+      // Client will handle offline fallback
+      throw dbError;
     }
-
-    // Check if tenant is active
-    if (tenant.status !== 'ACTIVE') {
-      console.log(`[TENANT_RESOLVE] Tenant not active: ${tenantIdentifier} (status: ${tenant.status})`);
-      return NextResponse.json(
-        { error: "Tenant is not active" },
-        { status: 403 }
-      );
-    }
-
-    console.log(`[TENANT_RESOLVE] Tenant resolved successfully: ${tenant.name}`);
-
-    // Transform the database record to match the TenantInfo interface
-    const tenantInfo = {
-      id: tenant.id.toString(),
-      slug: tenant.subdomain,
-      name: tenant.name,
-      domain: tenant.customDomain,
-      subdomain: tenant.subdomain,
-      status: tenant.status.toLowerCase() as "active" | "inactive" | "suspended",
-      databaseName: tenant.dbName,
-      storagePath: tenant.storagePath,
-      settings: {
-        timezone: 'UTC', // Can be added to schema later
-        theme: 'default', // Can be added to schema later
-        features: tenant.settings?.features || [],
-      },
-    };
-
-    // Cache the result
-    setCachedTenant(tenantIdentifier, tenantInfo);
-
-    return NextResponse.json({ 
-      tenant: tenantInfo,
-      cached: false // Indicate this was a fresh fetch
-    });
   } catch (error) {
     console.error("Error resolving tenant:", error);
     return NextResponse.json(

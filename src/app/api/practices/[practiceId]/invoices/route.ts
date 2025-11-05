@@ -135,6 +135,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const lineItems = items.map((it: any) => ({
       invoiceId: created.id,
+      currencyId: defaultCurrencyId, // Use practice's default currency
       description: it.description,
       quantity: it.quantity.toString(),
       unitPrice: (parseFloat(it.subtotal) / parseFloat(it.quantity || '1')).toFixed(2),

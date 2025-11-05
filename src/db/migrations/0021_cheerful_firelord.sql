@@ -1,0 +1,2 @@
+ALTER TABLE "refunds" ADD COLUMN "client_id" integer;--> statement-breakpoint
+ALTER TABLE "refunds" ADD CONSTRAINT "refunds_client_id_users_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;

@@ -352,8 +352,109 @@ const AccountsReceivablePage = () => {
   };
 
   const handleExportAR = () => {
-    // This would export the AR report as CSV or PDF
-    console.log("Exporting AR report...");
+    // Generate CSV content
+    const headers = [
+      "Invoice Number",
+      "Client Name",
+      "Pet Name",
+      "Issue Date",
+      "Due Date",
+      "Days Overdue",
+      "Original Amount",
+      "Amount Paid",
+      "Balance Due",
+      "Status",
+      "Client Email",
+      "Client Phone",
+    ];
+
+    const rows = filteredInvoices.map((invoice) => {
+      const balanceDue =
+        parseFloat(invoice.total) - parseFloat(invoice.amountPaid || "0");
+      const daysOverdue = getDaysOverdue(invoice.dueDate);
+
+      return [
+        invoice.invoiceNumber,
+        invoice.clientName || "N/A",
+        invoice.petName || "N/A",
+        format(new Date(invoice.date), "yyyy-MM-dd"),
+        format(new Date(invoice.dueDate), "yyyy-MM-dd"),
+        daysOverdue > 0 ? daysOverdue.toString() : "0",
+        parseFloat(invoice.total).toFixed(2),
+        parseFloat(invoice.amountPaid || "0").toFixed(2),
+        balanceDue.toFixed(2),
+        invoice.status,
+        invoice.clientEmail || "",
+        invoice.clientPhone || "",
+      ];
+    });
+
+    // Add summary rows
+    const totalOutstanding = filteredInvoices.reduce((sum, inv) => {
+      const balance = parseFloat(inv.total) - parseFloat(inv.amountPaid || "0");
+      return sum + balance;
+    }, 0);
+
+    rows.push([]);
+    rows.push([
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Total Balance Due:",
+      totalOutstanding.toFixed(2),
+    ]);
+    rows.push([
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Total Invoices:",
+      filteredInvoices.length.toString(),
+    ]);
+
+    // Convert to CSV format
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) =>
+        row
+          .map((cell) => {
+            // Escape commas and quotes in cell values
+            const cellStr = String(cell);
+            if (
+              cellStr.includes(",") ||
+              cellStr.includes('"') ||
+              cellStr.includes("\n")
+            ) {
+              return `"${cellStr.replace(/"/g, '""')}"`;
+            }
+            return cellStr;
+          })
+          .join(",")
+      ),
+    ].join("\n");
+
+    // Create download link
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `accounts-receivable-${format(new Date(), "yyyy-MM-dd")}.csv`
+    );
+    link.style.visibility = "hidden";
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const clearAllFilters = () => {
@@ -770,7 +871,7 @@ const AccountsReceivablePage = () => {
                               <Mail className="h-4 w-4" />
                             </Button>
                           )}
-                          <Button
+                          {/* <Button
                             variant="ghost"
                             size="icon"
                             title="Record Payment"
@@ -782,7 +883,7 @@ const AccountsReceivablePage = () => {
                             }}
                           >
                             <CreditCard className="h-4 w-4" />
-                          </Button>
+                          </Button> */}
                         </div>
                       </TableCell>
                     </TableRow>

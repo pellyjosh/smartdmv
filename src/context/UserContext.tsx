@@ -15,6 +15,11 @@ import {
   HTTP_ONLY_SESSION_TOKEN_COOKIE_NAME,
 } from "@/config/authConstants";
 import { fetchWithRetry } from "@/lib/client-network-utils";
+import {
+  cacheAuthForOffline,
+  clearAuthCache,
+  getTenantIdForCache,
+} from "@/lib/auth-cache";
 
 // Define User types
 export interface BaseUser {
@@ -495,6 +500,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
           JSON.stringify(userData)
         );
         setClientCookie(SESSION_TOKEN_COOKIE_NAME, JSON.stringify(userData));
+
+        // Cache authentication data for offline use
+        try {
+          const tenantId = getTenantIdForCache();
+          await cacheAuthForOffline(data, tenantId);
+          console.log(
+            "[UserContext login] ✅ Auth data cached for offline use"
+          );
+        } catch (error) {
+          console.error(
+            "[UserContext login] Failed to cache auth for offline:",
+            error
+          );
+          // Don't throw - caching failure shouldn't block login
+        }
+
         console.log(
           "[UserContext login SUCCESS] Login successful, user set in context:",
           userData.email,
@@ -547,6 +568,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setUser(null);
       sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
       setClientCookie(SESSION_TOKEN_COOKIE_NAME, null);
+
+      // Clear offline auth cache
+      try {
+        await clearAuthCache();
+        console.log("[UserContext logout] ✅ Offline auth cache cleared");
+      } catch (error) {
+        console.error(
+          "[UserContext logout] Failed to clear offline cache:",
+          error
+        );
+      }
+
       setIsLoading(false);
       setInitialAuthChecked(true);
       console.log(
@@ -559,40 +592,100 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   const switchPractice = async (newPracticeId: string) => {
-    if (user && user.role === "ADMINISTRATOR") {
+    if (
+      user &&
+      (user.role === "ADMINISTRATOR" || user.role === "SUPER_ADMIN")
+    ) {
       console.log(
-        `[UserContext switchPractice] Admin ${user.email} attempting to switch to practice ${newPracticeId}`
+        `[UserContext switchPractice] ${user.role} ${user.email} attempting to switch to practice ${newPracticeId}`
       );
       setIsLoading(true);
       try {
-        const updatedUser = await switchPracticeAction(user.id, newPracticeId);
-        if (updatedUser) {
-          console.log(
-            "[UserContext switchPractice] switchPracticeAction successful. Updated user from action:",
-            JSON.stringify(updatedUser)
+        const isOnline = navigator.onLine;
+
+        if (isOnline) {
+          // Online: Use server action
+          const updatedUser = await switchPracticeAction(
+            user.id,
+            newPracticeId
           );
-          setUser(updatedUser);
-          sessionStorage.setItem(
-            SESSION_TOKEN_COOKIE_NAME,
-            JSON.stringify(updatedUser)
-          );
-          setClientCookie(
-            SESSION_TOKEN_COOKIE_NAME,
-            JSON.stringify(updatedUser)
-          );
-          // console.log('[UserContext switchPractice SUCCESS] Practice switched. New currentPracticeId in context:', updatedUser.currentPracticeId);
+          if (updatedUser) {
+            console.log(
+              "[UserContext switchPractice] switchPracticeAction successful. Updated user from action:",
+              JSON.stringify(updatedUser)
+            );
+            setUser(updatedUser);
+            sessionStorage.setItem(
+              SESSION_TOKEN_COOKIE_NAME,
+              JSON.stringify(updatedUser)
+            );
+            setClientCookie(
+              SESSION_TOKEN_COOKIE_NAME,
+              JSON.stringify(updatedUser)
+            );
+          } else {
+            console.error(
+              "[UserContext switchPractice FAIL] Failed to switch practice via server action. Refetching user."
+            );
+            await fetchUser();
+          }
         } else {
-          console.error(
-            "[UserContext switchPractice FAIL] Failed to switch practice via server action. Refetching user."
+          // Offline: Use local cache
+          console.log(
+            "[UserContext switchPractice] Switching practice OFFLINE"
           );
-          await fetchUser();
+
+          // Import offline practice manager dynamically
+          const { switchPracticeOffline } = await import(
+            "@/lib/offline/storage/practice-storage"
+          );
+          const success = await switchPracticeOffline(
+            user.id.toString(),
+            newPracticeId
+          );
+
+          if (success) {
+            // Update local user state
+            const updatedUser = {
+              ...user,
+              currentPracticeId: newPracticeId, // Keep as string for consistency
+            };
+            setUser(updatedUser as unknown as User);
+
+            // Update session storage
+            sessionStorage.setItem(
+              SESSION_TOKEN_COOKIE_NAME,
+              JSON.stringify(updatedUser)
+            );
+
+            console.log(
+              "[UserContext switchPractice] Practice switched offline successfully"
+            );
+
+            // Show offline notification
+            if (typeof window !== "undefined") {
+              // You can dispatch a custom event or show a toast here
+              window.dispatchEvent(
+                new CustomEvent("offline-practice-switch", {
+                  detail: { practiceId: newPracticeId },
+                })
+              );
+            }
+          } else {
+            console.error(
+              "[UserContext switchPractice] Failed to switch practice offline"
+            );
+          }
         }
       } catch (error) {
         console.error(
           "[UserContext switchPractice CATCH_ERROR] Error switching practice:",
           error
         );
-        await fetchUser();
+        // Only try to refetch if online
+        if (navigator.onLine) {
+          await fetchUser();
+        }
       } finally {
         setIsLoading(false);
         console.log(

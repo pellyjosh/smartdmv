@@ -358,12 +358,18 @@ export async function GET(request: Request) {
       originalError: error
     });
 
-    // For network/database errors, return a more informative error message
+    // For network/database errors, return offline mode flag
     if (networkError.isNetworkError || networkError.isDatabaseError) {
+      console.log('[API ME] Network/DB error detected. Client should use offline mode.');
+      
+      // Return a special response indicating offline mode should be used
+      // Don't return 503 (which signals an error), instead return 200 with offline flag
       const response = NextResponse.json({ 
+        offline: true,
         error: networkError.userMessage,
-        isNetworkError: networkError.isNetworkError 
-      }, { status: 503 }); // Service Unavailable
+        useOfflineStorage: true,
+        timestamp: Date.now()
+      }, { status: 200 }); // Return 200 to prevent error handling on client
       return response;
     }
 

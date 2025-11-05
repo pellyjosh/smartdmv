@@ -12,6 +12,7 @@ import ClientOnlyWrapper from "@/components/utils/ClientOnlyWrapper";
 import GlobalLoader from "@/components/GlobalLoader";
 import { Toaster } from "@/components/ui/toaster";
 import { NetworkStatus } from "@/components/NetworkStatus";
+import { OfflineIndicator } from "@/components/offline";
 import { ThemeSwitcherWidget } from "@/components/ThemeSwitcherWidget";
 
 // Error boundary component for tenant validation
@@ -83,7 +84,8 @@ export default function ConditionalProviders({
             <GlobalLoader />
             <div className="min-h-screen">{children}</div>
             <Toaster />
-            <NetworkStatus />
+            {/* <NetworkStatus /> */}
+            <OfflineIndicator />
             <ThemeSwitcherWidget />
           </MobileBlocker>
         </ThemeProvider>
@@ -107,7 +109,9 @@ export default function ConditionalProviders({
                 </MobileBlocker>
               </NotificationWrapper>
               <Toaster />
-              <NetworkStatus />
+              {/* NetworkStatus disabled - using OfflineIndicator instead */}
+              {/* <NetworkStatus /> */}
+              <OfflineIndicator />
               <ThemeSwitcherWidget />
             </ThemeProvider>
           </PracticeProvider>

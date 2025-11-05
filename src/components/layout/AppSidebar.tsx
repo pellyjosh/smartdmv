@@ -62,6 +62,7 @@ import {
   AtSign,
   ShieldCheck,
   Bell,
+  WifiOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useRouter } from "next/navigation";
 import { useRoles } from "@/hooks/use-roles";
+import { useNetworkStatus } from "@/hooks/use-network-status";
 
 // --- Type Definitions ---
 type AppUserRole =
@@ -102,6 +104,8 @@ interface MenuItem {
   roles: AppUserRole[];
   keywords?: string[];
   marketplaceAddOn?: boolean;
+  offlineSupported?: boolean; // Defaults to true if not specified
+  offlineMessage?: string; // Custom message when unavailable offline
 }
 
 interface MenuGroup {
@@ -112,6 +116,8 @@ interface MenuGroup {
   href?: string;
   items?: MenuItem[];
   keywords?: string[];
+  offlineSupported?: boolean; // Defaults to true if not specified
+  offlineMessage?: string; // Custom message when unavailable offline
 }
 
 interface NavItem {
@@ -124,6 +130,8 @@ interface NavItem {
   onClick?: () => void;
   isAddon?: boolean;
   requiresWebsiteIntegration?: boolean;
+  offlineSupported?: boolean;
+  offlineMessage?: string;
 }
 
 interface SubmenuItem {
@@ -134,6 +142,8 @@ interface SubmenuItem {
   roles?: AppUserRole[];
   isAddon?: boolean;
   requiresWebsiteIntegration?: boolean;
+  offlineSupported?: boolean;
+  offlineMessage?: string;
 }
 
 interface AppSidebarProps {
@@ -151,30 +161,6 @@ const menuGroups: MenuGroup[] = [
     keywords: ["home", "main", "overview", "admin panel"],
     roles: ["SUPER_ADMIN", "ADMINISTRATOR"],
   },
-  // {
-  //   id: "practice-admin-dashboard",
-  //   title: "Practice Admin Dashboard",
-  //   href: "/practice-administrator",
-  //   icon: LayoutDashboard,
-  //   keywords: ["home", "main", "overview", "practice admin panel"],
-  //   roles: ["PRACTICE_ADMINISTRATOR", "PRACTICE_ADMIN"],
-  // },
-  // {
-  //   id: "client-dashboard",
-  //   title: "Client Dashboard",
-  //   href: "/client",
-  //   icon: LayoutDashboard,
-  //   keywords: ["home", "main", "overview", "my pets"],
-  //   roles: ['CLIENT']
-  // },
-  // {
-  //   id: "client-settings",
-  //   title: "Client Settings",
-  //   href: "/client-settings",
-  //   icon: Settings,
-  //   keywords: ["options", "configuration", "preferences", "profile", "account"],
-  //   roles: ['CLIENT'],
-  // },
   {
     id: "appointments",
     title: "Appointments",
@@ -406,6 +392,9 @@ const menuGroups: MenuGroup[] = [
           "VETERINARIAN",
           "TECHNICIAN",
         ],
+        offlineSupported: false,
+        offlineMessage:
+          "Lab integration requires real-time connection to external laboratory systems and cannot be performed offline.",
       },
       {
         title: "Medical Imaging",
@@ -418,6 +407,9 @@ const menuGroups: MenuGroup[] = [
           "VETERINARIAN",
           "TECHNICIAN",
         ],
+        offlineSupported: false,
+        offlineMessage:
+          "Medical imaging requires real-time image processing, cloud storage access, and cannot be performed offline. Previously cached images may be viewable.",
       },
       {
         title: "Disease Reporting",
@@ -430,6 +422,9 @@ const menuGroups: MenuGroup[] = [
           "VETERINARIAN",
         ],
         marketplaceAddOn: true,
+        offlineSupported: false,
+        offlineMessage:
+          "Disease reporting requires internet connection to submit reports to external health authorities and regulatory bodies.",
       },
       {
         title: "AI Diagnostic Assistant",
@@ -441,6 +436,9 @@ const menuGroups: MenuGroup[] = [
           "PRACTICE_MANAGER",
           "VETERINARIAN",
         ],
+        offlineSupported: false,
+        offlineMessage:
+          "AI diagnostic assistant requires cloud-based AI processing and cannot function offline.",
       },
     ],
   },
@@ -722,24 +720,36 @@ const menuGroups: MenuGroup[] = [
         href: "/analytics-reporting",
         icon: BarChart3,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
+        offlineSupported: false,
+        offlineMessage:
+          "Reports and analytics require real-time data aggregation from the database and cannot be generated offline.",
       },
       {
         title: "Advanced Reporting",
         href: "/advanced-reporting",
         icon: LineChart,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
+        offlineSupported: false,
+        offlineMessage:
+          "Advanced reporting requires real-time data processing and cannot be generated offline.",
       },
       {
         title: "Predictive Analytics",
         href: "/predictive-analytics",
         icon: LineChart,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
+        offlineSupported: false,
+        offlineMessage:
+          "Predictive analytics requires cloud-based AI processing and real-time data analysis.",
       },
       {
         title: "Audit Reports",
         href: "/audit-reports",
         icon: ShieldCheck,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"],
+        offlineSupported: false,
+        offlineMessage:
+          "Audit reports require real-time access to complete audit logs and cannot be generated offline.",
       },
     ],
   },
@@ -775,7 +785,7 @@ const menuGroups: MenuGroup[] = [
       },
       {
         title: "Offline Demo",
-        href: "/offline-demo",
+        href: "/admin/offline-demo",
         icon: Network,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
       },
@@ -878,12 +888,18 @@ const menuGroups: MenuGroup[] = [
         href: "/admin/email-templates",
         icon: Mail,
         roles: ["ADMINISTRATOR"],
+        offlineSupported: false,
+        offlineMessage:
+          "Email templates cannot be edited offline as they require server-side validation and storage.",
       },
       {
         title: "Email Service",
         href: "/admin/email-service",
         icon: AtSign,
         roles: ["ADMINISTRATOR"],
+        offlineSupported: false,
+        offlineMessage:
+          "Email service configuration requires internet connection to test and validate email server settings.",
       },
       {
         title: "Onboarding Settings",
@@ -902,6 +918,9 @@ const menuGroups: MenuGroup[] = [
         href: "/admin/billing-analytics",
         icon: LineChart,
         roles: ["ADMINISTRATOR"],
+        offlineSupported: false,
+        offlineMessage:
+          "Billing analytics require real-time access to financial data and payment processing systems.",
       },
     ],
   },
@@ -916,20 +935,41 @@ const MARKETPLACE_FEATURE_MAPPING: Record<string, string> = {
   "Website Integration": "client-portal-mobile-app", // Maps to Client Portal Mobile App
 };
 
+import { useAuthWithOffline } from "@/hooks/use-auth-with-offline";
+
+// Export menuGroups for use with OfflineProtected
+export { menuGroups };
+
 export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Use offline-aware authentication
+  const { user: onlineUser, isLoading: onlineIsLoading } = useUser();
   const {
-    user,
-    logout,
-    isLoading: userIsLoading,
-    initialAuthChecked,
-    userPracticeId,
-  } = useUser();
+    user: offlineUser,
+    isOfflineMode,
+    isLoading: offlineIsLoading,
+  } = useAuthWithOffline();
+
+  // Use offline user if online user is not available
+  const user = onlineUser || offlineUser;
+  const userIsLoading = onlineIsLoading || offlineIsLoading;
+  const initialAuthChecked = true; // Assume checked if we have either user
+
+  const { logout } = useUser();
+  const userPracticeId =
+    user && "practiceId" in user
+      ? user.practiceId
+      : user && "currentPracticeId" in user
+      ? (user as any).currentPracticeId
+      : undefined;
+
   // Role helpers that understand assigned roles (from user.roles) as well as legacy user.role
   const practiceIdNumber = Number(userPracticeId || 0) || 0;
   const { isSuperAdminAssigned, isPracticeAdminAssigned } =
     useRoles(practiceIdNumber);
+  const { isOnline } = useNetworkStatus();
   const [mobileSheetOpen, setMobileSheetOpen] = React.useState(false);
   const [expandedMenus, setExpandedMenus] = React.useState<
     Record<string, boolean>
@@ -940,13 +980,72 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
   const { data: practiceAddons } = useQuery({
     queryKey: ["/api/marketplace/practice"],
     queryFn: async () => {
-      const response = await fetch("/api/marketplace/practice");
-      if (!response.ok)
-        throw new Error("Failed to fetch practice subscriptions");
-      return response.json();
+      // If offline, skip API call and load from cache immediately
+      if (!isOnline) {
+        console.log(
+          "[AppSidebar] 🔌 Offline mode detected, loading from cache"
+        );
+        const cached = localStorage.getItem("marketplace_practice_cache");
+        if (cached) {
+          const cacheData = JSON.parse(cached);
+          return Array.isArray(cacheData) ? cacheData : cacheData.data;
+        }
+        return [];
+      }
+
+      // Online mode - try API with cache fallback
+      try {
+        const response = await fetch("/api/marketplace/practice");
+        if (!response.ok) {
+          // If offline or API fails, try to load from localStorage cache
+          const cached = localStorage.getItem("marketplace_practice_cache");
+          if (cached) {
+            console.log(
+              "[AppSidebar] API failed, using cached marketplace data"
+            );
+            const cacheData = JSON.parse(cached);
+            // Handle both old format (direct array) and new format (with metadata)
+            return Array.isArray(cacheData) ? cacheData : cacheData.data;
+          }
+          throw new Error("Failed to fetch practice subscriptions");
+        }
+        const data = await response.json();
+
+        // Always update cache with fresh data when online
+        if (data && typeof window !== "undefined") {
+          const cacheData = {
+            data: data,
+            timestamp: Date.now(),
+            cachedAt: new Date().toISOString(),
+          };
+          localStorage.setItem(
+            "marketplace_practice_cache",
+            JSON.stringify(cacheData)
+          );
+          console.log(
+            "[AppSidebar] ✅ Updated marketplace cache with fresh data"
+          );
+        }
+
+        return data;
+      } catch (error) {
+        // If network error, try to load from localStorage cache
+        const cached = localStorage.getItem("marketplace_practice_cache");
+        if (cached) {
+          console.log(
+            "[AppSidebar] Network error, using cached marketplace data"
+          );
+          const cacheData = JSON.parse(cached);
+          // Handle both old format (direct array) and new format (with metadata)
+          return Array.isArray(cacheData) ? cacheData : cacheData.data;
+        }
+        console.error("[AppSidebar] Failed to fetch marketplace data:", error);
+        return []; // Return empty array to prevent sidebar from breaking
+      }
     },
     enabled: !!user && !!userPracticeId,
     refetchOnWindowFocus: false,
+    retry: false, // Don't retry if offline
   });
 
   // Helper to check if practice has subscribed to a specific add-on
@@ -1045,9 +1144,10 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
       href: group.href,
       keywords: group.keywords, // Use group's own keywords first
       roles: group.roles, // Use group's roles first
+      offlineSupported: group.offlineSupported, // Copy offline support flag
+      offlineMessage: group.offlineMessage, // Copy offline message
       submenu: group.items
         ?.filter((item) => {
-          // Filter out marketplace add-ons that user doesn't have access to
           if (item.marketplaceAddOn) {
             return hasMarketplaceSubscription(item.title);
           }
@@ -1063,6 +1163,8 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
           requiresWebsiteIntegration:
             item.title === "Website Requests" ||
             item.title === "Website Integration",
+          offlineSupported: item.offlineSupported, // Copy offline support flag
+          offlineMessage: item.offlineMessage, // Copy offline message
         })),
     }));
 
@@ -1096,12 +1198,50 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
         },
       ];
     }
-    if (!user?.role) return [];
 
-    const lowerSearchTerm = searchTerm.toLowerCase().trim();
+    // Debug: Check what user data we have
+    const localStorageData =
+      typeof window !== "undefined"
+        ? localStorage.getItem("offline_session")
+        : null;
+    let parsedLocalStorage = null;
+    try {
+      parsedLocalStorage = localStorageData
+        ? JSON.parse(localStorageData)
+        : null;
+    } catch (e) {
+      parsedLocalStorage = "parse error";
+    }
 
+    console.log("[AppSidebar] User check:", {
+      hasUser: !!user,
+      role: user?.role,
+      roles: (user as any)?.roles,
+      roleNames: Array.isArray((user as any)?.roles)
+        ? (user as any)?.roles.map((r: any) => r?.name || r)
+        : "not-array",
+      isOffline: isOfflineMode,
+      userKeys: user ? Object.keys(user) : "no user",
+      localStorageExists: !!localStorageData,
+      localStorageRole: parsedLocalStorage?.role || "no localStorage",
+      localStorageRoles: parsedLocalStorage?.roles || "no localStorage",
+    });
+
+    // Check if user has ANY valid role (either legacy or assigned roles array)
     const userAssignedRoles = (user as any)?.roles;
     const userLegacyRole = (user as any)?.role;
+    const hasValidRole =
+      (userLegacyRole && userLegacyRole !== "UNKNOWN") ||
+      (Array.isArray(userAssignedRoles) && userAssignedRoles.length > 0);
+
+    if (!hasValidRole) {
+      console.warn(
+        "[AppSidebar] No valid user role found, returning empty menu"
+      );
+      return [];
+    }
+
+    const lowerSearchTerm = searchTerm.toLowerCase().trim();
 
     const userHasAnyRole = (allowedRoles: AppUserRole[] | undefined) => {
       if (!allowedRoles || allowedRoles.length === 0) return false;
@@ -1274,6 +1414,26 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
       </Badge>
     ) : null;
 
+    const offlineIndicator =
+      !isOnline && item.offlineSupported === false ? (
+        <span
+          className="ml-auto flex-shrink-0"
+          title={item.offlineMessage || "Requires internet connection"}
+        >
+          <WifiOff className="h-4 w-4 text-red-500" strokeWidth={2.5} />
+        </span>
+      ) : null;
+
+    // Debug logging for offline indicator (can be removed in production)
+    if (item.title === "Medical Imaging" || item.title === "Lab Integration") {
+      console.log(`[AppSidebar Offline] ${item.title}:`, {
+        isOnline,
+        offlineSupported: item.offlineSupported,
+        shouldShow: !isOnline && item.offlineSupported === false,
+        hasIndicator: !!offlineIndicator,
+      });
+    }
+
     if (currentViewCollapsed && !isSubmenuItem) {
       return itemIcon;
     }
@@ -1290,8 +1450,12 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
           ) : (
             <ChevronDown className="h-4 w-4 ml-auto opacity-70 shrink-0" />
           ))}
-        {addOnBadge}
-        {websiteIntegrationBadge && !addOnBadge && websiteIntegrationBadge}
+        {offlineIndicator}
+        {addOnBadge && !offlineIndicator && addOnBadge}
+        {websiteIntegrationBadge &&
+          !addOnBadge &&
+          !offlineIndicator &&
+          websiteIntegrationBadge}
       </>
     );
   };

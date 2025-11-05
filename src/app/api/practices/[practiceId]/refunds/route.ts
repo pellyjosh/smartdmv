@@ -31,7 +31,13 @@ export async function GET(req: NextRequest, context: { params: Promise<{ practic
       externalReference: refunds.externalReference,
       notes: refunds.notes,
       issuedById: refunds.issuedById,
-    }).from(refunds).where(eq(refunds.practiceId, practiceId)).orderBy(desc(refunds.createdAt));
+      clientId: refunds.clientId,
+      clientName: users.name,
+    })
+    .from(refunds)
+    .leftJoin(users, eq(refunds.clientId, users.id))
+    .where(eq(refunds.practiceId, practiceId))
+    .orderBy(desc(refunds.createdAt));
     // Helper function to safely serialize any value that might have toISOString issues
     const safeSerialize = (obj: any): any => {
       if (obj === null || obj === undefined) return obj;
@@ -93,7 +99,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ practic
            r.processedAt ? new Date(r.processedAt).toISOString() : null) : null,
         reason: r.reason,
         notes: r.notes,
-        clientId: undefined, // future expansion if refunds link directly to client/payments
+        clientId: (r as any).clientId,
+        clientName: (r as any).clientName || 'Unknown',
         errorDetails: rawStatus === 'failed' ? r.notes : null,
       };
     });
@@ -132,6 +139,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ practi
       amount: amount.toString(),
       currency: undefined, // use FK currencyId as single source
       currencyId: defaultCurrencyId,
+      clientId: clientId ? Number(clientId) : null,
       reason: reason || 'Refund requested',
       notes: notes || null,
       externalReference: paymentId,

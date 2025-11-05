@@ -99,7 +99,7 @@ interface Pet {
 interface Invoice {
   id: number;
   invoiceNumber: string;
-  status: "DRAFT" | "SENT" | "PAID" | "OVERDUE" | "CANCELLED";
+  status: "DRAFT" | "PENDING" | "SENT" | "PAID" | "OVERDUE" | "CANCELLED";
   issueDate: string;
   dueDate: string;
   paidDate?: string;
@@ -118,6 +118,7 @@ interface Invoice {
 
 const statusColors = {
   DRAFT: "bg-gray-100 text-gray-800 hover:bg-gray-200",
+  PENDING: "bg-yellow-100 text-yellow-800 hover:bg-yellow-200",
   SENT: "bg-blue-100 text-blue-800 hover:bg-blue-200",
   PAID: "bg-green-100 text-green-800 hover:bg-green-200",
   OVERDUE: "bg-red-100 text-red-800 hover:bg-red-200",
@@ -293,9 +294,12 @@ export default function InvoiceDetailPage() {
   });
 
   const getStatusLabel = (status: string) => {
-    switch (status) {
+    const upperStatus = status?.toUpperCase();
+    switch (upperStatus) {
       case "DRAFT":
         return "Draft";
+      case "PENDING":
+        return "Pending";
       case "SENT":
         return "Sent";
       case "PAID":
@@ -462,11 +466,7 @@ export default function InvoiceDetailPage() {
         />
 
         <div className="flex items-center justify-between mb-6">
-          <Button
-            variant="outline"
-            asChild
-            className="bg-white hover:bg-gray-50"
-          >
+          <Button variant="outline" asChild className="dark:text-white">
             <Link href="/admin/billing">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Billing
@@ -475,15 +475,16 @@ export default function InvoiceDetailPage() {
 
           <div className="flex items-center gap-2">
             <Select
-              value={invoice.status?.toString() || "DRAFT"}
+              value={invoice.status?.toUpperCase() || "DRAFT"}
               onValueChange={handleStatusChange}
               disabled={isChangingStatus}
             >
-              <SelectTrigger className="w-40 bg-white">
-                <SelectValue placeholder="Select status" />
+              <SelectTrigger className="w-40">
+                <SelectValue>{getStatusLabel(invoice.status)}</SelectValue>
               </SelectTrigger>
-              <SelectContent className="bg-white">
+              <SelectContent>
                 <SelectItem value="DRAFT">Draft</SelectItem>
+                <SelectItem value="PENDING">Pending</SelectItem>
                 <SelectItem value="SENT">Sent</SelectItem>
                 <SelectItem value="PAID">Paid</SelectItem>
                 <SelectItem value="OVERDUE">Overdue</SelectItem>
@@ -494,7 +495,7 @@ export default function InvoiceDetailPage() {
             <Button
               variant="outline"
               onClick={handleSendEmail}
-              className="text-sm bg-white hover:bg-gray-50"
+              className="text-sm dark:text-white"
             >
               <Mail className="h-4 w-4 mr-2" />
               Email
@@ -503,7 +504,7 @@ export default function InvoiceDetailPage() {
             <Button
               variant="outline"
               onClick={handlePrint}
-              className="text-sm bg-white hover:bg-gray-50"
+              className="text-sm dark:text-white"
             >
               <Receipt className="h-4 w-4 mr-2" />
               Print
@@ -512,7 +513,7 @@ export default function InvoiceDetailPage() {
             <Button
               variant="outline"
               onClick={handleDownload}
-              className="text-sm bg-white hover:bg-gray-50"
+              className="text-sm dark:text-white"
             >
               <Download className="h-4 w-4 mr-2" />
               Download PDF
@@ -531,8 +532,14 @@ export default function InvoiceDetailPage() {
                   Invoice {invoice.invoiceNumber}
                 </CardTitle>
                 <div className="flex items-center gap-2">
-                  <Badge className={statusColors[invoice.status]}>
-                    {invoice.status}
+                  <Badge
+                    className={
+                      statusColors[
+                        invoice.status?.toUpperCase() as keyof typeof statusColors
+                      ] || statusColors.DRAFT
+                    }
+                  >
+                    {getStatusLabel(invoice.status)}
                   </Badge>
                 </div>
               </div>
@@ -767,10 +774,10 @@ export default function InvoiceDetailPage() {
                   setPaymentData((prev) => ({ ...prev, paymentMethod: value }))
                 }
               >
-                <SelectTrigger className="bg-white">
+                <SelectTrigger>
                   <SelectValue placeholder="Select payment method" />
                 </SelectTrigger>
-                <SelectContent className="bg-white">
+                <SelectContent>
                   <SelectItem value="cash">Cash</SelectItem>
                   <SelectItem value="credit_card">Credit Card</SelectItem>
                   <SelectItem value="debit_card">Debit Card</SelectItem>
@@ -792,7 +799,6 @@ export default function InvoiceDetailPage() {
                   setPaymentData((prev) => ({ ...prev, notes: e.target.value }))
                 }
                 rows={3}
-                className="bg-white"
               />
             </div>
           </div>
@@ -802,14 +808,13 @@ export default function InvoiceDetailPage() {
               variant="outline"
               onClick={() => setShowPaymentDialog(false)}
               disabled={isChangingStatus}
-              className="bg-white hover:bg-gray-50"
             >
               Cancel
             </Button>
             <Button
               onClick={handlePaymentSubmit}
               disabled={isChangingStatus || !paymentData.paymentMethod}
-              className="bg-green-600 hover:bg-green-700 text-white"
+              className="bg-green-600 hover:bg-green-700 text-white dark:bg-green-600 dark:hover:bg-green-700"
             >
               {isChangingStatus ? "Recording..." : "Record Payment"}
             </Button>

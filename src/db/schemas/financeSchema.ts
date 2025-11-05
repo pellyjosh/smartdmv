@@ -86,6 +86,7 @@ export const refunds = dbTable('refunds', {
   practiceId: foreignKeyInt('practice_id').notNull().references(() => practices.id),
   expenseId: foreignKeyInt('expense_id').references(() => expenses.id), // optional: some refunds may originate from expenses
   issuedById: foreignKeyInt('issued_by_id').references(() => users.id),
+  clientId: foreignKeyInt('client_id').references(() => users.id), // client receiving the refund
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   // Legacy text currency
   currency: text('currency').notNull().default(sql`'USD'`),
@@ -105,6 +106,7 @@ export const refundsRelations = relations(refunds, ({ one }) => ({
   practice: one(practices, { fields: [refunds.practiceId], references: [practices.id] }),
   expense: one(expenses, { fields: [refunds.expenseId], references: [expenses.id] }),
   issuer: one(users, { fields: [refunds.issuedById], references: [users.id] }),
+  client: one(users, { fields: [refunds.clientId], references: [users.id] }),
 }));
 
 // -----------------------------

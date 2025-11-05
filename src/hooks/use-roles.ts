@@ -1,15 +1,66 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNetworkStatus } from './use-network-status';
 
 // Hook to fetch roles and provide role checking utilities
 export function useRoles(practiceId: number) {
+  const { isOnline } = useNetworkStatus();
+  
   const { data: roles = [], isLoading, error } = useQuery({
     queryKey: ['roles', practiceId],
     queryFn: async () => {
-      const response = await fetch(`/api/roles?practiceId=${practiceId}`);
-      if (!response.ok) throw new Error('Failed to fetch roles');
-      return response.json();
+      // If offline, skip API call and load from cache immediately
+      if (!isOnline) {
+        console.log('[useRoles] 🔌 Offline mode detected, loading from cache');
+        const cached = localStorage.getItem(`roles_cache_${practiceId}`);
+        if (cached) {
+          const cacheData = JSON.parse(cached);
+          return Array.isArray(cacheData) ? cacheData : cacheData.data;
+        }
+        console.warn('[useRoles] No cache found for offline mode');
+        return [];
+      }
+      
+      // Online mode - try API with cache fallback
+      try {
+        const response = await fetch(`/api/roles?practiceId=${practiceId}`);
+        if (!response.ok) {
+          // If API fails, try to load from localStorage cache
+          const cached = localStorage.getItem(`roles_cache_${practiceId}`);
+          if (cached) {
+            console.log('[useRoles] API failed, using cached roles data');
+            const cacheData = JSON.parse(cached);
+            return Array.isArray(cacheData) ? cacheData : cacheData.data;
+          }
+          throw new Error('Failed to fetch roles');
+        }
+        const data = await response.json();
+        
+        // Always update cache with fresh data when online
+        if (data && typeof window !== 'undefined') {
+          const cacheData = {
+            data: data,
+            timestamp: Date.now(),
+            cachedAt: new Date().toISOString(),
+          };
+          localStorage.setItem(`roles_cache_${practiceId}`, JSON.stringify(cacheData));
+          console.log('[useRoles] ✅ Updated roles cache with fresh data');
+        }
+        
+        return data;
+      } catch (error) {
+        // If network error, try to load from localStorage cache
+        const cached = localStorage.getItem(`roles_cache_${practiceId}`);
+        if (cached) {
+          console.log('[useRoles] Network error, using cached roles data');
+          const cacheData = JSON.parse(cached);
+          return Array.isArray(cacheData) ? cacheData : cacheData.data;
+        }
+        console.error('[useRoles] Failed to fetch roles:', error);
+        return []; // Return empty array to prevent breaking
+      }
     },
     enabled: !!practiceId,
+    retry: false,
   });
 
   // Helper functions to check role types

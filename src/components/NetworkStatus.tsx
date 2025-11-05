@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
-import { setupNetworkListeners, isOnline } from '@/lib/client-network-utils';
+import { useEffect, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Wifi, WifiOff, RefreshCw } from "lucide-react";
+import { setupNetworkListeners, isOnline } from "@/lib/client-network-utils";
 
 interface NetworkStatusProps {
   showOfflineAlert?: boolean;
@@ -12,10 +12,10 @@ interface NetworkStatusProps {
   className?: string;
 }
 
-export function NetworkStatus({ 
-  showOfflineAlert = true, 
+export function NetworkStatus({
+  showOfflineAlert = true,
   onRetry,
-  className = '' 
+  className = "",
 }: NetworkStatusProps) {
   const [online, setOnline] = useState(true);
   const [showRetry, setShowRetry] = useState(false);
@@ -37,16 +37,16 @@ export function NetworkStatus({
       setShowRetry(true);
     };
 
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', handleOnline);
-      window.addEventListener('offline', handleOffline);
+    if (typeof window !== "undefined") {
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
     }
 
     return () => {
       cleanup?.();
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('online', handleOnline);
-        window.removeEventListener('offline', handleOffline);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
       }
     };
   }, []);
@@ -68,15 +68,14 @@ export function NetworkStatus({
   }
 
   return (
-    <div className={`fixed top-4 right-4 z-50 ${className}`}>
+    <div className={`fixed top-20 right-4 z-50 ${className}`}>
       <Alert variant="destructive" className="max-w-md">
         <WifiOff className="h-4 w-4" />
         <AlertDescription className="flex items-center justify-between">
           <span>
-            {!online 
-              ? "You're offline. Check your internet connection." 
-              : "Connection lost. Some features may not work."
-            }
+            {!online
+              ? "You're offline. Check your internet connection."
+              : "Connection lost. Some features may not work."}
           </span>
           {(showRetry || onRetry) && (
             <Button
@@ -95,7 +94,7 @@ export function NetworkStatus({
   );
 }
 
-export function NetworkIndicator({ className = '' }: { className?: string }) {
+export function NetworkIndicator({ className = "" }: { className?: string }) {
   const [online, setOnline] = useState(true);
 
   useEffect(() => {
@@ -104,15 +103,15 @@ export function NetworkIndicator({ className = '' }: { className?: string }) {
     const handleOnline = () => setOnline(true);
     const handleOffline = () => setOnline(false);
 
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', handleOnline);
-      window.addEventListener('offline', handleOffline);
+    if (typeof window !== "undefined") {
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
     }
 
     return () => {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('online', handleOnline);
-        window.removeEventListener('offline', handleOffline);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
       }
     };
   }, []);
@@ -125,7 +124,7 @@ export function NetworkIndicator({ className = '' }: { className?: string }) {
         <WifiOff className="h-4 w-4 text-red-500" />
       )}
       <span className="text-sm text-muted-foreground">
-        {online ? 'Online' : 'Offline'}
+        {online ? "Online" : "Offline"}
       </span>
     </div>
   );

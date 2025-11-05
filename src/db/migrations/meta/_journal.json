@@ -148,6 +148,13 @@
       "when": 1761703643714,
       "tag": "0020_brown_manta",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1762340414739,
+      "tag": "0021_cheerful_firelord",
+      "breakpoints": true
     }
   ]
 }
