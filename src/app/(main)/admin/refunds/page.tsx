@@ -436,7 +436,11 @@ export default function RefundManagementPage() {
                           disabled={paymentsLoading || !eligiblePayments}
                           options={(eligiblePayments || []).map((p: any) => ({
                             value: p.id.toString(),
-                            label: `${p.paymentNumber} - ${p.client?.name || "Unknown"} - ${formatCurrency(p.amount)} (${p.currency?.code || ""})`,
+                            label: `${p.paymentNumber} - ${
+                              p.client?.name || "Unknown"
+                            } - ${formatCurrency(p.amount)} (${
+                              p.currency?.code || ""
+                            })`,
                           }))}
                           value={field.value}
                           onSelect={(value) => {
@@ -447,11 +451,16 @@ export default function RefundManagementPage() {
                             );
                             if (selectedPayment) {
                               form.setValue("amount", selectedPayment.amount);
-                              form.setValue("clientId", selectedPayment.client?.id);
+                              form.setValue(
+                                "clientId",
+                                selectedPayment.client?.id
+                              );
                               // Set gateway type based on payment method or default to STRIPE
                               // You may need to adjust this logic based on your data
-                              const gateway = selectedPayment.paymentMethod?.toUpperCase().includes("PAYSTACK") 
-                                ? "PAYSTACK" 
+                              const gateway = selectedPayment.paymentMethod
+                                ?.toUpperCase()
+                                .includes("PAYSTACK")
+                                ? "PAYSTACK"
                                 : "STRIPE";
                               form.setValue("gatewayType", gateway as any);
                             }
@@ -462,7 +471,9 @@ export default function RefundManagementPage() {
                               : "Search payments..."
                           }
                           emptyText={
-                            paymentsLoading ? "Loading..." : "No eligible payments"
+                            paymentsLoading
+                              ? "Loading..."
+                              : "No eligible payments"
                           }
                         />
                       </div>
@@ -482,7 +493,12 @@ export default function RefundManagementPage() {
                     <FormItem>
                       <FormLabel>Amount</FormLabel>
                       <FormControl>
-                        <Input placeholder="0.00" {...field} readOnly className="bg-muted" />
+                        <Input
+                          placeholder="0.00"
+                          {...field}
+                          readOnly
+                          className="bg-muted"
+                        />
                       </FormControl>
                       <FormDescription>
                         Auto-filled from selected payment

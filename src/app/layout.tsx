@@ -8,6 +8,20 @@ import ConditionalProviders from "@/components/providers/ConditionalProviders";
 export const metadata: Metadata = {
   title: "SmartDVM",
   description: "Your trusted partner in pet health management.",
+  manifest: "/pwa/manifest.json",
+  themeColor: "#2563eb",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "SmartDVM",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export default function RootLayout({

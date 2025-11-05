@@ -68,6 +68,22 @@ export async function middleware(request: NextRequest) {
   
   // Handle API routes first
   if (pathname.startsWith('/api/')) {
+    // Skip middleware for payment callback/webhook routes (no authentication required)
+    if (pathname.includes('/callback') || pathname.includes('/webhook') || pathname.includes('/payment-callback')) {
+      console.log(`[Middleware] Payment callback/webhook route detected, allowing without auth: ${pathname}`);
+      const tenantIdentifier = extractTenantFromHostname(hostname);
+      if (tenantIdentifier && !isOwnerDomain) {
+        const requestHeaders = new Headers(request.headers);
+        requestHeaders.set('X-Tenant-Identifier', tenantIdentifier);
+        return NextResponse.next({
+          request: {
+            headers: requestHeaders,
+          },
+        });
+      }
+      return NextResponse.next();
+    }
+
     // Skip middleware for owner API routes
     if (pathname.startsWith('/api/owner/')) {
       if (!isOwnerDomain) {
@@ -320,6 +336,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     // Apply middleware to all paths including API routes, but exclude static files, images, etc.
-    '/((?!_next/static|_next/image|favicon.ico|manifest.json|robots.txt|assets|images|.*\\.(?:png|jpg|jpeg|gif|svg)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|pwa|robots.txt|assets|images|.*\\.(?:png|jpg|jpeg|gif|svg)$).*)',
   ],
 };

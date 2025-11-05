@@ -11,6 +11,7 @@ import { useUser } from "@/context/UserContext";
 import { useOfflineInitialization } from "@/hooks/use-offline-initialization";
 import { OfflineProtected } from "@/components/offline";
 import { flattenMenuForOfflineCheck } from "@/lib/offline/utils/menu-data";
+import { initializePWA } from "@/lib/pwa";
 
 // Flatten menu data once for offline protection
 const offlineMenuData = flattenMenuForOfflineCheck(menuGroups);
@@ -29,6 +30,14 @@ export default function MainApplicationLayout({
 
   useEffect(() => {
     setIsMounted(true);
+
+    // Initialize PWA on app startup
+    console.log('[Layout] Starting PWA initialization...');
+    initializePWA().then((result) => {
+      console.log('[Layout] PWA initialization result:', result);
+    }).catch((error) => {
+      console.error('[Layout] PWA initialization failed:', error);
+    });
   }, []);
 
   const toggleSidebarCollapse = () => {

@@ -1,0 +1,20 @@
+{
+  "name": "SmartDVM - Veterinary Management System",
+  "short_name": "SmartDVM",
+  "description": "Complete veterinary practice management system with offline capabilities",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en-US",
+  "categories": ["business", "productivity", "health"],
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "16x16 32x32 48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}
