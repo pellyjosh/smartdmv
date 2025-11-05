@@ -236,31 +236,40 @@ export async function GET(req: NextRequest) {
     }
 
     // Build proper redirect URL to tenant subdomain/custom domain
-    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    // Detect if we're in development by checking OWNER_DOMAIN instead of NODE_ENV
+    const ownerDomain = process.env.OWNER_DOMAIN || 'localhost:9002';
+    const isLocalDev = ownerDomain.includes('localhost');
+    const protocol = isLocalDev ? 'http' : 'https';
     let redirectUrl: string;
     
-    if (process.env.NODE_ENV === 'production') {
+    console.log('[OWNER PAYMENT VERIFY] Environment detection:', {
+      ownerDomain,
+      isLocalDev,
+      protocol,
+      NODE_ENV: process.env.NODE_ENV,
+    });
+    
+    if (isLocalDev) {
+      // Development: Always use localhost
+      if (tenant.subdomain) {
+        // For local development with subdomain pattern like smartvet.localhost:9002
+        const port = ownerDomain.split(':')[1] || '9002';
+        redirectUrl = `${protocol}://${tenant.subdomain}.localhost:${port}/marketplace?payment=success&message=Payment completed successfully`;
+      } else {
+        // Simple localhost redirect (works for single-tenant dev setup)
+        redirectUrl = `${protocol}://localhost:9002/marketplace?payment=success&message=Payment completed successfully`;
+      }
+    } else {
       // Production: Use custom domain if available, otherwise subdomain
       if (tenant.customDomain) {
         redirectUrl = `${protocol}://${tenant.customDomain}/marketplace?payment=success&message=Payment completed successfully`;
       } else if (tenant.subdomain) {
         // Get base domain from OWNER_DOMAIN (remove subdomain if any)
-        const ownerDomain = process.env.OWNER_DOMAIN || 'app.smartdvm.com';
         const baseDomain = ownerDomain.includes('.') ? ownerDomain.split('.').slice(-2).join('.') : ownerDomain;
         redirectUrl = `${protocol}://${tenant.subdomain}.${baseDomain}/marketplace?payment=success&message=Payment completed successfully`;
       } else {
         // Fallback to owner domain with tenant ID
-        redirectUrl = `${protocol}://${process.env.OWNER_DOMAIN}/marketplace?payment=success&message=Payment completed successfully&tenant=${tenant.id}`;
-      }
-    } else {
-      // Development: Use localhost with subdomain pattern if configured, otherwise just localhost
-      if (tenant.subdomain && process.env.OWNER_DOMAIN?.includes('localhost')) {
-        // For local development, if using subdomain pattern like smartvet.localhost:9002
-        const port = process.env.OWNER_DOMAIN.split(':')[1] || '9002';
-        redirectUrl = `${protocol}://${tenant.subdomain}.localhost:${port}/marketplace?payment=success&message=Payment completed successfully`;
-      } else {
-        // Simple localhost redirect (works for single-tenant dev setup)
-        redirectUrl = `${protocol}://localhost:9002/marketplace?payment=success&message=Payment completed successfully`;
+        redirectUrl = `${protocol}://${ownerDomain}/marketplace?payment=success&message=Payment completed successfully&tenant=${tenant.id}`;
       }
     }
     
