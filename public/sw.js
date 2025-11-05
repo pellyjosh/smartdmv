@@ -13,7 +13,7 @@
  * This ensures the entire app is cached as users navigate, making it fully functional offline.
  */
 
-const CACHE_VERSION = 'v1.0.1';
+const CACHE_VERSION = 'v1.0.3';
 const STATIC_CACHE = `smartdmv-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `smartdmv-dynamic-${CACHE_VERSION}`;
 const API_CACHE = `smartdmv-api-${CACHE_VERSION}`;
@@ -25,6 +25,7 @@ const STATIC_ASSETS = [
   '/',
   '/auth/login',
   '/offline',
+  '/admin/online-only',
   '/manifest.json',
   '/favicon.ico',
 ];
@@ -34,6 +35,62 @@ const API_ENDPOINTS = [
   '/api/auth/me',
   '/api/roles',
   '/api/tenant/resolve',
+];
+
+// Routes that should NOT be cached (require online connection)
+// Only these sections support offline: Appointments, Patient Care, Medical Records
+const ONLINE_ONLY_ROUTES = [
+  // Clinical Tools (all require online)
+  '/admin/lab-integration',
+  '/admin/medical-imaging',
+  '/admin/disease-reporting',
+  '/admin/ai-diagnostic-assistant',
+  
+  // Inventory & Services
+  '/admin/inventory',
+  '/admin/boarding',
+  '/admin/pos',
+  '/admin/referrals',
+  
+  // Financial (all require online)
+  '/admin/billing',
+  '/admin/accounts-receivable',
+  '/admin/expenses',
+  '/admin/refunds',
+  '/admin/payroll',
+  
+  // Administration (all require online)
+  '/marketplace',
+  '/admin/integration-settings',
+  '/settings',
+  '/admin/users-and-permissions',
+  '/custom-fields',
+  '/trash',
+  '/communications-unified',
+  '/admin/practice-admin',
+  '/practice-billing',
+  '/admin/practice-settings',
+  '/subscriptions',
+  '/admin/payment-gateway',
+  '/notifications',
+  '/admin/audit-logs',
+  '/admin/audit-reports',
+  
+  // Reports (all require online)
+  '/analytics-reporting',
+  '/advanced-reporting',
+  '/predictive-analytics',
+  '/audit-reports',
+  
+  // Customization
+  '/theme-customization',
+  '/dashboard-config',
+  '/custom-field-demo',
+  
+  // Help
+  '/help-center',
+  '/support-tickets',
+  '/knowledge-base',
 ];
 
 // Max cache items to prevent excessive storage usage
@@ -155,13 +212,19 @@ self.addEventListener('fetch', (event) => {
 // Handle navigation requests (page loads)
 // Strategy: Network first, fallback to cache, then offline page
 async function handleNavigationRequest(request) {
+  const url = new URL(request.url);
+  const pathname = url.pathname;
+
+  // Check if this is an online-only route
+  const isOnlineOnlyRoute = ONLINE_ONLY_ROUTES.some(route => pathname.startsWith(route));
+
   try {
     const networkResponse = await fetch(request, {
       cache: 'no-cache'
     });
 
-    // Cache successful HTML responses
-    if (networkResponse.ok) {
+    // Only cache if NOT an online-only route
+    if (networkResponse.ok && !isOnlineOnlyRoute) {
       const cache = await caches.open(PAGES_CACHE);
       cache.put(request, networkResponse.clone());
       limitCacheSize(PAGES_CACHE, MAX_CACHE_ITEMS.pages);
@@ -169,9 +232,26 @@ async function handleNavigationRequest(request) {
 
     return networkResponse;
   } catch (error) {
-    console.log('[SW] Network failed for navigation, trying cache');
+    console.log('[SW] Network failed for navigation:', pathname);
 
-    // Try page cache first
+    // For online-only routes, don't serve cached version
+    if (isOnlineOnlyRoute) {
+      console.log('[SW] Online-only route - redirecting to online-only page');
+      // Redirect to the online-only page with the attempted route as a parameter
+      const onlineOnlyPageUrl = `/admin/online-only?route=${encodeURIComponent(pathname)}`;
+      
+      // Try to get cached version of the online-only page
+      const onlineOnlyPage = await caches.match('/admin/online-only');
+      if (onlineOnlyPage) {
+        // Return a redirect response
+        return Response.redirect(new URL(onlineOnlyPageUrl, request.url).toString(), 302);
+      }
+      
+      // Fallback to inline response if online-only page not cached
+      return getOnlineOnlyOfflineResponse(pathname);
+    }
+
+    // Try page cache first for regular routes
     let cachedResponse = await caches.match(request);
     if (cachedResponse) {
       console.log('[SW] Serving page from cache:', request.url);
@@ -404,6 +484,141 @@ function getOfflineResponse() {
     headers: { 
       'Content-Type': 'text/html',
       'Cache-Control': 'no-cache'
+    }
+  });
+}
+
+// Helper: Generate offline response for online-only routes
+function getOnlineOnlyOfflineResponse(pathname) {
+  // Extract feature name from pathname
+  const featureName = pathname.split('/').pop().replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  
+  return new Response(`
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Connection Required - SmartDVM</title>
+        <style>
+          body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(to bottom right, #fef2f2, #fef3c7);
+          }
+          .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 450px;
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+          }
+          .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+          }
+          .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: #fee;
+            border: 1px solid #fcc;
+            border-radius: 2rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #dc2626;
+            margin-bottom: 1rem;
+          }
+          h1 {
+            font-size: 1.75rem;
+            margin-bottom: 0.5rem;
+            color: #1e293b;
+          }
+          .feature-name {
+            color: #2563eb;
+            font-weight: 600;
+          }
+          p {
+            color: #64748b;
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+          }
+          .warning {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 1rem;
+            margin: 1rem 0;
+            text-align: left;
+            border-radius: 0.5rem;
+          }
+          .warning strong {
+            color: #92400e;
+          }
+          button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 0.875rem 1.75rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: background 0.2s;
+          }
+          button:hover {
+            background: #1d4ed8;
+          }
+          .back-link {
+            margin-top: 1rem;
+            color: #64748b;
+            text-decoration: none;
+            font-size: 0.875rem;
+          }
+          .back-link:hover {
+            color: #2563eb;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="icon">🌐</div>
+          <div class="badge">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            Internet Connection Required
+          </div>
+          <h1>
+            <span class="feature-name">${featureName}</span><br/>
+            Requires Internet Connection
+          </h1>
+          <p>
+            This feature requires a real-time connection to work properly and cannot be accessed offline.
+          </p>
+          <div class="warning">
+            <strong>⚡ Online-Only Feature</strong><br/>
+            This tool integrates with external systems or requires live data that isn't available in your offline cache.
+          </div>
+          <button onclick="window.location.reload()">Try Reconnecting</button>
+          <br/>
+          <a href="/" class="back-link" onclick="history.back(); return false;">← Go Back</a>
+        </div>
+      </body>
+    </html>
+  `, {
+    status: 503,
+    statusText: 'Service Unavailable',
+    headers: { 
+      'Content-Type': 'text/html',
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
     }
   });
 }

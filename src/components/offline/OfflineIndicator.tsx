@@ -41,12 +41,20 @@ export function OfflineIndicator() {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-hide when online with no pending operations
+  // Auto-hide logic: only hide when online, no pending operations, and some time has passed
   useEffect(() => {
+    // Always show when offline
+    if (!isOnline) {
+      setShow(true);
+      return;
+    }
+
+    // When online with no pending operations, auto-hide after 5 seconds
     if (isOnline && stats && stats.pending === 0) {
       const timer = setTimeout(() => setShow(false), 5000);
       return () => clearTimeout(timer);
     } else {
+      // Show if there are pending operations
       setShow(true);
     }
   }, [isOnline, stats]);
@@ -56,6 +64,7 @@ export function OfflineIndicator() {
     return null;
   }
 
+  // Don't hide when offline - always show the offline indicator
   if (!show && isOnline && (!stats || stats.pending === 0)) {
     return null;
   }
