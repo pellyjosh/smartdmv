@@ -33,9 +33,23 @@ export async function registerServiceWorker(): Promise<PWARegistrationResult> {
     };
   }
 
+  // Check if we're in a secure context for service worker registration
+  const isSecureContext = location.protocol === 'https:' ||
+                         location.hostname === 'localhost' ||
+                         location.hostname.endsWith('.localhost');
+
+  if (!isSecureContext) {
+    console.warn('[PWA] Service workers require HTTPS. Skipping registration in insecure context.');
+    console.warn('[PWA] Your offline functionality still works via IndexedDB and sync queues.');
+    return {
+      success: false,
+      error: 'Service workers require a secure context (HTTPS)'
+    };
+  }
+
   try {
-    console.log('[PWA] Registering service worker at /pwa/sw.js with scope /');
-    const registration = await navigator.serviceWorker.register('/pwa/sw.js', {
+    console.log('[PWA] Registering service worker at /sw.js with scope /');
+    const registration = await navigator.serviceWorker.register('/sw.js', {
       scope: '/'
     });
 
