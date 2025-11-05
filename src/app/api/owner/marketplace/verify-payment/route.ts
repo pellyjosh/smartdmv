@@ -235,41 +235,32 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Build proper redirect URL to tenant subdomain/custom domain
-    // Detect if we're in development by checking OWNER_DOMAIN instead of NODE_ENV
-    const ownerDomain = process.env.OWNER_DOMAIN || 'localhost:9002';
-    const isLocalDev = ownerDomain.includes('localhost');
-    const protocol = isLocalDev ? 'http' : 'https';
+    // Build proper redirect URL
+    // Priority: custom domain > subdomain.ownerdomain > owner domain
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
     let redirectUrl: string;
     
-    console.log('[OWNER PAYMENT VERIFY] Environment detection:', {
-      ownerDomain,
-      isLocalDev,
-      protocol,
-      NODE_ENV: process.env.NODE_ENV,
-    });
-    
-    if (isLocalDev) {
-      // Development: Always use localhost
-      if (tenant.subdomain) {
-        // For local development with subdomain pattern like smartvet.localhost:9002
-        const port = ownerDomain.split(':')[1] || '9002';
-        redirectUrl = `${protocol}://${tenant.subdomain}.localhost:${port}/marketplace?payment=success&message=Payment completed successfully`;
-      } else {
-        // Simple localhost redirect (works for single-tenant dev setup)
-        redirectUrl = `${protocol}://localhost:9002/marketplace?payment=success&message=Payment completed successfully`;
-      }
-    } else {
-      // Production: Use custom domain if available, otherwise subdomain
+    if (process.env.NODE_ENV === 'production') {
+      // Production: Use custom domain if available, otherwise prefix subdomain to owner domain
+      const ownerDomain = process.env.OWNER_DOMAIN || 'version3demo.smartdvm.com';
+      
       if (tenant.customDomain) {
+        // Use tenant's custom domain
         redirectUrl = `${protocol}://${tenant.customDomain}/marketplace?payment=success&message=Payment completed successfully`;
       } else if (tenant.subdomain) {
-        // Get base domain from OWNER_DOMAIN (remove subdomain if any)
-        const baseDomain = ownerDomain.includes('.') ? ownerDomain.split('.').slice(-2).join('.') : ownerDomain;
-        redirectUrl = `${protocol}://${tenant.subdomain}.${baseDomain}/marketplace?payment=success&message=Payment completed successfully`;
+        // Prefix tenant subdomain to owner domain
+        redirectUrl = `${protocol}://${tenant.subdomain}.${ownerDomain}/marketplace?payment=success&message=Payment completed successfully`;
       } else {
-        // Fallback to owner domain with tenant ID
-        redirectUrl = `${protocol}://${ownerDomain}/marketplace?payment=success&message=Payment completed successfully&tenant=${tenant.id}`;
+        // Fallback to owner domain if no subdomain or custom domain
+        redirectUrl = `${protocol}://${ownerDomain}/marketplace?payment=success&message=Payment completed successfully`;
+      }
+    } else {
+      // Development: Use localhost with subdomain pattern
+      if (tenant.subdomain && process.env.OWNER_DOMAIN?.includes('localhost')) {
+        const port = process.env.OWNER_DOMAIN.split(':')[1] || '9002';
+        redirectUrl = `${protocol}://${tenant.subdomain}.localhost:${port}/marketplace?payment=success&message=Payment completed successfully`;
+      } else {
+        redirectUrl = `${protocol}://localhost:9002/marketplace?payment=success&message=Payment completed successfully`;
       }
     }
     
