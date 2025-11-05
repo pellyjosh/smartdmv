@@ -1424,6 +1424,24 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
         </span>
       ) : null;
 
+    // Check if parent menu has ALL children requiring online (for parent badge)
+    const parentRequiresOnline =
+      !isOnline &&
+      !isSubmenuItem &&
+      "submenu" in item &&
+      item.submenu &&
+      item.submenu.length > 0 &&
+      item.submenu.every((subItem) => subItem.offlineSupported === false);
+
+    const parentOfflineIndicator = parentRequiresOnline ? (
+      <span
+        className="ml-auto flex-shrink-0"
+        title="All features in this section require internet connection"
+      >
+        <WifiOff className="h-4 w-4 text-red-500" strokeWidth={2.5} />
+      </span>
+    ) : null;
+
     // Debug logging for offline indicator (can be removed in production)
     if (item.title === "Medical Imaging" || item.title === "Lab Integration") {
       console.log(`[AppSidebar Offline] ${item.title}:`, {
@@ -1451,10 +1469,15 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
             <ChevronDown className="h-4 w-4 ml-auto opacity-70 shrink-0" />
           ))}
         {offlineIndicator}
-        {addOnBadge && !offlineIndicator && addOnBadge}
+        {parentOfflineIndicator}
+        {addOnBadge &&
+          !offlineIndicator &&
+          !parentOfflineIndicator &&
+          addOnBadge}
         {websiteIntegrationBadge &&
           !addOnBadge &&
           !offlineIndicator &&
+          !parentOfflineIndicator &&
           websiteIntegrationBadge}
       </>
     );

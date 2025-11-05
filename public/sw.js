@@ -14,7 +14,7 @@
  * This ensures offline-supported features are immediately available without visiting them first.
  */
 
-const CACHE_VERSION = 'v1.0.6';
+const CACHE_VERSION = 'v1.0.7';
 const STATIC_CACHE = `smartdmv-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `smartdmv-dynamic-${CACHE_VERSION}`;
 const API_CACHE = `smartdmv-api-${CACHE_VERSION}`;
@@ -278,17 +278,23 @@ async function handleNavigationRequest(request) {
 
     // For online-only routes, don't serve cached version
     if (isOnlineOnlyRoute) {
-      console.log('[SW] Online-only route - redirecting to online-only page');
-      // Redirect to the online-only page with the attempted route as a parameter
-      const onlineOnlyPageUrl = `/admin/online-only?route=${encodeURIComponent(pathname)}`;
+      console.log('[SW] Online-only route - serving online-only page');
       
       // Try to get cached version of the online-only page
       const onlineOnlyPage = await caches.match('/admin/online-only');
       if (onlineOnlyPage) {
-        // Return a redirect response
-        return Response.redirect(new URL(onlineOnlyPageUrl, request.url).toString(), 302);
+        console.log('[SW] Serving cached online-only page');
+        // Clone and modify the response to add the route parameter via URL
+        // The page will read ?route= from the URL to show the attempted route
+        const modifiedResponse = new Response(onlineOnlyPage.body, {
+          status: onlineOnlyPage.status,
+          statusText: onlineOnlyPage.statusText,
+          headers: onlineOnlyPage.headers
+        });
+        return modifiedResponse;
       }
       
+      console.warn('[SW] Online-only page not cached, using fallback');
       // Fallback to inline response if online-only page not cached
       return getOnlineOnlyOfflineResponse(pathname);
     }

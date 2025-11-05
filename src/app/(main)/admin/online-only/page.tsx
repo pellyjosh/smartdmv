@@ -72,6 +72,19 @@ export default function OnlineOnlyPage() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-3xl">
       <div className="space-y-6">
+        {/* Back Button */}
+        <div className="flex justify-start">
+          <Button
+            onClick={handleGoBack}
+            variant="ghost"
+            size="sm"
+            className="gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </Button>
+        </div>
+
         {/* Header */}
         <div className="text-center">
           {isOnline ? (
