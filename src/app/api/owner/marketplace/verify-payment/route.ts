@@ -163,12 +163,56 @@ export async function GET(req: NextRequest) {
       .where(eq(tenants.id, transaction.tenantId))
       .limit(1);
 
+    if (!tenant) {
+      console.error('[OWNER PAYMENT VERIFY] Tenant not found:', transaction.tenantId);
+      return NextResponse.redirect(
+        new URL('/marketplace?payment=error&message=Tenant not found', req.url)
+      );
+    }
+
+    console.log('[OWNER PAYMENT VERIFY] Found tenant:', {
+      id: tenant.id,
+      subdomain: tenant.subdomain,
+      customDomain: tenant.customDomain,
+    });
+
+    console.log('[OWNER PAYMENT VERIFY] Transaction details:', {
+      id: transaction.id,
+      tenantId: transaction.tenantId,
+      addonId: transaction.addonId,
+      subscriptionId: transaction.subscriptionId,
+      amount: transaction.amount,
+      status: transaction.status,
+    });
+
     // Activate addon subscription in tenant DB
     if (transaction.addonId && transaction.subscriptionId) {
       try {
-        const tenantDb = await getCurrentTenantDb();
+        console.log('[OWNER PAYMENT VERIFY] Attempting to activate subscription:', transaction.subscriptionId, 'for tenant:', tenant.id);
         
-        await tenantDb
+        // Use the tenant-db-resolver pattern to get tenant database connection
+        const { getTenantDb } = await import('@/db/tenant-db');
+        
+        // Build tenant connection config from tenant record
+        const tenantConfig = {
+          tenantId: String(tenant.id),
+          databaseName: tenant.dbName!,
+          host: tenant.dbHost || undefined,
+          port: tenant.dbPort || undefined,
+          username: tenant.dbUser || undefined,
+          password: tenant.dbPassword || undefined,
+        };
+        
+        console.log('[OWNER PAYMENT VERIFY] Connecting to tenant database:', {
+          tenantId: tenantConfig.tenantId,
+          databaseName: tenantConfig.databaseName,
+          host: tenantConfig.host,
+        });
+        
+        const tenantConnection = await getTenantDb(tenantConfig);
+        const tenantDb = tenantConnection.db;
+        
+        const updateResult = await tenantDb
           .update(practiceAddons)
           .set({
             paymentStatus: 'ACTIVE',
@@ -176,29 +220,51 @@ export async function GET(req: NextRequest) {
             lastActivatedAt: new Date(),
             updatedAt: new Date(),
           })
-          .where(eq(practiceAddons.id, transaction.subscriptionId));
+          .where(eq(practiceAddons.id, transaction.subscriptionId))
+          .returning();
 
-        console.log('[OWNER PAYMENT VERIFY] Addon subscription activated:', transaction.subscriptionId);
+        console.log('[OWNER PAYMENT VERIFY] Addon subscription activated:', transaction.subscriptionId, 'Updated rows:', updateResult.length);
       } catch (tenantError) {
         console.error('[OWNER PAYMENT VERIFY] Error activating subscription:', tenantError);
         // Don't fail the whole process, payment is already verified
       }
+    } else {
+      console.warn('[OWNER PAYMENT VERIFY] Skipping subscription activation - missing data:', {
+        hasAddonId: !!transaction.addonId,
+        hasSubscriptionId: !!transaction.subscriptionId,
+      });
     }
 
-    // Build proper redirect URL to tenant subdomain
-    const host = req.headers.get('host') || 'localhost:9002';
-    const protocol = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+    // Build proper redirect URL to tenant subdomain/custom domain
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    let redirectUrl: string;
     
-    // Use tenant subdomain if available, otherwise use current host
-    let redirectHost = host;
-    if (tenant?.subdomain) {
-      const baseDomain = host.replace(/^[^.]+\./, ''); // Remove subdomain from host
-      redirectHost = `${tenant.subdomain}.${baseDomain}`;
+    if (process.env.NODE_ENV === 'production') {
+      // Production: Use custom domain if available, otherwise subdomain
+      if (tenant.customDomain) {
+        redirectUrl = `${protocol}://${tenant.customDomain}/marketplace?payment=success&message=Payment completed successfully`;
+      } else if (tenant.subdomain) {
+        // Get base domain from OWNER_DOMAIN (remove subdomain if any)
+        const ownerDomain = process.env.OWNER_DOMAIN || 'app.smartdvm.com';
+        const baseDomain = ownerDomain.includes('.') ? ownerDomain.split('.').slice(-2).join('.') : ownerDomain;
+        redirectUrl = `${protocol}://${tenant.subdomain}.${baseDomain}/marketplace?payment=success&message=Payment completed successfully`;
+      } else {
+        // Fallback to owner domain with tenant ID
+        redirectUrl = `${protocol}://${process.env.OWNER_DOMAIN}/marketplace?payment=success&message=Payment completed successfully&tenant=${tenant.id}`;
+      }
+    } else {
+      // Development: Use localhost with subdomain pattern if configured, otherwise just localhost
+      if (tenant.subdomain && process.env.OWNER_DOMAIN?.includes('localhost')) {
+        // For local development, if using subdomain pattern like smartvet.localhost:9002
+        const port = process.env.OWNER_DOMAIN.split(':')[1] || '9002';
+        redirectUrl = `${protocol}://${tenant.subdomain}.localhost:${port}/marketplace?payment=success&message=Payment completed successfully`;
+      } else {
+        // Simple localhost redirect (works for single-tenant dev setup)
+        redirectUrl = `${protocol}://localhost:9002/marketplace?payment=success&message=Payment completed successfully`;
+      }
     }
     
-    const redirectUrl = `${protocol}://${redirectHost}/marketplace?payment=success&message=Payment completed successfully`;
-    
-    console.log('[OWNER PAYMENT VERIFY] Redirecting to:', redirectUrl);
+    console.log('[OWNER PAYMENT VERIFY] Redirecting to tenant URL:', redirectUrl);
 
     return NextResponse.redirect(redirectUrl);
 
@@ -208,7 +274,11 @@ export async function GET(req: NextRequest) {
     const host = req.headers.get('host') || 'localhost:9002';
     const protocol = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
     const errorMessage = encodeURIComponent(error instanceof Error ? error.message : 'Verification failed');
+    
+    // Always redirect to marketplace on current host (works for both localhost and production)
     const redirectUrl = `${protocol}://${host}/marketplace?payment=error&message=${errorMessage}`;
+    
+    console.log('[OWNER PAYMENT VERIFY] Error redirect to:', redirectUrl);
     
     return NextResponse.redirect(redirectUrl);
   }

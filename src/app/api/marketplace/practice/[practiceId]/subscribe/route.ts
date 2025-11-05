@@ -89,12 +89,16 @@ export async function POST(
       return NextResponse.json({ error: 'Practice not found.' }, { status: 404 });
     }
 
-    // Get company/tenant ID from headers or context
-    const subdomain = request.headers.get('x-tenant-id') || 'smartvet'; // Fallback for development
+    // Get company/tenant ID from current tenant context
+    const { getCurrentTenant } = await import('@/lib/tenant-db-resolver');
+    const tenantInfo = await getCurrentTenant();
     
-    // TODO: Get actual tenant ID from owner database using subdomain
-    // For now, we'll use a placeholder
-    const tenantId = 1; // This should be fetched from owner DB based on subdomain
+    if (!tenantInfo) {
+      return NextResponse.json({ error: 'Tenant information not found.' }, { status: 500 });
+    }
+    
+    const tenantId = tenantInfo.id;
+    console.log('[SUBSCRIBE] Using tenant ID:', tenantId, 'for practice:', practiceId);
 
     // Calculate addon price based on tier and billing cycle
     let addonPrice = 0;

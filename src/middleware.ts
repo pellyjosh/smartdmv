@@ -69,7 +69,7 @@ export async function middleware(request: NextRequest) {
   // Handle API routes first
   if (pathname.startsWith('/api/')) {
     // Skip middleware for payment callback/webhook routes (no authentication required)
-    if (pathname.includes('/callback') || pathname.includes('/webhook') || pathname.includes('/payment-callback')) {
+    if (pathname.includes('/callback') || pathname.includes('/webhook') || pathname.includes('/payment-callback') || pathname.includes('/verify-payment')) {
       console.log(`[Middleware] Payment callback/webhook route detected, allowing without auth: ${pathname}`);
       const tenantIdentifier = extractTenantFromHostname(hostname);
       if (tenantIdentifier && !isOwnerDomain) {
@@ -149,7 +149,8 @@ export async function middleware(request: NextRequest) {
   const tenantIdentifier = extractTenantFromHostname(hostname);
   
   // If we're on the owner domain but not accessing owner routes, redirect to owner auth
-  if (isOwnerDomain && !pathname.startsWith('/api/') && pathname !== '/') {
+  // Exception: Allow /marketplace on owner domain (for payment redirects)
+  if (isOwnerDomain && !pathname.startsWith('/api/') && pathname !== '/' && !pathname.startsWith('/marketplace')) {
     console.log(`[Middleware] Non-owner route on owner domain, redirecting to owner auth`);
     return NextResponse.redirect(new URL('/owner-auth', request.url));
   }

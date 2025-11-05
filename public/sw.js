@@ -14,7 +14,7 @@
  * This ensures offline-supported features are immediately available without visiting them first.
  */
 
-const CACHE_VERSION = 'v1.0.4';
+const CACHE_VERSION = 'v1.0.6';
 const STATIC_CACHE = `smartdmv-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `smartdmv-dynamic-${CACHE_VERSION}`;
 const API_CACHE = `smartdmv-api-${CACHE_VERSION}`;
@@ -550,15 +550,15 @@ function getOnlineOnlyOfflineResponse(pathname) {
             justify-content: center;
             min-height: 100vh;
             margin: 0;
-            background: linear-gradient(to bottom right, #fef2f2, #fef3c7);
+            background: white;
           }
           .container {
             text-align: center;
-            padding: 2rem;
-            max-width: 450px;
+            padding: 2.5rem;
+            max-width: 480px;
             background: white;
             border-radius: 1rem;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
           }
           .icon {
             font-size: 4rem;
@@ -569,61 +569,72 @@ function getOnlineOnlyOfflineResponse(pathname) {
             align-items: center;
             gap: 0.5rem;
             padding: 0.5rem 1rem;
-            background: #fee;
-            border: 1px solid #fcc;
+            background: #dbeafe;
+            border: 1px solid #93c5fd;
             border-radius: 2rem;
             font-size: 0.875rem;
-            font-weight: 500;
-            color: #dc2626;
-            margin-bottom: 1rem;
+            font-weight: 600;
+            color: #1e40af;
+            margin-bottom: 1.5rem;
           }
           h1 {
             font-size: 1.75rem;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.75rem;
             color: #1e293b;
+            line-height: 1.3;
           }
           .feature-name {
             color: #2563eb;
-            font-weight: 600;
+            font-weight: 700;
           }
           p {
             color: #64748b;
             margin-bottom: 1.5rem;
             line-height: 1.6;
+            font-size: 1rem;
           }
-          .warning {
-            background: #fef3c7;
-            border-left: 4px solid #f59e0b;
-            padding: 1rem;
-            margin: 1rem 0;
+          .info-box {
+            background: #eff6ff;
+            border-left: 4px solid #2563eb;
+            padding: 1.25rem;
+            margin: 1.5rem 0;
             text-align: left;
             border-radius: 0.5rem;
           }
-          .warning strong {
-            color: #92400e;
+          .info-box strong {
+            color: #1e40af;
+            display: block;
+            margin-bottom: 0.5rem;
+          }
+          .info-box p {
+            margin: 0;
+            font-size: 0.9rem;
+            color: #475569;
           }
           button {
             background: #2563eb;
             color: white;
             border: none;
-            padding: 0.875rem 1.75rem;
+            padding: 1rem 2rem;
             border-radius: 0.5rem;
             cursor: pointer;
             font-size: 1rem;
             font-weight: 600;
-            transition: background 0.2s;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
           }
           button:hover {
             background: #1d4ed8;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
           }
-          .back-link {
-            margin-top: 1rem;
-            color: #64748b;
-            text-decoration: none;
+          .hint {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: #f8fafc;
+            border-radius: 0.5rem;
             font-size: 0.875rem;
-          }
-          .back-link:hover {
-            color: #2563eb;
+            color: #64748b;
           }
         </style>
       </head>
@@ -631,10 +642,10 @@ function getOnlineOnlyOfflineResponse(pathname) {
         <div class="container">
           <div class="icon">🌐</div>
           <div class="badge">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/>
-              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
             </svg>
             Internet Connection Required
           </div>
@@ -643,15 +654,16 @@ function getOnlineOnlyOfflineResponse(pathname) {
             Requires Internet Connection
           </h1>
           <p>
-            This feature requires a real-time connection to work properly and cannot be accessed offline.
+            This feature needs a real-time connection to work properly and cannot be accessed offline.
           </p>
-          <div class="warning">
-            <strong>⚡ Online-Only Feature</strong><br/>
-            This tool integrates with external systems or requires live data that isn't available in your offline cache.
+          <div class="info-box">
+            <strong>⚡ Why This Feature Requires Internet</strong>
+            <p>This tool integrates with external systems or requires live data that isn't available in your offline cache.</p>
           </div>
           <button onclick="window.location.reload()">Try Reconnecting</button>
-          <br/>
-          <a href="/" class="back-link" onclick="history.back(); return false;">← Go Back</a>
+          <div class="hint">
+            💡 <strong>Tip:</strong> Use the sidebar to navigate to offline-supported features like Appointments, Patient Care, or Medical Records.
+          </div>
         </div>
       </body>
     </html>

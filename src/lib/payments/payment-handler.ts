@@ -290,7 +290,7 @@ export async function createMarketplacePayment(params: {
     console.log('[MARKETPLACE PAYMENT] NODE_ENV:', nodeEnv, '| Looking for environment:', environment);
 
     // Get active, verified owner payment configuration for this currency
-    const [configResult] = await ownerDb
+    let [configResult] = await ownerDb
       .select({
         config: ownerPaymentConfigurations,
         provider: paymentProviders,
@@ -307,6 +307,30 @@ export async function createMarketplacePayment(params: {
       .limit(1);
 
     console.log('[MARKETPLACE PAYMENT] Query result:', configResult ? 'Found' : 'Not found');
+    
+    // Fallback to sandbox if production config not found
+    if (!configResult && environment === 'production') {
+      console.log('[MARKETPLACE PAYMENT] No production config found, falling back to sandbox');
+      [configResult] = await ownerDb
+        .select({
+          config: ownerPaymentConfigurations,
+          provider: paymentProviders,
+        })
+        .from(ownerPaymentConfigurations)
+        .leftJoin(paymentProviders, eq(ownerPaymentConfigurations.providerId, paymentProviders.id))
+        .where(
+          and(
+            eq(ownerPaymentConfigurations.isActive, true),
+            eq(ownerPaymentConfigurations.isVerified, true),
+            eq(ownerPaymentConfigurations.environment, 'sandbox')
+          )
+        )
+        .limit(1);
+      
+      if (configResult) {
+        console.log('[MARKETPLACE PAYMENT] Using sandbox config as fallback');
+      }
+    }
     if (configResult) {
       console.log('[MARKETPLACE PAYMENT] Config:', {
         id: configResult.config?.id,
@@ -430,8 +454,9 @@ export async function createMarketplacePayment(params: {
           practiceId,
           type: 'marketplace',
         },
-        // We'll update the callback URL after getting the reference
-        callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002'}/api/owner/marketplace/verify-payment?transactionId=${transaction.id}&provider=paystack`,
+        // Use OWNER_DOMAIN for the callback URL since this is an owner API endpoint
+        // This ensures Paystack redirects to the owner domain, not a tenant subdomain
+        callbackUrl: `${process.env.NODE_ENV === 'production' ? 'https' : 'http'}://${process.env.OWNER_DOMAIN || 'localhost:9002'}/api/owner/marketplace/verify-payment?transactionId=${transaction.id}&provider=paystack`,
       });
 
       // Update transaction with Paystack reference
