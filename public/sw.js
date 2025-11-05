@@ -4,16 +4,17 @@
  * 
  * CACHING STRATEGY:
  * - Navigation (HTML pages): Network-first → Cache fallback → Offline page
+ * - Offline-Supported Routes: Precached on install (Appointments, Patient Care, Medical Records)
  * - Next.js Static Assets (_next/static/): Cache-first with background update (stale-while-revalidate)
  * - Next.js Data (_next/data/): Network-first with cache fallback
  * - API Requests: Network-first for GET, cache as backup; POST/PUT/DELETE queued for sync
  * - Media Assets (images, videos): Cache-first for performance
  * - Static Assets (CSS, JS, fonts): Cache-first with background update
  * 
- * This ensures the entire app is cached as users navigate, making it fully functional offline.
+ * This ensures offline-supported features are immediately available without visiting them first.
  */
 
-const CACHE_VERSION = 'v1.0.3';
+const CACHE_VERSION = 'v1.0.4';
 const STATIC_CACHE = `smartdmv-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `smartdmv-dynamic-${CACHE_VERSION}`;
 const API_CACHE = `smartdmv-api-${CACHE_VERSION}`;
@@ -28,6 +29,30 @@ const STATIC_ASSETS = [
   '/admin/online-only',
   '/manifest.json',
   '/favicon.ico',
+];
+
+// Offline-supported routes to precache (Appointments, Patient Care, Medical Records)
+const OFFLINE_SUPPORTED_ROUTES = [
+  // Admin Dashboard
+  '/administrator',
+  
+  // Appointments
+  '/admin/appointments',
+  '/admin/appointment-requests',
+  
+  // Patient Care
+  '/admin/clients',
+  '/admin/contact-requests',
+  '/admin/pet-admissions',
+  '/admin/health-plans',
+  '/admin/health-resources',
+  '/admin/vaccinations',
+  
+  // Medical Records
+  '/admin/soap-notes',
+  '/admin/patient-timeline',
+  '/admin/whiteboard',
+  '/admin/checklists',
 ];
 
 // API endpoints to cache
@@ -101,23 +126,40 @@ const MAX_CACHE_ITEMS = {
   dynamic: 100
 };
 
-// Install event - cache static assets
+// Install event - cache static assets and offline-supported routes
 self.addEventListener('install', (event) => {
   console.log('[SW] Install event - version', CACHE_VERSION);
   event.waitUntil(
-    caches.open(STATIC_CACHE)
-      .then((cache) => {
+    Promise.all([
+      // Cache static assets
+      caches.open(STATIC_CACHE).then((cache) => {
         console.log('[SW] Caching static assets');
-        // Use addAll with error handling
         return cache.addAll(STATIC_ASSETS).catch(err => {
           console.error('[SW] Failed to cache some static assets:', err);
-          // Still continue even if some assets fail
         });
+      }),
+      // Precache offline-supported routes
+      caches.open(PAGES_CACHE).then((cache) => {
+        console.log('[SW] Precaching offline-supported routes');
+        // Cache routes one by one to avoid failures stopping the entire process
+        return Promise.allSettled(
+          OFFLINE_SUPPORTED_ROUTES.map(route => 
+            cache.add(route).catch(err => {
+              console.warn('[SW] Failed to precache route:', route, err);
+            })
+          )
+        );
       })
-      .then(() => {
-        console.log('[SW] Static assets cached successfully');
-        return self.skipWaiting();
-      })
+    ])
+    .then(() => {
+      console.log('[SW] All caching completed successfully');
+      return self.skipWaiting();
+    })
+    .catch(err => {
+      console.error('[SW] Install event failed:', err);
+      // Still skip waiting even if some caching failed
+      return self.skipWaiting();
+    })
   );
 });
 
