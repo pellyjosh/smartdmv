@@ -1,20 +1,32 @@
 /**
  * Service Worker for SmartDVM PWA
  * Handles caching, offline functionality, and background sync
+ * 
+ * CACHING STRATEGY:
+ * - Navigation (HTML pages): Network-first → Cache fallback → Offline page
+ * - Next.js Static Assets (_next/static/): Cache-first with background update (stale-while-revalidate)
+ * - Next.js Data (_next/data/): Network-first with cache fallback
+ * - API Requests: Network-first for GET, cache as backup; POST/PUT/DELETE queued for sync
+ * - Media Assets (images, videos): Cache-first for performance
+ * - Static Assets (CSS, JS, fonts): Cache-first with background update
+ * 
+ * This ensures the entire app is cached as users navigate, making it fully functional offline.
  */
 
-const CACHE_NAME = 'smartdmv-v1.0.0';
-const STATIC_CACHE = 'smartdmv-static-v1.0.0';
-const API_CACHE = 'smartdmv-api-v1.0.0';
+const CACHE_VERSION = 'v1.0.1';
+const STATIC_CACHE = `smartdmv-static-${CACHE_VERSION}`;
+const DYNAMIC_CACHE = `smartdmv-dynamic-${CACHE_VERSION}`;
+const API_CACHE = `smartdmv-api-${CACHE_VERSION}`;
+const PAGES_CACHE = `smartdmv-pages-${CACHE_VERSION}`;
+const ASSETS_CACHE = `smartdmv-assets-${CACHE_VERSION}`;
 
 // Files to cache immediately on install
 const STATIC_ASSETS = [
   '/',
+  '/auth/login',
   '/offline',
   '/manifest.json',
   '/favicon.ico',
-  // Add critical CSS and JS files that are known
-  // These will be dynamically added during build
 ];
 
 // API endpoints to cache
@@ -24,52 +36,83 @@ const API_ENDPOINTS = [
   '/api/tenant/resolve',
 ];
 
+// Max cache items to prevent excessive storage usage
+const MAX_CACHE_ITEMS = {
+  pages: 50,
+  assets: 100,
+  api: 50,
+  dynamic: 100
+};
+
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
-  console.log('[SW] Install event');
+  console.log('[SW] Install event - version', CACHE_VERSION);
   event.waitUntil(
-    Promise.all([
-      // Cache static assets
-      caches.open(STATIC_CACHE).then((cache) => {
+    caches.open(STATIC_CACHE)
+      .then((cache) => {
         console.log('[SW] Caching static assets');
-        return cache.addAll(STATIC_ASSETS);
-      }),
-      // Skip waiting to activate immediately
-      self.skipWaiting()
-    ])
+        // Use addAll with error handling
+        return cache.addAll(STATIC_ASSETS).catch(err => {
+          console.error('[SW] Failed to cache some static assets:', err);
+          // Still continue even if some assets fail
+        });
+      })
+      .then(() => {
+        console.log('[SW] Static assets cached successfully');
+        return self.skipWaiting();
+      })
   );
 });
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activate event');
+  const currentCaches = [STATIC_CACHE, DYNAMIC_CACHE, API_CACHE, PAGES_CACHE, ASSETS_CACHE];
+  
   event.waitUntil(
-    Promise.all([
-      // Clean up old caches
-      caches.keys().then((cacheNames) => {
+    caches.keys()
+      .then((cacheNames) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
-            if (cacheName !== STATIC_CACHE && cacheName !== API_CACHE && cacheName !== CACHE_NAME) {
+            if (!currentCaches.includes(cacheName)) {
               console.log('[SW] Deleting old cache:', cacheName);
               return caches.delete(cacheName);
             }
           })
         );
-      }),
-      // Take control of all clients
-      self.clients.claim()
-    ])
+      })
+      .then(() => {
+        console.log('[SW] Service worker activated');
+        return self.clients.claim();
+      })
   );
 });
 
-// Fetch event - handle requests
+// Fetch event - handle requests with comprehensive caching
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // Skip chrome-extension and other non-http requests
+  if (!url.protocol.startsWith('http')) {
+    return;
+  }
+
   // Handle navigation requests (HTML pages)
   if (request.mode === 'navigate') {
     event.respondWith(handleNavigationRequest(request));
+    return;
+  }
+
+  // Handle Next.js static files (_next/static/)
+  if (url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(handleNextStaticAsset(request));
+    return;
+  }
+
+  // Handle Next.js data files (_next/data/)
+  if (url.pathname.startsWith('/_next/data/')) {
+    event.respondWith(handleNextDataRequest(request));
     return;
   }
 
@@ -79,47 +122,290 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle static assets
+  // Handle images and media
+  if (isMediaAsset(url.pathname)) {
+    event.respondWith(handleMediaAsset(request));
+    return;
+  }
+
+  // Handle other static assets (CSS, JS, fonts, etc.)
   if (isStaticAsset(request)) {
     event.respondWith(handleStaticAsset(request));
     return;
   }
 
-  // Default fetch
-  event.respondWith(fetch(request));
+  // Default: try network, fallback to cache
+  event.respondWith(
+    fetch(request)
+      .then(response => {
+        // Cache successful responses
+        if (response && response.status === 200) {
+          const responseClone = response.clone();
+          caches.open(DYNAMIC_CACHE).then(cache => {
+            cache.put(request, responseClone);
+            limitCacheSize(DYNAMIC_CACHE, MAX_CACHE_ITEMS.dynamic);
+          });
+        }
+        return response;
+      })
+      .catch(() => caches.match(request))
+  );
 });
 
 // Handle navigation requests (page loads)
+// Strategy: Network first, fallback to cache, then offline page
 async function handleNavigationRequest(request) {
   try {
-    // Try network first for navigation
-    const networkResponse = await fetch(request);
+    const networkResponse = await fetch(request, {
+      cache: 'no-cache'
+    });
 
-    // If successful, cache for offline use
+    // Cache successful HTML responses
     if (networkResponse.ok) {
-      const cache = await caches.open(STATIC_CACHE);
+      const cache = await caches.open(PAGES_CACHE);
       cache.put(request, networkResponse.clone());
+      limitCacheSize(PAGES_CACHE, MAX_CACHE_ITEMS.pages);
     }
 
     return networkResponse;
   } catch (error) {
     console.log('[SW] Network failed for navigation, trying cache');
 
-    // Try cache fallback
-    const cachedResponse = await caches.match(request);
+    // Try page cache first
+    let cachedResponse = await caches.match(request);
+    if (cachedResponse) {
+      console.log('[SW] Serving page from cache:', request.url);
+      return cachedResponse;
+    }
+
+    // Try static cache
+    cachedResponse = await caches.match(request, { cacheName: STATIC_CACHE });
     if (cachedResponse) {
       return cachedResponse;
     }
 
+    // For login page, try to find it in any cache
+    const url = new URL(request.url);
+    if (url.pathname === '/auth/login' || url.pathname.includes('/login')) {
+      const loginCache = await caches.match('/auth/login');
+      if (loginCache) {
+        console.log('[SW] Serving cached login page');
+        return loginCache;
+      }
+    }
+
     // Return offline page
-    return caches.match('/offline').then((response) => {
-      return response || new Response('Offline - Please check your connection', {
-        status: 503,
-        statusText: 'Service Unavailable',
-        headers: { 'Content-Type': 'text/plain' }
-      });
-    });
+    const offlinePage = await caches.match('/offline');
+    if (offlinePage) {
+      console.log('[SW] Serving offline page');
+      return offlinePage;
+    }
+
+    // Last resort: inline offline page
+    return getOfflineResponse();
   }
+}
+
+// Handle Next.js static assets (_next/static/)
+// Strategy: Cache first with network update (stale-while-revalidate)
+async function handleNextStaticAsset(request) {
+  const cache = await caches.open(ASSETS_CACHE);
+  const cachedResponse = await cache.match(request);
+
+  // Return cached immediately if available
+  if (cachedResponse) {
+    // Update cache in background
+    fetch(request).then(response => {
+      if (response && response.status === 200) {
+        cache.put(request, response.clone());
+      }
+    }).catch(() => {
+      // Network failed, keep using cached version
+    });
+
+    return cachedResponse;
+  }
+
+  // Not in cache, fetch from network
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse && networkResponse.status === 200) {
+      cache.put(request, networkResponse.clone());
+      limitCacheSize(ASSETS_CACHE, MAX_CACHE_ITEMS.assets);
+    }
+    return networkResponse;
+  } catch (error) {
+    console.error('[SW] Failed to fetch Next.js asset:', request.url);
+    throw error;
+  }
+}
+
+// Handle Next.js data requests (_next/data/)
+// Strategy: Network first with cache fallback
+async function handleNextDataRequest(request) {
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse && networkResponse.status === 200) {
+      const cache = await caches.open(DYNAMIC_CACHE);
+      cache.put(request, networkResponse.clone());
+      limitCacheSize(DYNAMIC_CACHE, MAX_CACHE_ITEMS.dynamic);
+    }
+    return networkResponse;
+  } catch (error) {
+    const cachedResponse = await caches.match(request);
+    if (cachedResponse) {
+      console.log('[SW] Serving Next.js data from cache');
+      return cachedResponse;
+    }
+    throw error;
+  }
+}
+
+// Handle media assets (images, videos, etc.)
+// Strategy: Cache first for better performance
+async function handleMediaAsset(request) {
+  const cache = await caches.open(ASSETS_CACHE);
+  const cachedResponse = await cache.match(request);
+
+  if (cachedResponse) {
+    return cachedResponse;
+  }
+
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse && networkResponse.status === 200) {
+      cache.put(request, networkResponse.clone());
+      limitCacheSize(ASSETS_CACHE, MAX_CACHE_ITEMS.assets);
+    }
+    return networkResponse;
+  } catch (error) {
+    console.error('[SW] Failed to fetch media asset:', request.url);
+    throw error;
+  }
+}
+
+// Helper: Check if pathname is a media asset
+function isMediaAsset(pathname) {
+  const mediaExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.avif', '.ico', '.mp4', '.webm', '.mp3', '.wav'];
+  return mediaExtensions.some(ext => pathname.endsWith(ext));
+}
+
+// Helper: Limit cache size to prevent excessive storage
+async function limitCacheSize(cacheName, maxItems) {
+  const cache = await caches.open(cacheName);
+  const keys = await cache.keys();
+  
+  if (keys.length > maxItems) {
+    // Delete oldest items (FIFO)
+    const itemsToDelete = keys.length - maxItems;
+    for (let i = 0; i < itemsToDelete; i++) {
+      await cache.delete(keys[i]);
+    }
+    console.log(`[SW] Trimmed ${cacheName} cache to ${maxItems} items`);
+  }
+}
+
+// Helper: Generate offline response
+function getOfflineResponse() {
+  return new Response(`
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Offline - SmartDVM</title>
+        <style>
+          body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(to bottom right, #dbeafe, #e0e7ff);
+          }
+          .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 400px;
+          }
+          .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+          }
+          h1 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: #1e293b;
+          }
+          p {
+            color: #64748b;
+            margin-bottom: 1.5rem;
+            line-height: 1.5;
+          }
+          button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+          }
+          button:hover {
+            background: #1d4ed8;
+          }
+          .features {
+            margin-top: 2rem;
+            text-align: left;
+            background: white;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          }
+          .features h2 {
+            font-size: 1rem;
+            margin: 0 0 0.5rem 0;
+            color: #1e293b;
+          }
+          .features ul {
+            margin: 0;
+            padding-left: 1.5rem;
+            color: #64748b;
+            font-size: 0.875rem;
+          }
+          .features li {
+            margin: 0.25rem 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="icon">📡</div>
+          <h1>You're Offline</h1>
+          <p>SmartDVM couldn't connect to the server. The app works offline with cached data!</p>
+          <button onclick="window.location.reload()">Try Reconnecting</button>
+          
+          <div class="features">
+            <h2>✨ Available Offline:</h2>
+            <ul>
+              <li>View cached pages</li>
+              <li>Access previously loaded data</li>
+              <li>Browse stored records</li>
+            </ul>
+          </div>
+        </div>
+      </body>
+    </html>
+  `, {
+    status: 503,
+    statusText: 'Service Unavailable',
+    headers: { 
+      'Content-Type': 'text/html',
+      'Cache-Control': 'no-cache'
+    }
+  });
 }
 
 // Handle API requests
@@ -220,25 +506,36 @@ async function handleApiRequest(request) {
   }
 }
 
-// Handle static assets
+// Handle static assets (CSS, JS, fonts, etc.)
+// Strategy: Cache first for better performance
 async function handleStaticAsset(request) {
+  const cache = await caches.open(ASSETS_CACHE);
+  const cachedResponse = await cache.match(request);
+
+  // Return cached version immediately
+  if (cachedResponse) {
+    // Update cache in background
+    fetch(request).then(response => {
+      if (response && response.status === 200) {
+        cache.put(request, response.clone());
+      }
+    }).catch(() => {
+      // Network failed, keep using cached version
+    });
+
+    return cachedResponse;
+  }
+
+  // Not in cache, fetch from network
   try {
-    // Try network first
     const networkResponse = await fetch(request);
-    if (networkResponse.ok) {
-      // Cache successful responses
-      const cache = await caches.open(STATIC_CACHE);
+    if (networkResponse && networkResponse.status === 200) {
       cache.put(request, networkResponse.clone());
+      limitCacheSize(ASSETS_CACHE, MAX_CACHE_ITEMS.assets);
     }
     return networkResponse;
   } catch (error) {
-    // Fallback to cache
-    const cachedResponse = await caches.match(request);
-    if (cachedResponse) {
-      return cachedResponse;
-    }
-
-    // Return offline response
+    // Return error response
     return new Response('Asset not available offline', {
       status: 503,
       statusText: 'Service Unavailable'
@@ -246,17 +543,17 @@ async function handleStaticAsset(request) {
   }
 }
 
-// Check if request is for a static asset
+// Check if request is for a static asset (excluding Next.js paths handled separately)
 function isStaticAsset(request) {
   const url = new URL(request.url);
   const pathname = url.pathname;
 
   // Static file extensions
-  const staticExtensions = ['.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf', '.eot'];
+  const staticExtensions = ['.js', '.css', '.woff', '.woff2', '.ttf', '.eot', '.otf'];
 
-  return staticExtensions.some(ext => pathname.endsWith(ext)) ||
-         pathname.startsWith('/_next/static/') ||
-         pathname.startsWith('/assets/');
+  // Check extensions but exclude _next paths (handled separately)
+  return staticExtensions.some(ext => pathname.endsWith(ext)) && 
+         !pathname.startsWith('/_next/');
 }
 
 // Background sync for failed requests
@@ -333,7 +630,7 @@ setInterval(() => {
 
 async function cleanupOldCaches() {
   const cacheNames = await caches.keys();
-  const validCaches = [STATIC_CACHE, API_CACHE, CACHE_NAME];
+  const validCaches = [STATIC_CACHE, DYNAMIC_CACHE, API_CACHE, PAGES_CACHE, ASSETS_CACHE];
 
   const cleanupPromises = cacheNames
     .filter(cacheName => !validCaches.includes(cacheName))
