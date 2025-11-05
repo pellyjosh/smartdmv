@@ -35,8 +35,19 @@ export default function OnlineOnlyPage() {
 
   useEffect(() => {
     // Extract feature name from route
-    if (attemptedRoute) {
-      const pathParts = attemptedRoute.split("/");
+    // Check both query parameter and injected window variable (from service worker)
+    let route = attemptedRoute;
+
+    // If service worker injected the route, use that
+    if (
+      typeof window !== "undefined" &&
+      (window as any).__OFFLINE_ATTEMPTED_ROUTE__
+    ) {
+      route = (window as any).__OFFLINE_ATTEMPTED_ROUTE__;
+    }
+
+    if (route) {
+      const pathParts = route.split("/");
       const lastPart =
         pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2];
       const name = lastPart

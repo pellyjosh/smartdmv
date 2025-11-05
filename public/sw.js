@@ -14,7 +14,7 @@
  * This ensures offline-supported features are immediately available without visiting them first.
  */
 
-const CACHE_VERSION = 'v1.0.7';
+const CACHE_VERSION = 'v1.0.9';
 const STATIC_CACHE = `smartdmv-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `smartdmv-dynamic-${CACHE_VERSION}`;
 const API_CACHE = `smartdmv-api-${CACHE_VERSION}`;
@@ -131,12 +131,27 @@ self.addEventListener('install', (event) => {
   console.log('[SW] Install event - version', CACHE_VERSION);
   event.waitUntil(
     Promise.all([
-      // Cache static assets
+      // Cache static assets (non-page assets first)
       caches.open(STATIC_CACHE).then((cache) => {
         console.log('[SW] Caching static assets');
-        return cache.addAll(STATIC_ASSETS).catch(err => {
+        const nonPageAssets = ['/manifest.json', '/favicon.ico'];
+        return cache.addAll(nonPageAssets).catch(err => {
           console.error('[SW] Failed to cache some static assets:', err);
         });
+      }),
+      // Cache critical pages individually with error handling
+      caches.open(PAGES_CACHE).then(async (cache) => {
+        console.log('[SW] Caching critical pages');
+        const criticalPages = ['/', '/auth/login', '/offline', '/admin/online-only'];
+        
+        for (const page of criticalPages) {
+          try {
+            await cache.add(page);
+            console.log(`[SW] Successfully cached: ${page}`);
+          } catch (err) {
+            console.warn(`[SW] Failed to cache page: ${page}`, err);
+          }
+        }
       }),
       // Precache offline-supported routes
       caches.open(PAGES_CACHE).then((cache) => {
@@ -278,23 +293,32 @@ async function handleNavigationRequest(request) {
 
     // For online-only routes, don't serve cached version
     if (isOnlineOnlyRoute) {
-      console.log('[SW] Online-only route - serving online-only page');
+      console.log('[SW] Online-only route detected:', pathname);
       
       // Try to get cached version of the online-only page
       const onlineOnlyPage = await caches.match('/admin/online-only');
+      
       if (onlineOnlyPage) {
-        console.log('[SW] Serving cached online-only page');
-        // Clone and modify the response to add the route parameter via URL
-        // The page will read ?route= from the URL to show the attempted route
-        const modifiedResponse = new Response(onlineOnlyPage.body, {
+        console.log('[SW] ✅ Found cached online-only page, injecting route');
+        
+        // Read the HTML content
+        const htmlText = await onlineOnlyPage.text();
+        
+        // Inject the attempted route into the HTML as a script
+        // This allows the page to read it without query parameters
+        const injectedHtml = htmlText.replace(
+          '</head>',
+          `<script>window.__OFFLINE_ATTEMPTED_ROUTE__ = "${pathname}";</script></head>`
+        );
+        
+        return new Response(injectedHtml, {
           status: onlineOnlyPage.status,
           statusText: onlineOnlyPage.statusText,
           headers: onlineOnlyPage.headers
         });
-        return modifiedResponse;
       }
       
-      console.warn('[SW] Online-only page not cached, using fallback');
+      console.warn('[SW] ❌ Online-only page NOT cached - using fallback HTML');
       // Fallback to inline response if online-only page not cached
       return getOnlineOnlyOfflineResponse(pathname);
     }
