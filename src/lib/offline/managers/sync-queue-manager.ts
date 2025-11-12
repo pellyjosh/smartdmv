@@ -47,7 +47,7 @@ class SyncQueueManager {
       data,
       relationships,
       priority,
-      maxRetries: 3,
+      maxRetries: Infinity, // Unlimited retries
       requiredPermissions,
       version: data?.version || 1,
     });
@@ -228,8 +228,9 @@ class SyncQueueManager {
     const failed = await syncQueueStorage.getFailedOperations(context.tenantId);
     let retried = 0;
 
+    // Retry ALL failed operations, no retry limit check
     for (const operation of failed) {
-      if (operation.id && operation.retryCount < operation.maxRetries) {
+      if (operation.id) {
         await syncQueueStorage.retryOperation(operation.id);
         retried++;
       }
@@ -411,6 +412,71 @@ class SyncQueueManager {
 
     return nodes;
   }
+
+  /**
+   * Approve an appointment request (offline-first)
+   */
+  async approveAppointmentRequest(appointmentId: number): Promise<number> {
+    const context = await getOfflineTenantContext();
+    if (!context) {
+      throw new Error('No tenant context available');
+    }
+
+    // Update local appointment status immediately
+    await entityStorage.updateEntity('appointments', appointmentId, {
+      status: 'approved',
+      updatedAt: new Date().toISOString(),
+    } as any, 'pending');
+
+    // Queue sync operation - use 'update' operation type
+    return syncQueueStorage.queueOperation({
+      tenantId: context.tenantId,
+      practiceId: context.practiceId,
+      userId: context.userId,
+      entityType: 'appointments',
+      entityId: appointmentId,
+      operation: 'update', // Changed from 'approve' to 'update'
+      data: { status: 'approved' },
+      relationships: {},
+      priority: 'high', // High priority for user actions
+      maxRetries: Infinity,
+      requiredPermissions: ['appointments:approve'],
+      version: 1,
+    });
+  }
+
+  /**
+   * Reject an appointment request (offline-first)
+   */
+  async rejectAppointmentRequest(appointmentId: number, rejectionReason: string): Promise<number> {
+    const context = await getOfflineTenantContext();
+    if (!context) {
+      throw new Error('No tenant context available');
+    }
+
+    // Update local appointment status immediately
+    await entityStorage.updateEntity('appointments', appointmentId, {
+      status: 'rejected',
+      description: `REJECTED: ${rejectionReason}`,
+      updatedAt: new Date().toISOString(),
+    } as any, 'pending');
+
+    // Queue sync operation - use 'update' operation type
+    return syncQueueStorage.queueOperation({
+      tenantId: context.tenantId,
+      practiceId: context.practiceId,
+      userId: context.userId,
+      entityType: 'appointments',
+      entityId: appointmentId,
+      operation: 'update', // Changed from 'reject' to 'update'
+      data: { status: 'rejected', rejectionReason },
+      relationships: {},
+      priority: 'high', // High priority for user actions
+      maxRetries: Infinity,
+      requiredPermissions: ['appointments:reject'],
+      version: 1,
+    });
+  }
 }
 
 // Export singleton instance
@@ -424,4 +490,6 @@ export const {
   getNextBatch,
   retryFailed,
   clearCompleted,
+  approveAppointmentRequest,
+  rejectAppointmentRequest,
 } = syncQueueManager;

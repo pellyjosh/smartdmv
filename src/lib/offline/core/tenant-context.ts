@@ -68,12 +68,25 @@ export async function getOfflineTenantContext(): Promise<TenantContext | null> {
 export function setOfflineTenantContext(context: TenantContext): void {
   if (typeof window !== 'undefined') {
     try {
+      console.log('[TenantContext] 🔍 setOfflineTenantContext called with:', {
+        tenantId: context.tenantId,
+        tenantIdType: typeof context.tenantId,
+        practiceId: context.practiceId,
+        userId: context.userId,
+        subdomain: context.subdomain,
+        callStack: new Error().stack?.split('\n').slice(1, 4).join('\n'),
+      });
+
       // Merge with any existing offline_session to avoid overwriting user role/roles
       const existing = localStorage.getItem('offline_session');
       let parsed: any = {};
       if (existing) {
         try {
           parsed = JSON.parse(existing) || {};
+          console.log('[TenantContext] 📖 Existing offline_session:', {
+            tenantId: parsed.tenantId,
+            subdomain: parsed.subdomain,
+          });
         } catch (e) {
           // If parse fails, start fresh but keep going
           parsed = {};
@@ -83,10 +96,10 @@ export function setOfflineTenantContext(context: TenantContext): void {
       const merged = {
         ...parsed,
         // Ensure tenant context fields are set/updated
-        tenantId: context.tenantId,
+        tenantId: context.tenantId,  // MUST be database ID!
         practiceId: context.practiceId,
         userId: context.userId,
-        subdomain: parsed.subdomain || window.location.hostname.split('.')[0],
+        subdomain: context.subdomain || parsed.subdomain || window.location.hostname.split('.')[0],
         // preserve role/roles if present in parsed
         role: parsed.role,
         roles: parsed.roles,
@@ -96,13 +109,15 @@ export function setOfflineTenantContext(context: TenantContext): void {
       console.log('[TenantContext] 💾 Setting offline_session (merged):', {
         userId: merged.userId,
         tenantId: merged.tenantId,
+        tenantIdType: typeof merged.tenantId,
         practiceId: merged.practiceId,
+        subdomain: merged.subdomain,
         hasRole: !!merged.role,
         hasRoles: Array.isArray(merged.roles) && merged.roles.length > 0,
       });
 
       localStorage.setItem('offline_session', JSON.stringify(merged));
-      console.log('[TenantContext] ✅ Offline session saved to localStorage (merged)');
+      console.log('[TenantContext] ✅ Offline session saved to localStorage');
     } catch (err) {
       console.error('[TenantContext] ❌ Failed to set offline_session:', err);
     }

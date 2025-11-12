@@ -6,12 +6,105 @@
 import { useEffect, useRef } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useTenant } from '@/context/TenantContext'; // Use existing TenantContext
-import { useNetworkStatus } from './use-network-status';
+import { useNetworkStatus } from '@/hooks/use-network-status';
 import { useOfflineAuth } from './use-offline-auth';
-import { initializeOfflineSystem, clearOfflineSystem, switchOfflinePractice } from '../lib/offline/utils/offline-init';
+import { initializeOfflineSystem, clearOfflineSystem, switchOfflinePractice } from '@/lib/offline/utils/offline-init';
 import { cacheTenantData, type CachedTenantInfo } from '@/lib/offline/storage/tenant-storage';
 import { saveSession } from '@/lib/offline/storage/auth-storage';
 import { savePermissions } from '@/lib/offline/storage/permission-storage';
+
+/**
+ * Cache additional offline data in background (non-blocking)
+ */
+async function cacheAdditionalOfflineData(tenantId: string, practiceIdNum: number, user: any) {
+  try {
+    // Cache practice data for offline use
+    try {
+      console.log('[useOfflineInit] 🏥 Fetching and caching practice data for offline use');
+      const practiceResponse = await fetch(`/api/practices/${practiceIdNum}`);
+      if (practiceResponse.ok) {
+        const practiceData = await practiceResponse.json();
+        console.log('[useOfflineInit] ✅ Fetched practice data:', practiceData.name);
+
+        // Cache practice data in IndexedDB
+        const { indexedDBManager } = await import('@/lib/offline/db');
+        const cacheKey = `practice_${practiceIdNum}`;
+        await indexedDBManager.put('cache', {
+          id: cacheKey,
+          key: cacheKey,
+          data: practiceData,
+          timestamp: Date.now(),
+          expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7 days
+        });
+        console.log('[useOfflineInit] ✅ Practice data cached to IndexedDB for offline use');
+      } else {
+        console.warn('[useOfflineInit] ⚠️ Failed to fetch practice data for caching:', practiceResponse.statusText);
+      }
+    } catch (practiceError) {
+      console.warn('[useOfflineInit] ⚠️ Failed to cache practice data (non-critical):', practiceError);
+    }
+
+    // Cache user permissions
+    try {
+      console.log('[useOfflineInit] 📋 Caching permissions for user:', {
+        userId: user.id,
+        role: user.role,
+        roles: (user as any).roles,
+        rolesLength: (user as any).roles?.length || 0,
+      });
+
+      // Get roles from user object
+      let roles = (user as any).roles || [];
+
+      // If no assigned roles, create a synthetic role from user.role
+      if (!roles || roles.length === 0) {
+        console.log('[useOfflineInit] No assigned roles found, creating synthetic role from user.role:', user.role);
+
+        // Create a synthetic role based on the user's primary role
+        const syntheticRole = {
+          id: -1, // Synthetic ID
+          name: user.role,
+          displayName: user.role,
+          description: `Primary role: ${user.role}`,
+          isSystemDefined: true,
+          isCustom: false,
+          practiceId: undefined,
+          permissions: getSyntheticPermissionsForRole(user.role),
+        };
+
+        roles = [syntheticRole];
+        console.log('[useOfflineInit] Created synthetic role:', syntheticRole);
+      }
+
+      const roleAssignments = roles.map((r: any, index: number) => ({
+        userId: parseInt(user.id),
+        roleId: r.id || -index, // Use negative index for synthetic roles
+        practiceId: practiceIdNum,
+        assignedAt: Date.now(),
+      }));
+
+      console.log('[useOfflineInit] Saving permissions:', {
+        rolesCount: roles.length,
+        roleNames: roles.map((r: any) => r.name),
+        assignments: roleAssignments.length,
+      });
+
+      await savePermissions(
+        parseInt(user.id),
+        tenantId,
+        practiceIdNum,
+        roles,
+        roleAssignments
+      );
+      console.log('[useOfflineInit] ✅ User permissions cached to IndexedDB');
+    } catch (permError) {
+      console.error('[useOfflineInit] ❌ Failed to cache permissions:', permError);
+      console.warn('[useOfflineInit] ⚠️ Failed to cache permissions (non-critical):', permError);
+    }
+  } catch (error) {
+    console.warn('[useOfflineInit] ⚠️ Background caching failed (non-critical):', error);
+  }
+}
 
 /**
  * Generate synthetic permissions based on user role
@@ -157,6 +250,14 @@ export function useOfflineInitialization() {
           previousPracticeId.current = practiceIdNum.toString();
           initializationPromise.current = null;
           console.log('[useOfflineInit] ✅ OFFLINE initialization complete');
+
+          // Try to cache additional data in background (don't block initialization)
+          // Note: user might not be available offline, so we pass it only if available
+          if (user) {
+            setTimeout(() => {
+              cacheAdditionalOfflineData(tenantId, practiceIdNum, user);
+            }, 100);
+          }
         }
         
         return;
@@ -186,15 +287,17 @@ export function useOfflineInitialization() {
       }
 
       try {
-        // Use tenant subdomain as tenant ID
-        const tenantId = tenant.subdomain || tenant.slug;
+        // CRITICAL: Use tenant DATABASE ID, not subdomain!
+        // tenant.id is the database ID (e.g., "19")
+        // tenant.subdomain is the URL subdomain (e.g., "innova")
+        const tenantId = tenant.id?.toString();
         
         if (!tenantId) {
-          console.error('[useOfflineInit] ❌ Tenant has no subdomain or slug:', tenant);
+          console.error('[useOfflineInit] ❌ Tenant has no database ID:', tenant);
           return;
         }
         
-        console.log('[useOfflineInit] 🏢 Tenant from API:', tenant.name, `(${tenantId})`);
+        console.log('[useOfflineInit] 🏢 Tenant from API:', tenant.name, `(DB ID: ${tenantId}, subdomain: ${tenant.subdomain})`);
         console.log('[useOfflineInit] 📊 Tenant status:', tenant.status);
         console.log('[useOfflineInit] 💾 Database name:', tenant.databaseName);
         
@@ -212,13 +315,13 @@ export function useOfflineInitialization() {
         }
 
         // Validate practiceId
-        if (!practiceId || practiceId === 'undefined' || (typeof practiceId === 'number' && isNaN(practiceId))) {
-          console.error('[useOfflineInit] ❌ Invalid practice ID. User data:', {
+        if (!practiceId || practiceId === 'undefined' || practiceId === 'practice_NONE' || (typeof practiceId === 'number' && isNaN(practiceId))) {
+          console.warn('[useOfflineInit] ⚠️ No valid practice assigned. Offline features disabled.');
+          console.warn('[useOfflineInit] User data:', {
             role: user.role,
             currentPracticeId: (user as any).currentPracticeId,
             practiceId: (user as any).practiceId,
             accessiblePracticeIds: (user as any).accessiblePracticeIds,
-            allUserKeys: Object.keys(user),
           });
           return;
         }
@@ -227,7 +330,8 @@ export function useOfflineInitialization() {
         const practiceIdNum = typeof practiceId === 'string' ? parseInt(practiceId, 10) : practiceId;
         
         if (isNaN(practiceIdNum)) {
-          console.error('[useOfflineInit] ❌ Practice ID is NaN after conversion:', { practiceId, practiceIdNum });
+          console.warn('[useOfflineInit] ⚠️ Practice ID is NaN after conversion. Offline features disabled.');
+          console.warn('[useOfflineInit] PracticeId values:', { practiceId, practiceIdNum });
           return;
         }
         
@@ -258,15 +362,15 @@ export function useOfflineInitialization() {
           previousPracticeId.current = practiceIdNum.toString();
           initializationPromise.current = null;
           console.log('[useOfflineInit] ✅ Initialization complete');
-          
-          // NOW cache tenant data AFTER offline system is initialized
+
+          // Cache tenant data immediately (critical for offline functionality)
           try {
             const cachedTenant: CachedTenantInfo = {
               id: tenant.id,
               slug: tenant.slug,
               name: tenant.name,
               domain: tenant.domain || null,
-              subdomain: tenantId,
+              subdomain: tenant.subdomain, // Keep subdomain for routing, but ID is the database identifier
               status: tenant.status,
               databaseName: tenant.databaseName,
               storagePath: tenant.storagePath,
@@ -276,40 +380,14 @@ export function useOfflineInitialization() {
                 features: tenant.settings?.features || [],
               },
             };
-            
+
             await cacheTenantData(cachedTenant);
             console.log('[useOfflineInit] ✅ Tenant data cached to IndexedDB for offline use');
           } catch (cacheError) {
             console.warn('[useOfflineInit] ⚠️ Failed to cache tenant data (non-critical):', cacheError);
           }
-          
-          // Cache practice data for offline use
-          try {
-            console.log('[useOfflineInit] 🏥 Fetching and caching practice data for offline use');
-            const practiceResponse = await fetch(`/api/practices/${practiceIdNum}`);
-            if (practiceResponse.ok) {
-              const practiceData = await practiceResponse.json();
-              console.log('[useOfflineInit] ✅ Fetched practice data:', practiceData.name);
-              
-              // Cache practice data in IndexedDB
-              const { indexedDBManager } = await import('@/lib/offline/db');
-              const cacheKey = `practice_${practiceIdNum}`;
-              await indexedDBManager.put('cache', {
-                id: cacheKey,
-                key: cacheKey,
-                data: practiceData,
-                timestamp: Date.now(),
-                expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7 days
-              });
-              console.log('[useOfflineInit] ✅ Practice data cached to IndexedDB for offline use');
-            } else {
-              console.warn('[useOfflineInit] ⚠️ Failed to fetch practice data for caching:', practiceResponse.statusText);
-            }
-          } catch (practiceError) {
-            console.warn('[useOfflineInit] ⚠️ Failed to cache practice data (non-critical):', practiceError);
-          }
-          
-          // Cache authentication session
+
+          // Cache authentication session (critical for offline functionality)
           try {
             console.log('[useOfflineInit] 💾 Saving session with user role:', {
               userId: user.id,
@@ -317,7 +395,7 @@ export function useOfflineInitialization() {
               roles: (user as any).roles,
               rolesArray: (user as any).roles?.map((r: any) => r.name),
             });
-            
+
             await saveSession({
               userId: user.id.toString(),
               tenantId,
@@ -339,64 +417,11 @@ export function useOfflineInitialization() {
           } catch (authError) {
             console.warn('[useOfflineInit] ⚠️ Failed to cache auth session (non-critical):', authError);
           }
-          
-          // Cache user permissions
-          try {
-            console.log('[useOfflineInit] 📋 Caching permissions for user:', {
-              userId: user.id,
-              role: user.role,
-              roles: (user as any).roles,
-              rolesLength: (user as any).roles?.length || 0,
-            });
-            
-            // Get roles from user object
-            let roles = (user as any).roles || [];
-            
-            // If no assigned roles, create a synthetic role from user.role
-            if (!roles || roles.length === 0) {
-              console.log('[useOfflineInit] No assigned roles found, creating synthetic role from user.role:', user.role);
-              
-              // Create a synthetic role based on the user's primary role
-              const syntheticRole = {
-                id: -1, // Synthetic ID
-                name: user.role,
-                displayName: user.role,
-                description: `Primary role: ${user.role}`,
-                isSystemDefined: true,
-                isCustom: false,
-                practiceId: undefined,
-                permissions: getSyntheticPermissionsForRole(user.role),
-              };
-              
-              roles = [syntheticRole];
-              console.log('[useOfflineInit] Created synthetic role:', syntheticRole);
-            }
-            
-            const roleAssignments = roles.map((r: any, index: number) => ({
-              userId: parseInt(user.id),
-              roleId: r.id || -index, // Use negative index for synthetic roles
-              practiceId: practiceIdNum,
-              assignedAt: Date.now(),
-            }));
-            
-            console.log('[useOfflineInit] Saving permissions:', {
-              rolesCount: roles.length,
-              roleNames: roles.map((r: any) => r.name),
-              assignments: roleAssignments.length,
-            });
-            
-            await savePermissions(
-              parseInt(user.id),
-              tenantId,
-              practiceIdNum,
-              roles,
-              roleAssignments
-            );
-            console.log('[useOfflineInit] ✅ User permissions cached to IndexedDB');
-          } catch (permError) {
-            console.error('[useOfflineInit] ❌ Failed to cache permissions:', permError);
-            console.warn('[useOfflineInit] ⚠️ Failed to cache permissions (non-critical):', permError);
-          }
+
+          // Try to cache additional data in background (don't block initialization)
+          setTimeout(() => {
+            cacheAdditionalOfflineData(tenantId, practiceIdNum, user);
+          }, 100);
         } else {
           console.log('[useOfflineInit] Already initialized for practice:', previousPracticeId.current);
         }

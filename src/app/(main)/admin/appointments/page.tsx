@@ -9,7 +9,15 @@ import { AppointmentCard } from "@/components/admin/appointments/appointment-car
 import { EnhancedCalendar } from "@/components/admin/appointments/enhanced-calendar";
 import { DraggableCalendar } from "@/components/admin/appointments/draggable-calendar";
 import { Button } from "@/components/ui/button";
-import { Loader2, CalendarPlus, Layout, LayoutGrid } from "lucide-react";
+import {
+  Loader2,
+  CalendarPlus,
+  Layout,
+  LayoutGrid,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -28,7 +36,7 @@ import {
 } from "@/lib/rbac-helpers";
 import { RequirePermission, PermissionButton } from "@/lib/rbac/components";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Appointment, appointmentStatusEnum } from "@/db/schema";
+import { appointmentStatusEnum } from "@/db/schema";
 import {
   Dialog,
   DialogContent,
@@ -58,6 +66,9 @@ import {
 } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
 import { useToast } from "@/hooks/use-toast";
+import { useAppointments } from "@/hooks/use-appointments";
+import { useNetworkStatus } from "@/hooks/use-network-status";
+import { Badge } from "@/components/ui/badge";
 
 // Form schema for creating appointments
 const appointmentFormSchema = z.object({
@@ -81,12 +92,29 @@ type AppointmentFormValues = z.infer<typeof appointmentFormSchema>;
 export default function AppointmentsPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { user, userPracticeId } = useUser();
   const { toast } = useToast();
+  const { isOnline } = useNetworkStatus();
+
   // Next.js Router hooks instead of Wouter
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+
+  // Use the hybrid appointments hook (auto-switches between online/offline)
+  const {
+    appointments,
+    isLoading: isLoadingAppointments,
+    createAppointment,
+    updateAppointment,
+    deleteAppointment,
+    pendingCount,
+    syncedCount,
+    errorCount,
+    syncNow,
+    refresh,
+  } = useAppointments();
 
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentFormSchema),
@@ -128,22 +156,6 @@ export default function AppointmentsPage() {
       }
     }
   }, [searchParams, form]); // Depend on searchParams object itself
-
-  // Fetch appointments
-  const { data: appointments, isLoading: isLoadingAppointments } = useQuery<
-    Appointment[]
-  >({
-    queryKey: ["/api/appointments"],
-    enabled: !!user,
-    queryFn: async () => {
-      const res = await apiRequest(
-        "GET",
-        `/api/appointments?practiceId=${userPracticeId}`
-      );
-      if (!res.ok) throw new Error("Failed to fetch appointments");
-      return res.json();
-    },
-  });
 
   // Fetch pets for dropdown
   const { data: pets, isLoading: isLoadingPets } = useQuery<any[]>({
@@ -190,57 +202,16 @@ export default function AppointmentsPage() {
     });
   }, [filteredAppointments]);
 
-  // Create appointment mutation
-  const createAppointmentMutation = useMutation({
-    mutationFn: async (data: AppointmentFormValues) => {
-      console.log("Sending appointment data to API:", data);
-      const res = await fetch("/api/appointments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-        credentials: "include",
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`${res.status}: ${errorText}`);
-      }
-
-      return await res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
-      toast({
-        title: "Appointment created",
-        description: "The appointment has been successfully created.",
-      });
-      setIsDialogOpen(false);
-      form.reset();
-      router.replace(pathname);
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Failed to create appointment",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const onSubmit = (data: AppointmentFormValues) => {
+  // Handle appointment submission (uses hybrid hook automatically)
+  const onSubmit = async (data: AppointmentFormValues) => {
     const formattedData = { ...data };
 
     if (user && userPracticeId) {
       formattedData.practiceId = userPracticeId;
     }
-    console.log("user practice id", userPracticeId);
-    console.log("createAppointmentMutation - data:", formattedData);
 
     if (formattedData.petId) {
       formattedData.petId = formattedData.petId;
-      console.log("formattedData.petId", formattedData.petId);
     }
 
     if (formattedData.practitionerId) {
@@ -251,8 +222,18 @@ export default function AppointmentsPage() {
       formattedData.status = "pending";
     }
 
-    console.log("Submitting appointment data:", formattedData);
-    createAppointmentMutation.mutate(formattedData);
+    try {
+      setIsSubmitting(true);
+      await createAppointment(formattedData);
+      setIsDialogOpen(false);
+      form.reset();
+      router.replace(pathname);
+    } catch (error) {
+      // Error already handled by the hook
+      console.error("Failed to create appointment:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   useEffect(() => {
@@ -316,15 +297,62 @@ export default function AppointmentsPage() {
       <div className="h-full">
         <main className="flex-1 overflow-y-auto pb-16 md:pb-0 p-4 md:p-6">
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-bold">Appointments</h1>
-            <PermissionButton
-              resource={"appointments" as any}
-              action={"CREATE" as any}
-              className="inline-flex items-center"
-            >
-              <CalendarPlus className="mr-2 h-4 w-4" />
-              <span onClick={() => setIsDialogOpen(true)}>New Appointment</span>
-            </PermissionButton>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold">Appointments</h1>
+
+              {/* Network Status & Sync Indicator */}
+              <div className="flex items-center gap-2">
+                {isOnline ? (
+                  <Badge variant="outline" className="gap-1.5">
+                    <Wifi className="h-3 w-3 text-green-600" />
+                    <span className="text-xs">Online</span>
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="gap-1.5">
+                    <WifiOff className="h-3 w-3 text-orange-600" />
+                    <span className="text-xs">Offline Mode</span>
+                  </Badge>
+                )}
+
+                {!isOnline && pendingCount > 0 && (
+                  <Badge variant="secondary" className="gap-1.5">
+                    <span className="text-xs">{pendingCount} pending sync</span>
+                  </Badge>
+                )}
+
+                {!isOnline && errorCount > 0 && (
+                  <Badge variant="destructive" className="gap-1.5">
+                    <span className="text-xs">{errorCount} sync errors</span>
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Manual Sync Button (only show when offline with pending changes) */}
+              {!isOnline && pendingCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => syncNow()}
+                  className="gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Sync Now
+                </Button>
+              )}
+
+              <PermissionButton
+                resource={"appointments" as any}
+                action={"CREATE" as any}
+                className="inline-flex items-center"
+              >
+                <CalendarPlus className="mr-2 h-4 w-4" />
+                <span onClick={() => setIsDialogOpen(true)}>
+                  New Appointment
+                </span>
+              </PermissionButton>
+            </div>
           </div>
 
           {user && (
@@ -652,11 +680,8 @@ export default function AppointmentsPage() {
                     >
                       Cancel
                     </Button>
-                    <Button
-                      type="submit"
-                      disabled={createAppointmentMutation.isPending}
-                    >
-                      {createAppointmentMutation.isPending ? (
+                    <Button type="submit" disabled={isSubmitting}>
+                      {isSubmitting ? (
                         <>
                           {" "}
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}

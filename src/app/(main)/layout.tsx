@@ -8,7 +8,7 @@ import { PracticeProvider } from "@/hooks/use-practice";
 import { FeatureAccessProvider } from "@/hooks/use-feature-access";
 import { NotificationProvider } from "@/components/notifications/notification-provider";
 import { useUser } from "@/context/UserContext";
-import { useOfflineInitialization } from "@/hooks/use-offline-initialization";
+import { useOfflineInitialization } from "@/hooks/offline/use-offline-initialization";
 import { OfflineProtected } from "@/components/offline";
 import { flattenMenuForOfflineCheck } from "@/lib/offline/utils/menu-data";
 

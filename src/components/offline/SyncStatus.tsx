@@ -6,8 +6,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSyncQueue } from "@/hooks/use-sync-queue";
+import { useSyncQueue } from "@/hooks/offline/use-sync-queue";
 import { indexedDBManager } from "@/lib/offline/db";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -40,6 +41,7 @@ export function SyncStatus() {
     refresh,
   } = useSyncQueue();
   const [isInitialized, setIsInitialized] = useState(false);
+  const { toast } = useToast();
 
   // Check if offline system is initialized
   useEffect(() => {
@@ -54,13 +56,45 @@ export function SyncStatus() {
   }, []);
 
   const handleRetryFailed = async () => {
-    const count = await retryFailed();
-    console.log(`Retried ${count} failed operations`);
+    try {
+      console.log("[SyncStatus] Retrying failed operations...");
+      const count = await retryFailed();
+      console.log(`[SyncStatus] Retried ${count} failed operations`);
+
+      toast({
+        title: "Retry initiated",
+        description: `${count} failed operation(s) queued for retry.`,
+      });
+    } catch (error) {
+      console.error("[SyncStatus] Retry failed error:", error);
+      toast({
+        title: "Retry failed",
+        description:
+          error instanceof Error ? error.message : "Failed to retry operations",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleClearCompleted = async () => {
-    const count = await clearCompleted();
-    console.log(`Cleared ${count} completed operations`);
+    try {
+      console.log("[SyncStatus] Clearing completed operations...");
+      const count = await clearCompleted();
+      console.log(`[SyncStatus] Cleared ${count} completed operations`);
+
+      toast({
+        title: "Completed operations cleared",
+        description: `${count} completed operation(s) removed from queue.`,
+      });
+    } catch (error) {
+      console.error("[SyncStatus] Clear completed error:", error);
+      toast({
+        title: "Clear failed",
+        description:
+          error instanceof Error ? error.message : "Failed to clear operations",
+        variant: "destructive",
+      });
+    }
   };
 
   // Don't render until initialized
@@ -252,7 +286,7 @@ export function SyncStatus() {
                       )}
                     </div>
                     <Badge variant="outline" className="text-xs">
-                      Retry {op.retryCount}/{op.maxRetries}
+                      Retry {op.retryCount}
                     </Badge>
                   </div>
                 ))}

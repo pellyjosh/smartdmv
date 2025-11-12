@@ -294,11 +294,33 @@ class StorageManager {
    */
   private async ensureInitialized(): Promise<void> {
     if (!this.initialized) {
-      console.warn('[StorageManager] Auto-initializing storage manager...');
+      console.warn('[StorageManager] Storage not initialized, attempting to recover...');
+      
+      // Try to get existing tenant context from IndexedDB manager
+      const { tenantId, practiceId } = indexedDBManager.getCurrentTenant();
+      
+      if (!tenantId) {
+        throw new Error(
+          'Storage manager not initialized and no tenant context available. ' +
+          'Ensure offline system is initialized with initializeOfflineSystem() before performing operations.'
+        );
+      }
+      
+      // Get offline context which should have userId
+      const context = await getOfflineTenantContext();
+      if (!context) {
+        throw new Error(
+          'No offline tenant context available. ' +
+          'Ensure offline system is initialized with initializeOfflineSystem() before performing operations.'
+        );
+      }
+      
+      console.log('[StorageManager] Auto-initializing with recovered context:', context);
+      
       try {
-        await this.initialize();
+        await this.initialize(context.tenantId, context.practiceId, context.userId);
       } catch (error) {
-        throw new Error('Storage manager not initialized. Call initialize() first.');
+        throw new Error(`Storage manager initialization failed: ${(error as Error).message}`);
       }
     }
   }

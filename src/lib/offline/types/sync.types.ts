@@ -2,7 +2,7 @@
  * Sync queue types for offline functionality
  */
 
-export type SyncOperationType = 'create' | 'update' | 'delete';
+export type SyncOperationType = 'create' | 'update' | 'delete' | 'approve' | 'reject';
 export type SyncPriority = 'high' | 'normal' | 'low';
 export type SyncOperationStatus = 'pending' | 'in_progress' | 'failed' | 'conflicted' | 'completed';
 

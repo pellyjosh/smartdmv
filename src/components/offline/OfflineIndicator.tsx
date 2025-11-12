@@ -7,7 +7,8 @@
 
 import { useState, useEffect } from "react";
 import { useNetworkStatus } from "@/hooks/use-network-status";
-import { useSyncQueue } from "@/hooks/use-sync-queue";
+import { useSyncQueue } from "@/hooks/offline/use-sync-queue";
+import { useSyncEngine } from "@/hooks/offline/use-sync-engine";
 import { indexedDBManager } from "@/lib/offline/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,12 +20,14 @@ import {
   Loader2,
   AlertCircle,
   Check,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function OfflineIndicator() {
   const { isOnline, isTransitioning } = useNetworkStatus();
   const { stats } = useSyncQueue();
+  const { sync, isSyncing } = useSyncEngine();
   const [show, setShow] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -69,6 +72,11 @@ export function OfflineIndicator() {
     return null;
   }
 
+  const handleSyncNow = async () => {
+    console.log("🔄 Manual sync triggered from OfflineIndicator");
+    await sync();
+  };
+
   return (
     <div
       className={cn(
@@ -77,39 +85,53 @@ export function OfflineIndicator() {
       )}
     >
       {isOnline ? (
-        <Badge
-          variant="secondary"
-          className="gap-2 px-3 py-2 bg-background border shadow-lg"
-        >
-          <Wifi className="h-4 w-4 text-green-500" />
-          <span className="text-sm font-medium">Online</span>
+        <div className="flex items-center gap-2">
+          <Badge
+            variant="secondary"
+            className="gap-2 px-3 py-2 bg-background border shadow-lg"
+          >
+            <Wifi className="h-4 w-4 text-green-500" />
+            <span className="text-sm font-medium">Online</span>
 
+            {stats && stats.pending > 0 && (
+              <>
+                <span className="text-muted-foreground">•</span>
+                {isSyncing ? (
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                ) : (
+                  <Cloud className="h-3 w-3 text-blue-500" />
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {stats.pending} pending
+                </span>
+              </>
+            )}
+
+            {stats && stats.pending === 0 && (
+              <>
+                <Check className="h-3 w-3 text-green-500" />
+                <span className="text-xs text-green-600">Synced</span>
+              </>
+            )}
+          </Badge>
+
+          {/* Manual Sync Button - show when online with pending operations */}
           {stats && stats.pending > 0 && (
-            <>
-              <span className="text-muted-foreground">•</span>
-              <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-              <span className="text-xs text-muted-foreground">
-                {stats.pending} pending
-              </span>
-            </>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSyncNow}
+              disabled={isSyncing}
+              className="h-8 gap-1.5 shadow-lg"
+              title="Sync pending changes now"
+            >
+              <RefreshCw
+                className={cn("h-3.5 w-3.5", isSyncing && "animate-spin")}
+              />
+              <span className="text-xs">Sync Now</span>
+            </Button>
           )}
-
-          {stats && stats.failed > 0 && (
-            <>
-              <AlertCircle className="h-3 w-3 text-destructive" />
-              <span className="text-xs text-destructive">
-                {stats.failed} failed
-              </span>
-            </>
-          )}
-
-          {stats && stats.pending === 0 && stats.failed === 0 && (
-            <>
-              <Check className="h-3 w-3 text-green-500" />
-              <span className="text-xs text-green-600">Synced</span>
-            </>
-          )}
-        </Badge>
+        </div>
       ) : (
         <Badge variant="destructive" className="gap-2 px-3 py-2 shadow-lg">
           <WifiOff className="h-4 w-4" />

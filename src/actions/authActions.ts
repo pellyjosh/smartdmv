@@ -75,8 +75,14 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
         if (!currentPracticeId && accessiblePracticeIds.length > 0) {
           currentPracticeId = accessiblePracticeIds[0];
         } else if (accessiblePracticeIds.length === 0) { 
-          console.warn(`[AuthAction loginUserAction] Administrator ${dbUser.email} has no current or accessible practices configured.`);
-          currentPracticeId = 'practice_NONE'; // Fallback
+          // Fallback to user's practiceId if no accessible practices configured
+          if (dbUser.practiceId) {
+            console.log(`[AuthAction loginUserAction] Administrator ${dbUser.email} has no accessible practices, using practiceId: ${dbUser.practiceId}`);
+            currentPracticeId = dbUser.practiceId.toString();
+            accessiblePracticeIds.push(currentPracticeId);
+          } else {
+            throw new Error(`Administrator ${dbUser.email} has no practice assigned. Every user must have a practice.`);
+          }
         } else if (currentPracticeId && !accessiblePracticeIds.includes(currentPracticeId) && accessiblePracticeIds.length > 0) {
             console.warn(`[AuthAction loginUserAction] Administrator ${dbUser.email}'s currentPracticeId ${currentPracticeId} is not in accessible list. Defaulting to first accessible.`);
             currentPracticeId = accessiblePracticeIds[0];
@@ -136,8 +142,14 @@ export async function loginUserAction(emailInput: string, passwordInput: string)
         if (!currentPracticeId && accessiblePracticeIds.length > 0) {
           currentPracticeId = accessiblePracticeIds[0];
         } else if (accessiblePracticeIds.length === 0) { 
-          console.warn(`[AuthAction loginUserAction] SUPER_ADMIN ${dbUser.email} has no current or accessible practices configured.`);
-          currentPracticeId = 'practice_NONE'; // Fallback
+          // Fallback to user's practiceId if no accessible practices configured
+          if (dbUser.practiceId) {
+            console.log(`[AuthAction loginUserAction] SUPER_ADMIN ${dbUser.email} has no accessible practices, using practiceId: ${dbUser.practiceId}`);
+            currentPracticeId = dbUser.practiceId.toString();
+            accessiblePracticeIds.push(currentPracticeId);
+          } else {
+            throw new Error(`SUPER_ADMIN ${dbUser.email} has no practice assigned. Every user must have a practice.`);
+          }
         }
 
         userData = {

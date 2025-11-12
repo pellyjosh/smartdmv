@@ -45,18 +45,18 @@ import {
 } from "@/components/ui/select";
 import { getCachedTenantData } from "@/lib/offline/storage/tenant-storage";
 
-
 // Import new offline components and hooks
 import {
-  OfflineIndicator,
   SyncStatus,
+  SyncEnginePanel,
   PermissionGuard,
   StorageUsage,
+  StorageManager,
 } from "@/components/offline";
-import { useOfflineStorage } from "@/hooks/use-offline-storage";
-import { useOfflinePermissions } from "@/hooks/use-offline-permissions";
-import { useOfflineAuth } from "@/hooks/use-offline-auth";
-import { useSyncQueue } from "@/hooks/use-sync-queue";
+import { useOfflineStorage } from "@/hooks/offline/use-offline-storage";
+import { useOfflinePermissions } from "@/hooks/offline/use-offline-permissions";
+import { useOfflineAuth } from "@/hooks/offline/use-offline-auth";
+import { useSyncQueue } from "@/hooks/offline/use-sync-queue";
 import { useUser } from "@/context/UserContext";
 import { useTenant } from "@/context/TenantContext";
 import { EntityType } from "@/lib/offline/types/storage.types";
@@ -140,23 +140,28 @@ export default function OfflineDemoPage() {
       if (session?.tenantId && session?.userId && session?.practiceId) {
         try {
           // Initialize offline system with tenant context
-          const { initializeOfflineSystem } = await import('@/lib/offline/utils/offline-init');
+          const { initializeOfflineSystem } = await import(
+            "@/lib/offline/utils/offline-init"
+          );
           await initializeOfflineSystem({
             tenantId: session.tenantId,
             practiceId: session.practiceId,
             userId: session.userId,
           });
-          console.log('[OfflineDemo] Offline system initialized');
+          console.log("[OfflineDemo] Offline system initialized");
 
           // Load tenant data from cache
           const tenantData = await getCachedTenantData(session.tenantId);
           if (tenantData) {
             setCachedTenant(tenantData);
-            console.log('[OfflineDemo] Auto-loaded tenant from cache:', tenantData.name);
+            console.log(
+              "[OfflineDemo] Auto-loaded tenant from cache:",
+              tenantData.name
+            );
           }
 
           // Load practice data from cache
-          const { indexedDBManager } = await import('@/lib/offline/db');
+          const { indexedDBManager } = await import("@/lib/offline/db");
           const cachedPracticeData = (await indexedDBManager.get(
             "cache",
             `practice_${session.practiceId}`
@@ -164,10 +169,13 @@ export default function OfflineDemoPage() {
 
           if (cachedPracticeData?.data) {
             setCachedPractice(cachedPracticeData.data);
-            console.log('[OfflineDemo] Auto-loaded practice from cache:', cachedPracticeData.data.name);
+            console.log(
+              "[OfflineDemo] Auto-loaded practice from cache:",
+              cachedPracticeData.data.name
+            );
           }
         } catch (error) {
-          console.warn('[OfflineDemo] Failed to auto-load cached data:', error);
+          console.warn("[OfflineDemo] Failed to auto-load cached data:", error);
         }
       }
     };
@@ -249,7 +257,49 @@ export default function OfflineDemoPage() {
     }
   };
 
+  // Handle retry failed operations
+  const handleRetryFailed = async () => {
+    try {
+      console.log("[OfflineDemo] Retrying failed operations...");
+      const count = await retryFailed();
+      console.log(`[OfflineDemo] Retried ${count} failed operations`);
 
+      toast({
+        title: "Retry initiated",
+        description: `${count} failed operation(s) queued for retry.`,
+      });
+    } catch (error) {
+      console.error("[OfflineDemo] Retry failed error:", error);
+      toast({
+        title: "Retry failed",
+        description:
+          error instanceof Error ? error.message : "Failed to retry operations",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle clear completed operations
+  const handleClearCompleted = async () => {
+    try {
+      console.log("[OfflineDemo] Clearing completed operations...");
+      const count = await clearCompleted();
+      console.log(`[OfflineDemo] Cleared ${count} completed operations`);
+
+      toast({
+        title: "Completed operations cleared",
+        description: `${count} completed operation(s) removed from queue.`,
+      });
+    } catch (error) {
+      console.error("[OfflineDemo] Clear completed error:", error);
+      toast({
+        title: "Clear failed",
+        description:
+          error instanceof Error ? error.message : "Failed to clear operations",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Test permission functions
   const testPermissions = async () => {
@@ -300,8 +350,7 @@ export default function OfflineDemoPage() {
 
   return (
     <div className="container py-6">
-      {/* Global offline indicator */}
-      <OfflineIndicator />
+      {/* OfflineIndicator is already rendered globally in ConditionalProviders */}
 
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-2">
@@ -513,7 +562,8 @@ export default function OfflineDemoPage() {
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>No Tenant Information</AlertTitle>
                   <AlertDescription>
-                    No cached tenant data available. Data will be cached when you go online.
+                    No cached tenant data available. Data will be cached when
+                    you go online.
                   </AlertDescription>
                 </Alert>
               )}
@@ -587,7 +637,8 @@ export default function OfflineDemoPage() {
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>No Practice Information</AlertTitle>
                   <AlertDescription>
-                    No cached practice data available. Data will be cached when you go online.
+                    No cached practice data available. Data will be cached when
+                    you go online.
                   </AlertDescription>
                 </Alert>
               )}
@@ -644,81 +695,7 @@ export default function OfflineDemoPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Stored Pets ({pets?.length || 0})</CardTitle>
-              <CardDescription>
-                Data saved in IndexedDB for offline access
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoadingPets ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  Loading pets...
-                </div>
-              ) : petsError ? (
-                <Alert variant="destructive">
-                  <AlertTitle>Error</AlertTitle>
-                  <AlertDescription>
-                    {typeof petsError === "string"
-                      ? petsError
-                      : "Failed to load pets"}
-                  </AlertDescription>
-                </Alert>
-              ) : pets && pets.length > 0 ? (
-                <div className="space-y-2">
-                  {pets.map((pet) => (
-                    <div
-                      key={pet.id}
-                      className="flex items-center justify-between p-3 border rounded-lg"
-                    >
-                      <div className="flex-1">
-                        <h4 className="font-medium">{pet.name}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {pet.species} • {pet.breed} • {pet.age} years
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <PermissionGuard resource="pet" action="update">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEditPet(pet)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </PermissionGuard>
-                        <PermissionGuard resource="pet" action="delete">
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDeletePet(pet.id!)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </PermissionGuard>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No pets stored offline. Create one in the Operations tab.
-                </div>
-              )}
-            </CardContent>
-            {pets && pets.length > 0 && (
-              <CardFooter>
-                <Button
-                  variant="outline"
-                  onClick={refetchPets}
-                  className="w-full"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" /> Refresh
-                </Button>
-              </CardFooter>
-            )}
-          </Card>
+          <StorageManager />
         </TabsContent>
 
         {/* Tab 2: Authentication Status */}
@@ -866,6 +843,10 @@ export default function OfflineDemoPage() {
 
         {/* Tab 4: Sync Queue Viewer */}
         <TabsContent value="sync" className="space-y-4">
+          {/* Sync Engine Control Panel */}
+          <SyncEnginePanel />
+
+          {/* Legacy Sync Status */}
           <SyncStatus />
 
           <Card>
@@ -877,7 +858,7 @@ export default function OfflineDemoPage() {
             </CardHeader>
             <CardContent className="space-y-2">
               <Button
-                onClick={retryFailed}
+                onClick={handleRetryFailed}
                 disabled={failedOperations.length === 0 || !isOnline}
                 className="w-full"
               >
@@ -885,7 +866,7 @@ export default function OfflineDemoPage() {
                 Retry All Failed Operations ({failedOperations.length})
               </Button>
               <Button
-                onClick={clearCompleted}
+                onClick={handleClearCompleted}
                 variant="outline"
                 className="w-full"
               >

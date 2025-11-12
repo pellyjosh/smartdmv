@@ -3,14 +3,15 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { syncQueueManager } from '../lib/offline/managers/sync-queue-manager';
-import { indexedDBManager } from '../lib/offline/db';
+import { syncQueueManager } from '@/lib/offline/managers/sync-queue-manager';
+import { indexedDBManager } from '@/lib/offline/db';
+import { syncEventEmitter } from '@/lib/offline/events/sync-events';
 import type {
   SyncOperation,
   SyncQueueStats,
   SyncPriority,
   SyncOperationType,
-} from '../lib/offline/types/sync.types';
+} from '@/lib/offline/types/sync.types';
 
 export interface UseSyncQueueReturn {
   stats: SyncQueueStats | null;
@@ -43,6 +44,10 @@ export function useSyncQueue(): UseSyncQueueReturn {
       const { tenantId } = indexedDBManager.getCurrentTenant();
       if (!tenantId) {
         console.log('[useSyncQueue] No tenant context, skipping load');
+        setStats(null);
+        setPendingOperations([]);
+        setFailedOperations([]);
+        setConflictedOperations([]);
         setIsLoading(false);
         return;
       }
@@ -87,6 +92,10 @@ export function useSyncQueue(): UseSyncQueueReturn {
         priority
       );
       await loadQueue(); // Refresh
+      
+      // Trigger sync event so sync engine can pick it up
+      syncEventEmitter.trigger();
+      
       return id;
     } catch (error) {
       console.error('[useSyncQueue] Add operation error:', error);

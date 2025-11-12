@@ -20,66 +20,73 @@ export interface TenantContext {
 }
 
 export async function getTenantContext(): Promise<TenantContext> {
-  const headersList = headers();
+  const headersList = await headers();
   const hostname = headersList.get('host') || '';
   const tenantHeader = headersList.get('x-tenant-id');
   
-  // Extract subdomain from hostname or header
-  let subdomain = tenantHeader;
-  if (!subdomain) {
-    const parts = hostname.split('.');
-    subdomain = parts.length > 2 ? parts[0] : 'default';
+  console.log('[getTenantContext] Resolving tenant from hostname:', hostname);
+
+  // Priority 1: Use x-tenant-id header if set (useful for custom domains)
+  if (tenantHeader) {
+    console.log('[getTenantContext] Using tenant from header:', tenantHeader);
   }
+
+  // Try to find tenant by:
+  // 1. x-tenant-id header (for custom domains mapped via middleware/proxy)
+  // 2. Full hostname (for custom domains like clientdomain.com)
+  // 3. Subdomain (for subdomain.yourdomain.com)
   
-  if (subdomain === 'www' || subdomain === 'localhost') {
-    subdomain = 'default';
+  let tenant: typeof tenants.$inferSelect | undefined;
+
+  // Step 1: Check x-tenant-id header
+  if (tenantHeader) {
+    tenant = await ownerDb
+      .select()
+      .from(tenants)
+      .where(eq(tenants.subdomain, tenantHeader))
+      .limit(1)
+      .then(results => results[0]);
+    
+    if (tenant) {
+      console.log('[getTenantContext] Found tenant via header:', tenant.subdomain);
+    }
   }
 
-  // For development/localhost, use a default tenant
-  if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-    subdomain = 'default';
+  // Step 2: Try to find by custom domain (full hostname without port)
+  if (!tenant) {
+    const hostnameWithoutPort = hostname.split(':')[0];
+    tenant = await ownerDb
+      .select()
+      .from(tenants)
+      .where(eq(tenants.customDomain, hostnameWithoutPort))
+      .limit(1)
+      .then(results => results[0]);
+    
+    if (tenant) {
+      console.log('[getTenantContext] Found tenant via custom domain:', hostnameWithoutPort);
+    }
   }
 
-  // Get tenant info from owner database
-  const tenant = await ownerDb
-    .select()
-    .from(tenants)
-    .where(eq(tenants.subdomain, subdomain))
-    .limit(1)
-    .then(results => results[0]);
+  // Step 3: Extract subdomain and search
+  if (!tenant) {
+    const parts = hostname.split(':')[0].split('.');
+    const subdomain = parts.length > 1 ? parts[0] : 'innova';
+    
+    tenant = await ownerDb
+      .select()
+      .from(tenants)
+      .where(eq(tenants.subdomain, subdomain))
+      .limit(1)
+      .then(results => results[0]);
+    
+    if (tenant) {
+      console.log('[getTenantContext] Found tenant via subdomain:', subdomain);
+    }
+  }
 
   if (!tenant) {
-    // Create default tenant if it doesn't exist
-    if (subdomain === 'default') {
-      const defaultTenant = await ownerDb
-        .insert(tenants)
-        .values({
-          name: 'Default Tenant',
-          subdomain: 'default',
-          dbHost: 'localhost',
-          dbName: process.env.DATABASE_URL!.split('/').pop()!, // Use current database as default
-          dbPort: 5432,
-          storagePath: 'tenants/default',
-          status: 'ACTIVE',
-          plan: 'ENTERPRISE'
-        })
-        .returning()
-        .then(results => results[0]);
-        
-      return {
-        tenantId: defaultTenant.id.toString(),
-        subdomain: defaultTenant.subdomain,
-        dbHost: defaultTenant.dbHost,
-        dbName: defaultTenant.dbName,
-        dbPort: defaultTenant.dbPort,
-        dbUser: defaultTenant.dbUser || undefined,
-        dbPassword: defaultTenant.dbPassword || undefined,
-        storagePath: defaultTenant.storagePath,
-        tenant: defaultTenant
-      };
-    }
-    
-    throw new Error(`Tenant not found for subdomain: ${subdomain}`);
+    console.error('[getTenantContext] No tenant found for hostname:', hostname);
+    throw new Error(`Tenant not found for hostname: ${hostname}`);
   }
 
   return {

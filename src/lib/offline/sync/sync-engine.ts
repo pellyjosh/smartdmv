@@ -69,7 +69,19 @@ export class SyncEngine {
    */
   async bidirectionalSync(): Promise<SyncResult> {
     if (this.syncing) {
-      throw new Error('Sync already in progress');
+      // Silent skip - don't throw error to avoid console spam
+      console.log('[SyncEngine] ⏸️  Sync already in progress, skipping');
+      return {
+        success: false,
+        synced: 0,
+        failed: 0,
+        conflicts: 0,
+        operations: [],
+        errors: [],
+        duration: 0,
+        timestamp: Date.now(),
+        idMappings: []
+      };
     }
 
     this.syncing = true;
@@ -146,16 +158,258 @@ export class SyncEngine {
    */
   async syncFromServer(): Promise<SyncResult> {
     const startTime = Date.now();
+    console.log('[SyncEngine] syncFromServer() called at', new Date().toISOString());
+
     const context = await getOfflineTenantContext();
     if (!context) {
+      console.error('[SyncEngine] No tenant context available');
       throw new Error('No tenant context available');
     }
 
-    // TODO: Implement server download logic
-    // This will be implemented when API endpoints are ready
-    console.log('📥 Server sync not yet implemented');
+    console.log('📥 Fetching changes from server...', { practiceId: context.practiceId, tenantId: context.tenantId });
 
-    return this.createEmptyResult(startTime);
+    try {
+      // Get last sync timestamp from metadata
+      const lastSyncTimestamp = await this.getLastSyncTimestamp();
+
+      // Pull changes from server - include pets and all appointments
+      const response = await fetch(
+        `/api/sync/pull?lastSyncTimestamp=${lastSyncTimestamp}&practiceId=${context.practiceId}&entityTypes=appointments,pets,clients`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Sync pull failed: ${response.statusText}`);
+      }
+
+      const pullResult = await response.json();
+
+      const result: SyncResult = {
+        success: true,
+        synced: 0,
+        failed: 0,
+        conflicts: 0,
+        operations: [],
+        errors: [],
+        duration: 0,
+        timestamp: Date.now(),
+        idMappings: [],
+      };
+
+      // Apply server changes to local storage
+      console.log(`📥 Applying ${pullResult.changes.length} server changes to local storage`);
+      
+      // Group by entity type for better logging
+      const changesByType = pullResult.changes.reduce((acc: Record<string, number>, change: any) => {
+        acc[change.entityType] = (acc[change.entityType] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log(`📥 Changes by type:`, changesByType);
+      
+      for (const change of pullResult.changes) {
+        try {
+          console.log(`📥 [${change.entityType}] Applying ${change.operation} for ID ${change.id}`);
+          console.log(`📥 [${change.entityType}] Data sample:`, {
+            id: change.data?.id,
+            tenantId: change.data?.tenantId,
+            practiceId: change.data?.practiceId,
+            hasAllFields: !!change.data,
+          });
+          
+          await this.applyServerChange(change);
+          result.synced++;
+          console.log(`✅ [${change.entityType}] Successfully applied ID ${change.id}`);
+        } catch (error) {
+          console.error(`❌ [${change.entityType}] Failed to apply ID ${change.id}:`, error);
+          console.error(`❌ [${change.entityType}] Error details:`, {
+            message: error instanceof Error ? error.message : 'Unknown',
+            stack: error instanceof Error ? error.stack : undefined,
+            change: change,
+          });
+          result.failed++;
+          result.errors.push({
+            operationId: 0,
+            entityType: change.entityType,
+            entityId: change.id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            timestamp: Date.now(),
+            retryCount: 0,
+            recoverable: true,
+          });
+        }
+      }
+
+      // Update last sync timestamp
+      await this.updateLastSyncTimestamp(pullResult.timestamp);
+
+      result.duration = Date.now() - startTime;
+      result.success = result.failed === 0;
+
+      console.log(`📥 Server sync complete: ${result.synced} synced, ${result.failed} failed`);
+
+      return result;
+    } catch (error) {
+      console.error('📥 Server sync error:', error);
+      return {
+        success: false,
+        synced: 0,
+        failed: 0,
+        conflicts: 0,
+        operations: [],
+        errors: [
+          {
+            operationId: 0,
+            entityType: 'system',
+            entityId: 0,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            timestamp: Date.now(),
+            retryCount: 0,
+            recoverable: true,
+          },
+        ],
+        duration: Date.now() - startTime,
+        timestamp: Date.now(),
+        idMappings: [],
+      };
+    }
+  }
+
+  /**
+   * Apply a server change to local storage
+   */
+  private async applyServerChange(change: any): Promise<void> {
+    console.log(`[applyServerChange] Processing ${change.operation} for ${change.entityType} ${change.id}`);
+
+    const { saveEntity, updateEntity, deleteEntity } = await import('../storage/entity-storage');
+
+    const context = await getOfflineTenantContext();
+    console.log('[applyServerChange] Tenant context:', context);
+
+    if (!context) {
+      console.error('[applyServerChange] No tenant context available');
+      throw new Error('No tenant context');
+    }
+
+    // Ensure practice is registered
+    const { indexedDBManager } = await import('../db/manager');
+    console.log(`[applyServerChange] Registering practice ${context.practiceId} for tenant ${context.tenantId}`);
+    await indexedDBManager.registerPractice(context.practiceId.toString(), context.tenantId);
+
+    switch (change.operation) {
+      case 'create':
+      case 'update':
+        console.log(`[applyServerChange] Saving ${change.entityType} with data:`, change.data);
+        try {
+          // For sync operations, use UPSERT logic: try update first, if not found, create
+          // This handles cases where server sends 'update' but entity doesn't exist locally yet
+          const { getEntity } = await import('../storage/entity-storage');
+          const exists = await getEntity(change.entityType, change.id);
+          
+          if (exists) {
+            // Entity exists - update it
+            const result = await updateEntity(change.entityType, change.id, change.data, 'synced');
+            console.log(`[applyServerChange] ✅ Successfully updated ${change.entityType} ${change.id}:`, result);
+          } else {
+            // Entity doesn't exist - create it (even if server says 'update')
+            const result = await saveEntity(change.entityType, change.data, 'synced');
+            console.log(`[applyServerChange] ✅ Successfully created ${change.entityType} ${change.id}:`, result);
+          }
+        } catch (error) {
+          console.error(`[applyServerChange] ❌ Failed to save/update ${change.entityType} ${change.id}:`, error);
+          throw error;
+        }
+        break;
+
+      case 'delete':
+        // SKIP DELETE OPERATIONS - we don't delete anything locally during sync
+        console.log(`[applyServerChange] ⏭️  Skipping delete for ${change.entityType} ${change.id} (deletes not supported in offline sync)`);
+        break;
+
+      default:
+        console.warn(`[applyServerChange] Unknown operation type: ${change.operation}`);
+    }
+  }
+
+  /**
+   * Get last sync timestamp from metadata
+   */
+  private async getLastSyncTimestamp(): Promise<number> {
+    try {
+      const { indexedDBManager } = await import('../db/manager');
+      const { STORES } = await import('../db/schema');
+      const context = await getOfflineTenantContext();
+
+      if (!context) return 0;
+
+      const db = await indexedDBManager.initialize(context.tenantId);
+      
+      if (!Array.from(db.objectStoreNames).includes(STORES.METADATA)) {
+        return 0;
+      }
+
+      const metadata = await new Promise<any>((resolve, reject) => {
+        try {
+          const tx = db.transaction(STORES.METADATA, 'readonly');
+          const store = tx.objectStore(STORES.METADATA);
+          const request = store.get('lastSyncTimestamp');
+
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      return metadata?.value || 0;
+    } catch (error) {
+      console.error('Failed to get last sync timestamp:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Update last sync timestamp in metadata
+   */
+  private async updateLastSyncTimestamp(timestamp: number): Promise<void> {
+    try {
+      const { indexedDBManager } = await import('../db/manager');
+      const { STORES } = await import('../db/schema');
+      const context = await getOfflineTenantContext();
+
+      if (!context) return;
+
+      const db = await indexedDBManager.initialize(context.tenantId);
+
+      if (!Array.from(db.objectStoreNames).includes(STORES.METADATA)) {
+        return;
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        try {
+          const tx = db.transaction(STORES.METADATA, 'readwrite');
+          const store = tx.objectStore(STORES.METADATA);
+          const request = store.put({
+            key: 'lastSyncTimestamp',
+            value: timestamp,
+            updatedAt: Date.now(),
+          });
+
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      console.log(`Updated last sync timestamp to ${new Date(timestamp).toISOString()}`);
+    } catch (error) {
+      console.error('Failed to update last sync timestamp:', error);
+    }
   }
 
   /**
@@ -180,26 +434,10 @@ export class SyncEngine {
       this.updateProgress('syncing', operations.length, i);
 
       try {
-        // Check for conflicts
-        const conflict = await this.detectConflicts(operation);
-
-        if (conflict) {
-          result.conflicts++;
-          await conflictStorage.saveConflict(conflict);
-
-          // Try auto-resolve if enabled
-          if (this.config.autoResolveSimple && conflict.autoResolvable) {
-            await this.resolveConflict(conflict, { 
-              strategy: this.config.conflictStrategy,
-              appliedAt: Date.now()
-            });
-          } else {
-            // Skip this operation for now
-            this.config.conflictCallback?.(conflict);
-            continue;
-          }
-        }
-
+        // TEMPORARILY DISABLE CONFLICT DETECTION - causing issues with pending operations
+        // The server will handle conflicts and return conflict data if needed
+        // TODO: Re-enable conflict detection with proper server state checking
+        
         // Send operation to server
         const syncResult = await this.sendOperationToServer(operation);
 
@@ -240,10 +478,9 @@ export class SyncEngine {
             recoverable: true
           });
 
-          // Mark for retry or failed
-          if (operation.retryCount < this.config.maxRetries) {
-            await syncQueueStorage.markOperationFailed(operation.id!, syncResult.error || 'Unknown error');
-          }
+          // Always mark for retry - no max retry limit
+          await syncQueueStorage.markOperationFailed(operation.id!, syncResult.error || 'Unknown error');
+          console.log(`⚠️ Operation ${operation.id} failed (attempt ${operation.retryCount + 1}): ${syncResult.error || 'Unknown error'}`);
         }
 
         this.config.progressCallback?.(this.progress);
@@ -392,67 +629,314 @@ export class SyncEngine {
   ): Promise<void> {
     await conflictStorage.resolveConflict(conflict.id, resolution!);
 
+    const { saveEntity, updateEntity } = await import('../storage/entity-storage');
+
     // Apply resolution based on strategy
     switch (resolution!.strategy) {
       case 'server-wins':
         // Update local with server data
         console.log('🔄 Applying server-wins resolution');
+        if (conflict.serverData) {
+          await updateEntity(
+            conflict.operation.entityType,
+            conflict.operation.entityId,
+            conflict.serverData,
+            'synced'
+          );
+        }
+        // Remove the original operation from sync queue (conflict is resolved)
+        if (conflict.operation.id) {
+          await syncQueueStorage.markOperationCompleted(conflict.operation.id);
+        }
         break;
 
       case 'client-wins':
-        // Keep local, sync to server
+        // Keep local, re-queue operation to force sync to server
         console.log('🔄 Applying client-wins resolution');
+        
+        // First, remove the old conflicting operation
+        if (conflict.operation.id) {
+          await syncQueueStorage.markOperationCompleted(conflict.operation.id);
+        }
+        
+        // Then queue a fresh operation with client data
+        await syncQueueStorage.queueOperation({
+          operation: conflict.operation.operation,
+          entityType: conflict.operation.entityType,
+          entityId: conflict.operation.entityId,
+          data: conflict.localData,
+          tenantId: conflict.operation.tenantId,
+          practiceId: conflict.operation.practiceId,
+          userId: conflict.operation.userId,
+          priority: 'high',
+          maxRetries: 3,
+          version: (conflict.localData.version || 0) + 1,
+          requiredPermissions: conflict.operation.requiredPermissions || [],
+        });
         break;
 
       case 'merge':
         // Merge data
         const merged = attemptMerge(conflict.localData, conflict.serverData);
         console.log('🔄 Applying merge resolution:', merged);
+        
+        if (merged) {
+          // Update local with merged data
+          await updateEntity(
+            conflict.operation.entityType,
+            conflict.operation.entityId,
+            merged as any,
+            'pending'
+          );
+
+          // Remove the old conflicting operation
+          if (conflict.operation.id) {
+            await syncQueueStorage.markOperationCompleted(conflict.operation.id);
+          }
+
+          // Queue operation to sync merged data to server
+          await syncQueueStorage.queueOperation({
+            operation: 'update',
+            entityType: conflict.operation.entityType,
+            entityId: conflict.operation.entityId,
+            data: merged,
+            tenantId: conflict.operation.tenantId,
+            practiceId: conflict.operation.practiceId,
+            userId: conflict.operation.userId,
+            priority: 'high',
+            maxRetries: 3,
+            version: ((merged as any).version || 0) + 1,
+            requiredPermissions: conflict.operation.requiredPermissions || [],
+          });
+        }
         break;
 
       case 'last-write-wins':
         // Use most recent timestamp
-        const useLocal = conflict.localData.lastModified > 
-                         conflict.serverData?.lastModified;
+        const localTimestamp = conflict.localData.lastModified || conflict.localData.updatedAt || 0;
+        const serverTimestamp = conflict.serverData?.lastModified || conflict.serverData?.updatedAt || 0;
+        const useLocal = localTimestamp > serverTimestamp;
+        
         console.log(`🔄 Applying last-write-wins: ${useLocal ? 'local' : 'server'}`);
+        
+        if (useLocal) {
+          // Remove the old conflicting operation
+          if (conflict.operation.id) {
+            await syncQueueStorage.markOperationCompleted(conflict.operation.id);
+          }
+          
+          // Re-queue local data to force sync
+          await syncQueueStorage.queueOperation({
+            operation: conflict.operation.operation,
+            entityType: conflict.operation.entityType,
+            entityId: conflict.operation.entityId,
+            data: conflict.localData,
+            tenantId: conflict.operation.tenantId,
+            practiceId: conflict.operation.practiceId,
+            userId: conflict.operation.userId,
+            priority: 'high',
+            maxRetries: 3,
+            version: (conflict.localData.version || 0) + 1,
+            requiredPermissions: conflict.operation.requiredPermissions || [],
+          });
+        } else if (conflict.serverData) {
+          // Use server data
+          await updateEntity(
+            conflict.operation.entityType,
+            conflict.operation.entityId,
+            conflict.serverData,
+            'synced'
+          );
+          // Remove the old conflicting operation
+          if (conflict.operation.id) {
+            await syncQueueStorage.markOperationCompleted(conflict.operation.id);
+          }
+        }
         break;
+
+      case 'manual':
+        // Manual resolution - data already prepared in resolution
+        console.log('🔄 Applying manual resolution');
+        if (resolution!.resolvedData) {
+          await updateEntity(
+            conflict.operation.entityType,
+            conflict.operation.entityId,
+            resolution!.resolvedData,
+            'pending'
+          );
+
+          // Remove the old conflicting operation
+          if (conflict.operation.id) {
+            await syncQueueStorage.markOperationCompleted(conflict.operation.id);
+          }
+
+          // Queue to sync manually resolved data
+          await syncQueueStorage.queueOperation({
+            operation: 'update',
+            entityType: conflict.operation.entityType,
+            entityId: conflict.operation.entityId,
+            data: resolution!.resolvedData,
+            tenantId: conflict.operation.tenantId,
+            practiceId: conflict.operation.practiceId,
+            userId: conflict.operation.userId,
+            priority: 'high',
+            maxRetries: 3,
+            version: (resolution!.resolvedData.version || 0) + 1,
+            requiredPermissions: conflict.operation.requiredPermissions || [],
+          });
+        }
+        break;
+
+      default:
+        console.warn(`Unknown resolution strategy: ${resolution!.strategy}`);
     }
+
+    console.log(`✅ Conflict ${conflict.id} resolved with ${resolution!.strategy} strategy`);
   }
 
   /**
-   * Send operation to server (mock implementation)
+   * Send operation to server
    */
   private async sendOperationToServer(
     operation: SyncOperation
   ): Promise<{ success: boolean; realId?: number; error?: string }> {
-    // TODO: Replace with actual API call
-    // For now, simulate success
-    console.log(`📤 Sending ${operation.operation} for ${operation.entityType} ${operation.entityId}`);
+    try {
+      console.log(`📤 Sending ${operation.operation} for ${operation.entityType} ${operation.entityId}`);
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 100));
+      // Sanitize data - convert string numbers to actual numbers for appointments
+      let sanitizedData = { ...operation.data };
+      
+      if (operation.entityType === 'appointments') {
+        // Convert numeric fields from strings to numbers
+        const numericFields = ['durationMinutes', 'petId', 'clientId', 'staffId', 'practitionerId', 'practiceId'];
+        numericFields.forEach(field => {
+          if (sanitizedData[field] && typeof sanitizedData[field] === 'string') {
+            const num = parseInt(sanitizedData[field], 10);
+            if (!isNaN(num)) {
+              sanitizedData[field] = num;
+            }
+          }
+        });
+        
+        // Remove metadata from data (it's already in operation metadata)
+        delete sanitizedData.metadata;
+      }
 
-    // Simulate success with real ID for CREATE operations
-    if (operation.operation === 'create') {
+      // Prepare operation for API
+      const apiOperation = {
+        id: operation.id,
+        operation: operation.operation,
+        entityType: operation.entityType,
+        entityId: operation.entityId,
+        data: sanitizedData,
+        timestamp: operation.timestamp,
+        userId: operation.userId,
+        practiceId: operation.practiceId,
+        tenantId: operation.tenantId,
+      };
+
+      console.log('📤 Sending operation to server:', {
+        operation: apiOperation.operation,
+        entityType: apiOperation.entityType,
+        entityId: apiOperation.entityId,
+        tenantId: apiOperation.tenantId,
+        tenantIdType: typeof apiOperation.tenantId,
+        practiceId: apiOperation.practiceId,
+        userId: apiOperation.userId,
+      });
+
+      // Send to sync/push endpoint
+      const response = await fetch('/api/sync/push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          operations: [apiOperation],
+          clientTimestamp: Date.now(),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('❌ Sync push failed:', error);
+        return {
+          success: false,
+          error: `HTTP ${response.status}: ${error}`,
+        };
+      }
+
+      const result = await response.json();
+
+      // Check result for this specific operation
+      if (result.results && result.results.length > 0) {
+        const opResult = result.results[0];
+
+        if (opResult.conflict) {
+          console.warn('⚠️ Conflict detected:', opResult.conflictData);
+          return {
+            success: false,
+            error: 'Conflict detected',
+          };
+        }
+
+        if (opResult.success) {
+          console.log(`✅ Successfully synced ${operation.entityType} ${operation.entityId}`);
+          return {
+            success: true,
+            realId: opResult.realId,
+          };
+        } else {
+          return {
+            success: false,
+            error: opResult.error || 'Unknown error',
+          };
+        }
+      }
+
+      return { success: false, error: 'No result returned' };
+    } catch (error) {
+      console.error('❌ Network error during sync:', error);
       return {
-        success: true,
-        realId: Math.floor(Math.random() * 10000)
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error',
       };
     }
-
-    return { success: true };
   }
 
   /**
-   * Fetch current server data (mock implementation)
+   * Fetch current server data
    */
   private async fetchServerData(
     entityType: string,
     entityId: string | number
   ): Promise<any | null> {
-    // TODO: Replace with actual API call
-    // For now, return null (no server data)
-    return null;
+    try {
+      // Use the standard API endpoints to fetch data
+      const endpoint = `/api/${entityType}/${entityId}`;
+      
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.status === 404) {
+        return null; // Entity doesn't exist
+      }
+
+      if (!response.ok) {
+        console.error(`Failed to fetch ${entityType} ${entityId}:`, response.statusText);
+        return null;
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error(`Error fetching ${entityType} ${entityId}:`, error);
+      return null;
+    }
   }
 
   /**
@@ -498,7 +982,7 @@ export class SyncEngine {
   }
 
   /**
-   * Get sync status
+   * Get status
    */
   getStatus(): SyncStatus {
     return this.progress.status;
@@ -509,6 +993,19 @@ export class SyncEngine {
    */
   isSyncing(): boolean {
     return this.syncing;
+  }
+
+  /**
+   * Get count of pending operations
+   */
+  async getPendingOperationsCount(): Promise<number> {
+    try {
+      const stats = await syncQueueStorage.getQueueStats();
+      return stats.pending;
+    } catch (error) {
+      console.error('[SyncEngine] Failed to get pending count:', error);
+      return 0;
+    }
   }
 
   /**

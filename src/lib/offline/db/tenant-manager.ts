@@ -180,9 +180,11 @@ class TenantDatabaseManager {
   /**
    * Open tenant-specific IndexedDB
    */
-  private openTenantDatabase(tenantId: string, version?: number): Promise<IDBDatabase> {
+  private openTenantDatabase(tenantId: string, version?: number, retryCount = 0): Promise<IDBDatabase> {
     const dbName = getTenantDatabaseName(tenantId);
     console.log('[TenantDB] 📂 Opening database:', dbName, version ? `at version ${version}` : '(auto version)');
+    console.log('[TenantDB] 🔍 TRACE: tenantId received:', tenantId, 'type:', typeof tenantId);
+    console.log('[TenantDB] 🔍 TRACE: Call stack:', new Error().stack);
 
     return new Promise((resolve, reject) => {
       // Open without version to get current version, or with specific version if provided
@@ -191,8 +193,38 @@ class TenantDatabaseManager {
       console.log('[TenantDB] 📤 IndexedDB.open request created');
 
       request.onerror = () => {
-        console.error('[TenantDB] ❌ Failed to open database:', dbName, request.error);
-        reject(request.error);
+        const error = request.error;
+        console.error('[TenantDB] ❌ Failed to open database:', dbName, error);
+        
+        // Check if this is a backing store error and we haven't retried yet
+        if (error?.name === 'UnknownError' && 
+            error?.message?.includes('backing store') && 
+            retryCount === 0) {
+          console.warn('[TenantDB] 🔄 Backing store corrupted, attempting recovery...');
+          
+          // Delete the corrupted database and retry
+          const deleteRequest = indexedDB.deleteDatabase(dbName);
+          
+          deleteRequest.onsuccess = () => {
+            console.log('[TenantDB] ✅ Corrupted database deleted, retrying...');
+            // Retry opening the database (will create fresh)
+            this.openTenantDatabase(tenantId, DB_VERSION, retryCount + 1)
+              .then(resolve)
+              .catch(reject);
+          };
+          
+          deleteRequest.onerror = () => {
+            console.error('[TenantDB] ❌ Failed to delete corrupted database:', deleteRequest.error);
+            reject(error);
+          };
+          
+          deleteRequest.onblocked = () => {
+            console.error('[TenantDB] ❌ Database deletion blocked. Close all other tabs.');
+            reject(new Error('Cannot recover: database deletion blocked. Please close all other tabs.'));
+          };
+        } else {
+          reject(error);
+        }
       };
 
       request.onsuccess = () => {

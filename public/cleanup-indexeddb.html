@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>IndexedDB Cleanup</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+    .log { margin: 5px 0; }
+    .success { color: #4ec9b0; }
+    .error { color: #f48771; }
+    .warning { color: #dcdcaa; }
+    .info { color: #569cd6; }
+  </style>
+</head>
+<body>
+  <h1>🧹 IndexedDB Cleanup Tool</h1>
+  <p>This tool will delete unnecessary IndexedDB databases:</p>
+  <ul>
+    <li>SmartDMV_Tenant_innova (duplicate created from subdomain)</li>
+    <li>SmartDMV_OfflineDB (old practice storage, now merged)</li>
+  </ul>
+  <p><strong>Only SmartDMV_Tenant_&lt;ID&gt; should remain</strong></p>
+  <button onclick="cleanupDatabases()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
+    🗑️ Run Cleanup
+  </button>
+  <div id="output" style="margin-top: 20px;"></div>
+
+  <script>
+/**
+ * Cleanup Script: Delete unnecessary IndexedDB databases
+ * 
+ * This script removes:
+ * - SmartDMV_Tenant_innova (duplicate created from subdomain)
+ * - SmartDMV_OfflineDB (old separate database, now merged into tenant DB)
+ * 
+ * Only SmartDMV_Tenant_19 (or your tenant ID) should remain
+ */
+
+const output = document.getElementById('output');
+
+function log(message, type = 'info') {
+  const div = document.createElement('div');
+  div.className = `log ${type}`;
+  div.textContent = message;
+  output.appendChild(div);
+  console.log(message);
+}
+
+// List of databases to delete
+const databasesToDelete = [
+  'SmartDMV_Tenant_innova',  // Created from subdomain (wrong)
+  'SmartDMV_OfflineDB',      // Old practice storage (deprecated)
+  'smartvet_tenant_innova',  // Lowercase variant
+];
+
+async function cleanupDatabases() {
+  output.innerHTML = '';
+  log('🧹 Starting cleanup...', 'info');
+  log('', 'info');
+  
+  let deletedCount = 0;
+  let errorCount = 0;
+
+  for (const dbName of databasesToDelete) {
+    try {
+      log(`🗑️  Attempting to delete: ${dbName}...`, 'info');
+      
+      await new Promise((resolve, reject) => {
+        const deleteRequest = indexedDB.deleteDatabase(dbName);
+        
+        deleteRequest.onsuccess = () => {
+          log(`   ✅ Deleted: ${dbName}`, 'success');
+          deletedCount++;
+          resolve();
+        };
+        
+        deleteRequest.onerror = () => {
+          log(`   ⚠️  Not found or already deleted: ${dbName}`, 'warning');
+          resolve(); // Don't reject, just skip
+        };
+        
+        deleteRequest.onblocked = () => {
+          log(`   ⚠️  Blocked: ${dbName} (close other tabs)`, 'warning');
+          resolve();
+        };
+      });
+    } catch (error) {
+      log(`   ❌ Error deleting ${dbName}: ${error}`, 'error');
+      errorCount++;
+    }
+  }
+
+  log('', 'info');
+  log(`📊 Cleanup Summary:`, 'info');
+  log(`   ✅ Deleted: ${deletedCount} databases`, 'success');
+  log(`   ❌ Errors: ${errorCount}`, deletedCount > 0 ? 'success' : 'warning');
+  log('', 'info');
+  log(`✨ Only SmartDMV_Tenant_<ID> databases should remain`, 'success');
+  log(`   (where <ID> is your tenant database ID, e.g., SmartDMV_Tenant_19)`, 'info');
+  log('', 'info');
+  log(`🔄 Please refresh your application now`, 'warning');
+}
+  </script>
+</body>
+</html>

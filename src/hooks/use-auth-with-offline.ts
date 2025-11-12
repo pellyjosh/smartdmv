@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/context/UserContext';
-import { useOfflineAuth } from './use-offline-auth';
+import { useOfflineAuth } from '@/hooks/offline/use-offline-auth';
 import { useNetworkStatus } from './use-network-status';
 import { indexedDBManager } from '@/lib/offline/db';
 import type { User } from '@/context/UserContext';
@@ -92,8 +92,8 @@ export function useAuthWithOffline(): UseAuthWithOfflineReturn {
       } as any;
       
       // Check if the role is valid before proceeding
-      if (!reconstructedUser.role || reconstructedUser.role === 'UNKNOWN') {
-        console.error('[useAuthWithOffline] ❌ Session has invalid role:', reconstructedUser.role, 'cannot load offline user');
+      if (!reconstructedUser.role) {
+        console.error('[useAuthWithOffline] ❌ Session has no role, cannot load offline user');
         setOfflineUser(null);
         setError('Invalid offline session role');
         return;

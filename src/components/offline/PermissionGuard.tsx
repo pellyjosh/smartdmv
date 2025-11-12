@@ -6,7 +6,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useOfflinePermissions } from "@/hooks/use-offline-permissions";
+import { useOfflinePermissions } from "@/hooks/offline/use-offline-permissions";
 import type { PermissionAction } from "@/lib/offline/types/permission.types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Loader2 } from "lucide-react";

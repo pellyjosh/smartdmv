@@ -9,7 +9,7 @@
 
 import { apiRequest, queryClient } from "./queryClient";
 import { useNetworkStatus } from "@/hooks/use-network-status";
-import { useOfflineData } from "@/hooks/use-offline-data";
+import { useOfflineData } from "@/hooks/offline/use-offline-data";
 import { useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 

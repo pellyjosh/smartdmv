@@ -14,7 +14,7 @@
  * This ensures offline-supported features are immediately available without visiting them first.
  */
 
-const CACHE_VERSION = 'v1.0.9';
+const CACHE_VERSION = 'v1.1.0';
 const STATIC_CACHE = `smartdmv-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `smartdmv-dynamic-${CACHE_VERSION}`;
 const API_CACHE = `smartdmv-api-${CACHE_VERSION}`;
@@ -252,8 +252,8 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(request)
       .then(response => {
-        // Cache successful responses
-        if (response && response.status === 200) {
+        // Only cache GET requests with successful responses
+        if (request.method === 'GET' && response && response.status === 200) {
           const responseClone = response.clone();
           caches.open(DYNAMIC_CACHE).then(cache => {
             cache.put(request, responseClone);
@@ -908,6 +908,14 @@ self.addEventListener('message', (event) => {
       }
       break;
 
+    case 'CACHE_ROUTES':
+      // Cache multiple routes (triggered after authentication)
+      if (payload && payload.routes && Array.isArray(payload.routes)) {
+        console.log('[SW] Received request to cache', payload.routes.length, 'routes');
+        cacheRoutesInBackground(payload.routes);
+      }
+      break;
+
     case 'CLEAR_CACHE':
       // Clear all caches
       caches.keys().then((cacheNames) => {
@@ -921,6 +929,42 @@ self.addEventListener('message', (event) => {
       console.log('[SW] Unknown message type:', type);
   }
 });
+
+// Cache routes in background after authentication
+async function cacheRoutesInBackground(routes) {
+  console.log('[SW] Starting background caching of', routes.length, 'routes');
+  
+  const cache = await caches.open(PAGES_CACHE);
+  let cached = 0;
+  let failed = 0;
+
+  // Cache routes one by one to handle errors gracefully
+  for (const route of routes) {
+    try {
+      await cache.add(route);
+      cached++;
+      console.log(`[SW] ✅ Cached: ${route}`);
+    } catch (error) {
+      failed++;
+      console.warn(`[SW] ❌ Failed to cache ${route}:`, error.message);
+    }
+  }
+
+  console.log(`[SW] Background caching complete: ${cached} cached, ${failed} failed`);
+
+  // Notify all clients about completion
+  const clients = await self.clients.matchAll();
+  clients.forEach((client) => {
+    client.postMessage({
+      type: 'CACHE_ROUTES_COMPLETE',
+      payload: {
+        total: routes.length,
+        cached,
+        failed
+      }
+    });
+  });
+}
 
 // Periodic cleanup (run every hour)
 setInterval(() => {

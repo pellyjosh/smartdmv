@@ -140,6 +140,8 @@ export async function updateTokenValidation(
  */
 export async function saveSession(session: Omit<OfflineSession, 'id' | 'createdAt' | 'lastActivity'>): Promise<OfflineSession> {
   try {
+    console.log('[saveSession] Received session with tenantId:', session.tenantId, 'type:', typeof session.tenantId);
+    
     const now = Date.now();
     const fullSession: OfflineSession = {
       ...session,
@@ -148,12 +150,17 @@ export async function saveSession(session: Omit<OfflineSession, 'id' | 'createdA
       lastActivity: now,
     };
 
+    console.log('[saveSession] Full session tenantId before saving:', fullSession.tenantId);
     await indexedDBManager.put(STORES.SESSIONS, fullSession);
     
     // Store in localStorage for quick access with all user data for offline mode
     if (typeof window !== 'undefined') {
+      const detectedSubdomain = window.location.hostname.split('.')[0];
+      console.log('[saveSession] Detected subdomain from window:', detectedSubdomain);
+      console.log('[saveSession] Using session.tenantId:', session.tenantId);
+      
       const localStorageData = {
-        tenantId: session.tenantId,
+        tenantId: session.tenantId, // Use the tenantId from session, not subdomain!
         practiceId: session.practiceId,
         userId: session.userId,
         email: session.email,
@@ -165,11 +172,14 @@ export async function saveSession(session: Omit<OfflineSession, 'id' | 'createdA
         assignedLocations: session.assignedLocations || [],
         assignedDepartments: session.assignedDepartments || [],
         preferences: session.preferences || { offlineEnabled: true, autoSync: false },
-        subdomain: typeof window !== 'undefined' ? window.location.hostname.split('.')[0] : '',
+        subdomain: detectedSubdomain, // This is the actual subdomain from URL
         savedAt: Date.now(), // Add timestamp to track when it was saved
       };
+      console.log('[saveSession] Saving to localStorage with tenantId:', localStorageData.tenantId, 'subdomain:', localStorageData.subdomain);
       localStorage.setItem('offline_session', JSON.stringify(localStorageData));
       console.log('[saveSession] 💾 Saved to localStorage:', {
+        tenantId: localStorageData.tenantId,
+        subdomain: localStorageData.subdomain,
         role: localStorageData.role,
         roles: localStorageData.roles,
         savedAt: new Date(localStorageData.savedAt).toISOString()

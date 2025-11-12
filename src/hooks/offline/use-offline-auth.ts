@@ -3,10 +3,10 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { indexedDBManager } from '../lib/offline/db';
-import { STORES } from '../lib/offline/db/schema';
-import { clearOfflineTenantContext } from '../lib/offline/core/tenant-context';
-import type { OfflineSession, TokenValidation } from '../lib/offline/types/auth.types';
+import { indexedDBManager } from '@/lib/offline/db';
+import { STORES } from '@/lib/offline/db/schema';
+import { clearOfflineTenantContext } from '@/lib/offline/core/tenant-context';
+import type { OfflineSession, TokenValidation } from '@/lib/offline/types/auth.types';
 
 export interface UseOfflineAuthReturn {
   session: OfflineSession | null;
@@ -81,7 +81,20 @@ export function useOfflineAuth(): UseOfflineAuthReturn {
       }
 
       // Try to load any session from IndexedDB
-      const allSessions = await indexedDBManager.getAll<OfflineSession>(STORES.SESSIONS);
+      let allSessions;
+      try {
+        allSessions = await indexedDBManager.getAll<OfflineSession>(STORES.SESSIONS);
+      } catch (dbError: any) {
+        // If no tenant context is set, offline features are disabled
+        if (dbError?.message?.includes('No tenant context')) {
+          console.log('[useOfflineAuth] ⚠️ No tenant context - offline features disabled');
+          setSession(null);
+          setTokenValidation(null);
+          setIsLoading(false);
+          return;
+        }
+        throw dbError; // Re-throw other errors
+      }
       
       if (!allSessions || allSessions.length === 0) {
         console.log('[useOfflineAuth] No offline sessions found');

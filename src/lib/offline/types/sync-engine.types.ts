@@ -104,6 +104,7 @@ export type ConflictSeverity =
 export interface ConflictResolution {
   strategy: ConflictStrategy;
   mergedData?: any;
+  resolvedData?: any; // Manually resolved data
   appliedBy?: string;
   appliedAt: number;
   reason?: string;

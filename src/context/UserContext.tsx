@@ -188,6 +188,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const cachedUserData = sessionStorage.getItem(SESSION_TOKEN_COOKIE_NAME);
       if (cachedUserData) {
         const userData: User = JSON.parse(cachedUserData);
+        
+        // Detect and clear old invalid cached data
+        if (userData && 'currentPracticeId' in userData && userData.currentPracticeId === 'practice_NONE') {
+          console.warn('[UserContext INIT_CACHE] Detected invalid cached data with practice_NONE, clearing cache');
+          sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
+          setUser(null);
+          return;
+        }
+        
         if (userData && userData.id) {
           setUser(userData);
           console.log(
@@ -503,14 +512,30 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         // Cache authentication data for offline use
         try {
-          const tenantId = getTenantIdForCache();
-          await cacheAuthForOffline(data, tenantId);
+          await cacheAuthForOffline(data);
           console.log(
             "[UserContext login] ✅ Auth data cached for offline use"
           );
         } catch (error) {
           console.error(
             "[UserContext login] Failed to cache auth for offline:",
+            error
+          );
+          // Don't throw - caching failure shouldn't block login
+        }
+
+        // Trigger background caching of offline-supported routes
+        try {
+          const { cacheOfflineSupportedRoutes } = await import(
+            "@/lib/offline/cache-manager"
+          );
+          await cacheOfflineSupportedRoutes();
+          console.log(
+            "[UserContext login] ✅ Triggered caching of offline-supported routes"
+          );
+        } catch (error) {
+          console.error(
+            "[UserContext login] Failed to trigger route caching:",
             error
           );
           // Don't throw - caching failure shouldn't block login

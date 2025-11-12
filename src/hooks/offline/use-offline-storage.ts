@@ -3,10 +3,10 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { storageManager } from '../lib/offline/managers/storage-manager';
+import { storageManager } from '@/lib/offline/managers/storage-manager';
 import { useOfflineInitialization } from './use-offline-initialization';
-import type { SyncStatus } from '../lib/offline/types/storage.types';
-import { handleOfflineError } from '../lib/offline/utils/error-handlers';
+import type { SyncStatus } from '@/lib/offline/types/storage.types';
+import { handleOfflineError } from '@/lib/offline/utils/error-handlers';
 
 export interface UseOfflineStorageOptions {
   entityType: string;
@@ -62,16 +62,33 @@ export function useOfflineStorage<T extends { id?: number | string }>(
   const save = useCallback(async (entity: T): Promise<T | null> => {
     try {
       setError(null);
+      
+      // Check if initialized before attempting save
+      if (!initialized) {
+        const errorMsg = 'Cannot save - offline storage not initialized yet';
+        console.error('[useOfflineStorage] ❌', errorMsg);
+        setError(errorMsg);
+        throw new Error(errorMsg);
+      }
+      
+      console.log('[useOfflineStorage] 💾 Saving', entityType, entity);
       const saved = await storageManager.saveEntity<T>(entityType, entity, 'pending');
+      console.log('[useOfflineStorage] ✅ Saved', entityType, saved);
       await loadData(); // Refresh list
       return saved;
     } catch (err) {
       const handled = handleOfflineError(err);
       setError(handled.message);
-      console.error('[useOfflineStorage] Save error:', err);
-      return null;
+      console.error('[useOfflineStorage] ❌ Save error:', err);
+      console.error('[useOfflineStorage] ❌ Error details:', {
+        message: (err as Error).message,
+        stack: (err as Error).stack,
+        handled: handled.message,
+      });
+      // Re-throw the error so the caller can handle it
+      throw handled;
     }
-  }, [entityType, loadData]);
+  }, [entityType, loadData, initialized]);
 
   const update = useCallback(async (
     id: number | string,
@@ -79,30 +96,58 @@ export function useOfflineStorage<T extends { id?: number | string }>(
   ): Promise<T | null> => {
     try {
       setError(null);
+      
+      // Check if initialized before attempting update
+      if (!initialized) {
+        const errorMsg = 'Cannot update - offline storage not initialized yet';
+        console.error('[useOfflineStorage] ❌', errorMsg);
+        setError(errorMsg);
+        throw new Error(errorMsg);
+      }
+      
       const updated = await storageManager.updateEntity(entityType, id, updates);
       await loadData(); // Refresh list
       return updated as T;
     } catch (err) {
       const handled = handleOfflineError(err);
       setError(handled.message);
-      console.error('[useOfflineStorage] Update error:', err);
-      return null;
+      console.error('[useOfflineStorage] ❌ Update error:', err);
+      console.error('[useOfflineStorage] ❌ Error details:', {
+        message: (err as Error).message,
+        handled: handled.message,
+      });
+      // Re-throw the error so the caller can handle it
+      throw handled;
     }
-  }, [entityType, loadData]);
+  }, [entityType, loadData, initialized]);
 
   const remove = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       setError(null);
+      
+      // Check if initialized before attempting delete
+      if (!initialized) {
+        const errorMsg = 'Cannot delete - offline storage not initialized yet';
+        console.error('[useOfflineStorage] ❌', errorMsg);
+        setError(errorMsg);
+        throw new Error(errorMsg);
+      }
+      
       await storageManager.deleteEntity(entityType, id);
       await loadData(); // Refresh list
       return true;
     } catch (err) {
       const handled = handleOfflineError(err);
       setError(handled.message);
-      console.error('[useOfflineStorage] Delete error:', err);
-      return false;
+      console.error('[useOfflineStorage] ❌ Delete error:', err);
+      console.error('[useOfflineStorage] ❌ Error details:', {
+        message: (err as Error).message,
+        handled: handled.message,
+      });
+      // Re-throw the error so the caller can handle it
+      throw handled;
     }
-  }, [entityType, loadData]);
+  }, [entityType, loadData, initialized]);
 
   const getById = useCallback(async (id: number | string): Promise<T | null> => {
     try {

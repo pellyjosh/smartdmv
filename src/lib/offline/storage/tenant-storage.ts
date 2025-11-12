@@ -65,6 +65,13 @@ export async function getCachedTenantData(identifier: string): Promise<CachedTen
  */
 export async function cacheTenantData(tenant: CachedTenantInfo): Promise<void> {
   try {
+    // Set tenant context first before trying to cache
+    const { tenantId } = indexedDBManager.getCurrentTenant();
+    if (!tenantId) {
+      console.log('[TenantStorage] Setting tenant context before caching:', tenant.id);
+      indexedDBManager.setCurrentTenant(tenant.id);
+    }
+
     const cacheKey = `tenant_${tenant.subdomain}`;
     
     await indexedDBManager.put(CACHE_STORE, {
@@ -78,7 +85,7 @@ export async function cacheTenantData(tenant: CachedTenantInfo): Promise<void> {
     console.log('[TenantStorage] Tenant cached successfully:', tenant.name);
   } catch (error) {
     console.error('[TenantStorage] Error caching tenant:', error);
-    throw error;
+    // Don't throw - caching is non-critical
   }
 }
 

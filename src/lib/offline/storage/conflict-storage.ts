@@ -18,7 +18,18 @@ export async function getConflict(id: number): Promise<Conflict | null> {
 }
 
 export async function getAllConflicts(): Promise<Conflict[]> {
-  return await indexedDBManager.getAll<Conflict>(STORES.CONFLICTS);
+  try {
+    // Check if tenant context is set
+    const { tenantId } = indexedDBManager.getCurrentTenant();
+    if (!tenantId) {
+      console.log('[ConflictStorage] No tenant context, returning empty conflicts');
+      return [];
+    }
+    return await indexedDBManager.getAll<Conflict>(STORES.CONFLICTS);
+  } catch (error) {
+    console.error('[ConflictStorage] Error getting conflicts:', error);
+    return [];
+  }
 }
 
 export async function getUnresolvedConflicts(): Promise<Conflict[]> {

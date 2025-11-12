@@ -22,10 +22,11 @@ export interface LoginResponse {
 /**
  * Cache authentication data to IndexedDB for offline use
  * Call this after successful login
+ * 
+ * NOTE: Tenant ID is fetched from the server, not passed as parameter
  */
 export async function cacheAuthForOffline(
-  response: LoginResponse,
-  tenantId: string
+  response: LoginResponse
 ): Promise<void> {
   try {
     const { user, session } = response;
@@ -36,6 +37,85 @@ export async function cacheAuthForOffline(
     }
 
     console.log('[cacheAuthForOffline] Caching auth data for user:', user.email);
+
+    // Fetch the actual tenant database ID from the server - REQUIRED, NO FALLBACK
+    let tenantId: string;
+    let subdomain: string;
+    
+    console.log('[cacheAuthForOffline] Fetching tenant DB ID from /api/tenant/current...');
+    const tenantResponse = await fetch('/api/tenant/current');
+    console.log('[cacheAuthForOffline] Tenant API response status:', tenantResponse.status);
+    
+    if (!tenantResponse.ok) {
+      const errorText = await tenantResponse.text();
+      console.error('[cacheAuthForOffline] ❌ Tenant API failed:', tenantResponse.status, errorText);
+      throw new Error(`Failed to fetch tenant ID: ${tenantResponse.status} ${errorText}`);
+    }
+    
+    const tenantData = await tenantResponse.json();
+    console.log('[cacheAuthForOffline] Tenant API response data:', tenantData);
+    
+    if (!tenantData.success || !tenantData.tenant || !tenantData.tenant.id) {
+      console.error('[cacheAuthForOffline] ❌ Invalid tenant data:', tenantData);
+      throw new Error('Invalid tenant data received from API');
+    }
+    
+    tenantId = tenantData.tenant.id; // Database ID (e.g., "20")
+    subdomain = tenantData.tenant.subdomain; // Subdomain (e.g., "innova")
+    console.log('[cacheAuthForOffline] ✅ Got tenant DB ID:', tenantId, 'subdomain:', subdomain);
+
+    console.log('[cacheAuthForOffline] Will use tenantId:', tenantId, 'subdomain:', subdomain);
+
+    // Initialize IndexedDB with tenant context FIRST before any operations
+    try {
+      console.log('[cacheAuthForOffline] Setting tenant context in IndexedDB manager');
+      indexedDBManager.setCurrentTenant(tenantId);
+      await indexedDBManager.initialize(tenantId);
+      console.log('[cacheAuthForOffline] IndexedDB initialized with tenant:', tenantId);
+    } catch (error: any) {
+      console.error('[cacheAuthForOffline] Failed to initialize IndexedDB:', error);
+      
+      // Check if this is a backing store corruption error
+      if (error?.name === 'UnknownError' && error?.message?.includes('backing store')) {
+        console.warn('[cacheAuthForOffline] 🔄 Detected IndexedDB corruption for tenant:', tenantId);
+        
+        try {
+          // Only delete THIS tenant's database, not all of them
+          const dbName = `smartvet_tenant_${tenantId}`;
+          console.log('[cacheAuthForOffline] Deleting corrupted database:', dbName);
+          
+          await new Promise<void>((resolve, reject) => {
+            const deleteRequest = indexedDB.deleteDatabase(dbName);
+            
+            deleteRequest.onsuccess = () => {
+              console.log('[cacheAuthForOffline] ✅ Deleted corrupted database:', dbName);
+              resolve();
+            };
+            
+            deleteRequest.onerror = () => {
+              console.error('[cacheAuthForOffline] ❌ Failed to delete database:', deleteRequest.error);
+              reject(deleteRequest.error);
+            };
+            
+            deleteRequest.onblocked = () => {
+              console.error('[cacheAuthForOffline] ⚠️ Database deletion blocked. Close other tabs and try again.');
+              reject(new Error('Database deletion blocked. Please close all other tabs with this app open.'));
+            };
+          });
+          
+          console.log('[cacheAuthForOffline] ✅ Corrupted database deleted, retrying initialization...');
+          
+          // Retry initialization with the same tenant
+          await indexedDBManager.initialize(tenantId);
+          console.log('[cacheAuthForOffline] ✅ IndexedDB recovered and initialized successfully');
+        } catch (recoveryError) {
+          console.error('[cacheAuthForOffline] ❌ Recovery failed:', recoveryError);
+          throw new Error('IndexedDB is corrupted and cannot be recovered. Please try:\n1. Closing all other tabs\n2. Clearing browser data (Application → Storage → Clear site data)\n3. Using a different browser');
+        }
+      } else {
+        throw error;
+      }
+    }
 
     // Cache tenant information for offline use
     try {
@@ -57,14 +137,45 @@ export async function cacheAuthForOffline(
     let currentPracticeId: string | undefined;
     let accessiblePracticeIds: string[] | undefined;
 
+    console.log('[cacheAuthForOffline] 🔍 User object:', {
+      role: user.role,
+      id: user.id,
+      email: user.email,
+      keys: Object.keys(user),
+      fullUser: user,
+    });
+
     if (user.role === 'ADMINISTRATOR' || user.role === 'SUPER_ADMIN') {
       const adminUser = user as any;
+      console.log('[cacheAuthForOffline] 🔍 Admin user data:', {
+        currentPracticeId: adminUser.currentPracticeId,
+        accessiblePracticeIds: adminUser.accessiblePracticeIds,
+        practiceId: adminUser.practiceId,
+      });
       currentPracticeId = adminUser.currentPracticeId;
       accessiblePracticeIds = adminUser.accessiblePracticeIds || [];
       practiceId = currentPracticeId;
+      
+      // Skip offline caching if no valid practice is assigned
+      if (!practiceId || practiceId === 'practice_NONE') {
+        console.warn('[cacheAuthForOffline] ⚠️ User has no practice assigned, skipping offline cache');
+        console.warn('[cacheAuthForOffline] User can still login online, but offline features disabled until practice is assigned');
+        return;
+      }
     } else {
       const regularUser = user as any;
+      console.log('[cacheAuthForOffline] 🔍 Regular user data:', {
+        practiceId: regularUser.practiceId,
+        currentPracticeId: regularUser.currentPracticeId,
+      });
       practiceId = regularUser.practiceId;
+      
+      // Skip offline caching if no valid practice is assigned
+      if (!practiceId || practiceId === 'practice_NONE') {
+        console.warn('[cacheAuthForOffline] ⚠️ User has no practice assigned, skipping offline cache');
+        console.warn('[cacheAuthForOffline] User can still login online, but offline features disabled until practice is assigned');
+        return;
+      }
     }
 
     // Save authentication token (use simplified format)
@@ -111,19 +222,27 @@ export async function cacheAuthForOffline(
       lastActivity: Date.now(),
     };
 
+    console.log('[cacheAuthForOffline] About to save session with tenantId:', sessionData.tenantId);
     await indexedDBManager.put(STORES.SESSIONS, sessionData);
     console.log('[cacheAuthForOffline] Session saved');
 
     // Set offline tenant context for permission checks
     if (practiceId) {
       const { setOfflineTenantContext } = await import('./offline/core/tenant-context');
+      console.log('[cacheAuthForOffline] About to set offline tenant context with:', {
+        tenantId, // Should be DB ID like "20"
+        tenantIdType: typeof tenantId,
+        practiceId,
+        userId: typeof user.id === 'string' ? parseInt(user.id, 10) : user.id,
+        subdomain,
+      });
       setOfflineTenantContext({
-        tenantId,
+        tenantId, // Database ID (e.g., "20")
         practiceId: typeof practiceId === 'string' ? parseInt(practiceId, 10) : practiceId,
         userId: typeof user.id === 'string' ? parseInt(user.id, 10) : user.id,
-        subdomain: tenantId,
+        subdomain, // Subdomain (e.g., "innova")
       });
-      console.log('[cacheAuthForOffline] Offline tenant context set');
+      console.log('[cacheAuthForOffline] Offline tenant context set with DB ID:', tenantId);
     }
 
     // Fetch and cache practice information if practiceId is available

@@ -186,14 +186,13 @@ async function queuePracticeSwitchSync(
 }
 
 /**
- * Helper to open offline DB
+ * Helper to open offline DB (DEPRECATED - now uses main tenant database)
  */
 async function openOfflineDB() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open('SmartDMV_OfflineDB', 2);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+  // This function is deprecated - we now use the main tenant database via indexedDBManager
+  // Kept for backwards compatibility but returns the tenant database instead
+  const { indexedDBManager } = await import('../db');
+  return indexedDBManager.getDatabase();
 }
 
 /**

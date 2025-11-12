@@ -5,6 +5,7 @@
 
 import { indexedDBManager } from '../db/manager';
 import { storageManager } from '../managers/storage-manager';
+import { initializeNetworkMonitoring } from '../core/network-monitor';
 
 /**
  * Initialize offline system with user context
@@ -38,6 +39,13 @@ export async function initializeOfflineSystem(context: {
     // Initialize storage manager (this sets tenant context)
     console.log('[OfflineInit] 🎯 Calling storageManager.initialize...');
     await storageManager.initialize(tenantId, practiceIdNum, userIdNum);
+
+    // Initialize network monitoring for auto-sync
+    console.log('[OfflineInit] 📶 Initializing network monitoring...');
+    initializeNetworkMonitoring({
+      syncOnReconnect: true,
+      autoSyncEnabled: true,
+    });
 
     console.log('[OfflineInit] ✅ Offline system initialized successfully');
   } catch (error) {

@@ -3,13 +3,13 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { permissionManager } from '../lib/offline/managers/permission-manager';
-import { indexedDBManager } from '../lib/offline/db';
-import { STORES } from '../lib/offline/db/schema';
+import { permissionManager } from '@/lib/offline/managers/permission-manager';
+import { indexedDBManager } from '@/lib/offline/db';
+import { STORES } from '@/lib/offline/db/schema';
 import { useOfflineInitialization } from './use-offline-initialization';
 import type {
   PermissionAction,
-} from '../lib/offline/types/permission.types';
+} from '@/lib/offline/types/permission.types';
 
 export interface UseOfflinePermissionsReturn {
   canCreate: (entityType: string) => Promise<boolean>;

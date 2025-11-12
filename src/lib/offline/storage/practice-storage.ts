@@ -3,14 +3,11 @@
  * 
  * Handles caching and retrieval of accessible practices for offline use.
  * Supports practice switching without network connectivity.
+ * 
+ * NOTE: Uses the main tenant database 'cache' store instead of a separate database
  */
 
-import { openDB, IDBPDatabase } from 'idb';
-
-const DB_NAME = 'SmartDMV_OfflineDB';
-const DB_VERSION = 2; // Increment version for schema update
-const PRACTICES_STORE = 'practices';
-const CURRENT_PRACTICE_STORE = 'current_practice';
+import { indexedDBManager } from '../db';
 
 export interface CachedPractice {
   id: string | number;
@@ -29,27 +26,6 @@ export interface AccessiblePractices {
 }
 
 /**
- * Open IndexedDB with practice stores
- */
-async function getDB(): Promise<IDBPDatabase> {
-  return openDB(DB_NAME, DB_VERSION, {
-    upgrade(db, oldVersion, newVersion, transaction) {
-      // Create stores if they don't exist
-      if (!db.objectStoreNames.contains(PRACTICES_STORE)) {
-        const practiceStore = db.createObjectStore(PRACTICES_STORE, { keyPath: 'userId' });
-        practiceStore.createIndex('by_user', 'userId', { unique: true });
-      }
-      
-      if (!db.objectStoreNames.contains(CURRENT_PRACTICE_STORE)) {
-        db.createObjectStore(CURRENT_PRACTICE_STORE, { keyPath: 'userId' });
-      }
-
-      console.log('🏥 [PracticeStorage] Database upgraded from version', oldVersion, 'to', newVersion);
-    },
-  });
-}
-
-/**
  * Cache accessible practices for a user
  */
 export async function cacheAccessiblePractices(
@@ -64,8 +40,6 @@ export async function cacheAccessiblePractices(
   currentPracticeId?: string | null
 ): Promise<void> {
   try {
-    const db = await getDB();
-    
     const cachedPractices: CachedPractice[] = practices.map(p => ({
       id: p.id,
       name: p.name,
@@ -75,14 +49,15 @@ export async function cacheAccessiblePractices(
       cached_at: new Date().toISOString(),
     }));
 
-    const data: AccessiblePractices = {
+    const data = {
+      id: `accessible_practices_${userId}`,
       userId,
       practices: cachedPractices,
       currentPracticeId: currentPracticeId || null,
       cached_at: new Date().toISOString(),
     };
 
-    await db.put(PRACTICES_STORE, data);
+    await indexedDBManager.put('cache', data);
     
     console.log(`✅ [PracticeStorage] Cached ${practices.length} practices for user ${userId}`);
   } catch (error) {
@@ -96,17 +71,43 @@ export async function cacheAccessiblePractices(
  */
 export async function getCachedAccessiblePractices(userId: string): Promise<AccessiblePractices | null> {
   try {
-    const db = await getDB();
-    const data = await db.get(PRACTICES_STORE, userId);
+    const data = await indexedDBManager.get('cache', `accessible_practices_${userId}`) as any;
     
-    if (data) {
-      console.log(`✅ [PracticeStorage] Retrieved ${data.practices.length} cached practices for user ${userId}`);
+    if (!data) {
+      console.log(`⚠️ [PracticeStorage] No cached practices found for user ${userId}`);
+      return null;
     }
-    
-    return data || null;
+
+    console.log(`✅ [PracticeStorage] Retrieved ${data.practices?.length || 0} cached practices for user ${userId}`);
+    return data;
   } catch (error) {
-    console.error('❌ [PracticeStorage] Failed to get cached practices:', error);
+    console.error('❌ [PracticeStorage] Failed to retrieve cached practices:', error);
     return null;
+  }
+}
+
+/**
+ * Update current practice for a user
+ */
+export async function updateCurrentPractice(userId: string, practiceId: string): Promise<void> {
+  try {
+    const cachedData = await indexedDBManager.get('cache', `accessible_practices_${userId}`) as any;
+    
+    if (!cachedData) {
+      console.warn(`⚠️ [PracticeStorage] No cached practices found for user ${userId}`);
+      return;
+    }
+
+    // Update current practice
+    cachedData.currentPracticeId = practiceId;
+    cachedData.cached_at = new Date().toISOString();
+    
+    await indexedDBManager.put('cache', cachedData);
+    
+    console.log(`✅ [PracticeStorage] Updated current practice to ${practiceId} for user ${userId}`);
+  } catch (error) {
+    console.error('❌ [PracticeStorage] Failed to update current practice:', error);
+    throw error;
   }
 }
 
@@ -118,10 +119,8 @@ export async function switchPracticeOffline(
   newPracticeId: string
 ): Promise<boolean> {
   try {
-    const db = await getDB();
+    const cachedData = await indexedDBManager.get('cache', `accessible_practices_${userId}`) as any;
     
-    // Verify practice exists in cached practices
-    const cachedData = await db.get(PRACTICES_STORE, userId);
     if (!cachedData) {
       console.error('❌ [PracticeStorage] No cached practices found for user');
       return false;
@@ -137,16 +136,7 @@ export async function switchPracticeOffline(
     }
 
     // Update current practice
-    cachedData.currentPracticeId = newPracticeId;
-    await db.put(PRACTICES_STORE, cachedData);
-
-    // Store in separate current_practice store for quick access
-    await db.put(CURRENT_PRACTICE_STORE, {
-      userId,
-      practiceId: newPracticeId,
-      practiceName: practice.name,
-      switched_at: new Date().toISOString(),
-    });
+    await updateCurrentPractice(userId, newPracticeId);
 
     console.log(`✅ [PracticeStorage] Switched to practice ${newPracticeId} (${practice.name}) offline`);
     return true;
@@ -157,13 +147,12 @@ export async function switchPracticeOffline(
 }
 
 /**
- * Get current practice ID
+ * Get current practice ID for a user
  */
 export async function getCurrentPracticeId(userId: string): Promise<string | null> {
   try {
-    const db = await getDB();
-    const current = await db.get(CURRENT_PRACTICE_STORE, userId);
-    return current?.practiceId || null;
+    const data = await indexedDBManager.get('cache', `accessible_practices_${userId}`) as any;
+    return data?.currentPracticeId || null;
   } catch (error) {
     console.error('❌ [PracticeStorage] Failed to get current practice:', error);
     return null;
@@ -171,33 +160,39 @@ export async function getCurrentPracticeId(userId: string): Promise<string | nul
 }
 
 /**
- * Clear cached practices for a user
- */
-export async function clearCachedPractices(userId: string): Promise<void> {
-  try {
-    const db = await getDB();
-    await db.delete(PRACTICES_STORE, userId);
-    await db.delete(CURRENT_PRACTICE_STORE, userId);
-    console.log(`✅ [PracticeStorage] Cleared cached practices for user ${userId}`);
-  } catch (error) {
-    console.error('❌ [PracticeStorage] Failed to clear cached practices:', error);
-  }
-}
-
-/**
- * Get practice by ID from cache
+ * Get a specific practice by ID from cached practices
  */
 export async function getCachedPracticeById(
   userId: string,
   practiceId: string
 ): Promise<CachedPractice | null> {
   try {
-    const data = await getCachedAccessiblePractices(userId);
-    if (!data) return null;
+    const data = await indexedDBManager.get('cache', `accessible_practices_${userId}`) as any;
+    
+    if (!data || !data.practices) {
+      return null;
+    }
 
-    return data.practices.find(p => p.id.toString() === practiceId.toString()) || null;
+    const practice = data.practices.find(
+      (p: CachedPractice) => p.id.toString() === practiceId.toString()
+    );
+
+    return practice || null;
   } catch (error) {
     console.error('❌ [PracticeStorage] Failed to get practice by ID:', error);
     return null;
+  }
+}
+
+/**
+ * Clear all cached practices for a user
+ */
+export async function clearCachedPractices(userId: string): Promise<void> {
+  try {
+    await indexedDBManager.delete('cache', `accessible_practices_${userId}`);
+    console.log(`✅ [PracticeStorage] Cleared cached practices for user ${userId}`);
+  } catch (error) {
+    console.error('❌ [PracticeStorage] Failed to clear cached practices:', error);
+    throw error;
   }
 }

@@ -1,8 +1,14 @@
 // src/components/notifications/notification-provider.tsx
-'use client';
+"use client";
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import { useToast } from "@/hooks/use-toast";
 
 interface Notification {
   id: string;
@@ -24,7 +30,9 @@ interface NotificationContextType {
   fetchNotifications: () => Promise<void>;
 }
 
-const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
+const NotificationContext = createContext<NotificationContextType | undefined>(
+  undefined
+);
 
 interface NotificationProviderProps {
   children: ReactNode;
@@ -32,7 +40,11 @@ interface NotificationProviderProps {
   practiceId?: string;
 }
 
-export function NotificationProvider({ children, userId, practiceId }: NotificationProviderProps) {
+export function NotificationProvider({
+  children,
+  userId,
+  practiceId,
+}: NotificationProviderProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const { toast } = useToast();
@@ -41,31 +53,33 @@ export function NotificationProvider({ children, userId, practiceId }: Notificat
   const fetchNotifications = async () => {
     try {
       const params = new URLSearchParams();
-      if (userId) params.append('userId', userId);
-      if (practiceId) params.append('practiceId', practiceId);
-      params.append('limit', '50');
+      if (userId) params.append("userId", userId);
+      if (practiceId) params.append("practiceId", practiceId);
+      params.append("limit", "50");
 
       const response = await fetch(`/api/notifications?${params.toString()}`, {
-        credentials: 'include'
+        credentials: "include",
       });
 
       if (response.ok) {
         const data = await response.json();
         const fetchedNotifications = data.notifications || [];
         setNotifications(fetchedNotifications);
-        setUnreadCount(fetchedNotifications.filter((n: Notification) => !n.read).length);
+        setUnreadCount(
+          fetchedNotifications.filter((n: Notification) => !n.read).length
+        );
       }
     } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+      console.error("Failed to fetch notifications:", error);
     }
   };
 
   // Add new notification (for real-time updates)
   const addNotification = (notification: Notification) => {
-    setNotifications(prev => [notification, ...prev]);
+    setNotifications((prev) => [notification, ...prev]);
     if (!notification.read) {
-      setUnreadCount(prev => prev + 1);
-      
+      setUnreadCount((prev) => prev + 1);
+
       // Show toast notification for new notifications
       toast({
         title: notification.title,
@@ -79,39 +93,39 @@ export function NotificationProvider({ children, userId, practiceId }: Notificat
   const markAsRead = async (notificationId: string) => {
     try {
       const response = await fetch(`/api/notifications?id=${notificationId}`, {
-        method: 'PATCH',
-        credentials: 'include'
+        method: "PATCH",
+        credentials: "include",
       });
 
       if (response.ok) {
-        setNotifications(prev => 
-          prev.map(notification => 
-            notification.id === notificationId 
+        setNotifications((prev) =>
+          prev.map((notification) =>
+            notification.id === notificationId
               ? { ...notification, read: true }
               : notification
           )
         );
-        setUnreadCount(prev => Math.max(0, prev - 1));
+        setUnreadCount((prev) => Math.max(0, prev - 1));
       }
     } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+      console.error("Failed to mark notification as read:", error);
     }
   };
 
   // Mark all notifications as read
   const markAllAsRead = async () => {
     try {
-      const response = await fetch('/api/notifications?markAllRead=true', {
-        method: 'PATCH',
-        credentials: 'include'
+      const response = await fetch("/api/notifications?markAllRead=true", {
+        method: "PATCH",
+        credentials: "include",
       });
 
       if (response.ok) {
-        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
         setUnreadCount(0);
       }
     } catch (error) {
-      console.error('Failed to mark all notifications as read:', error);
+      console.error("Failed to mark all notifications as read:", error);
     }
   };
 
@@ -119,19 +133,19 @@ export function NotificationProvider({ children, userId, practiceId }: Notificat
   const removeNotification = async (notificationId: string) => {
     try {
       const response = await fetch(`/api/notifications?id=${notificationId}`, {
-        method: 'DELETE',
-        credentials: 'include'
+        method: "DELETE",
+        credentials: "include",
       });
 
       if (response.ok) {
-        const notification = notifications.find(n => n.id === notificationId);
-        setNotifications(prev => prev.filter(n => n.id !== notificationId));
+        const notification = notifications.find((n) => n.id === notificationId);
+        setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
         if (notification && !notification.read) {
-          setUnreadCount(prev => Math.max(0, prev - 1));
+          setUnreadCount((prev) => Math.max(0, prev - 1));
         }
       }
     } catch (error) {
-      console.error('Failed to delete notification:', error);
+      console.error("Failed to delete notification:", error);
     }
   };
 
@@ -150,50 +164,59 @@ export function NotificationProvider({ children, userId, practiceId }: Notificat
 
   // WebSocket connection for real-time notifications (if available)
   useEffect(() => {
-    if (typeof window !== 'undefined' && userId) {
+    if (typeof window !== "undefined" && userId) {
       try {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsPort = window.location.port === '3000' ? '3001' : '3001'; // Adjust based on your websocket server port
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsPort = window.location.port === "3000" ? "3001" : "3001"; // Adjust based on your websocket server port
         const wsUrl = `${protocol}//${window.location.hostname}:${wsPort}`;
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
-          console.log('🔌 WebSocket connected for notifications');
+          console.log("🔌 WebSocket connected for notifications");
           // Subscribe to user-specific notifications
-          ws.send(JSON.stringify({
-            type: 'subscribe',
-            channel: `notifications:${userId}`,
-            practiceId: practiceId
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "subscribe",
+              channel: `notifications:${userId}`,
+              practiceId: practiceId,
+            })
+          );
         };
 
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            console.log('📨 WebSocket message received:', data);
-            
-            if (data.type === 'notification' && data.notification) {
-              console.log('🔔 New notification received via WebSocket:', data.notification);
+            console.log("📨 WebSocket message received:", data);
+
+            if (data.type === "notification" && data.notification) {
+              console.log(
+                "🔔 New notification received via WebSocket:",
+                data.notification
+              );
               addNotification(data.notification);
             }
           } catch (error) {
-            console.error('Failed to parse WebSocket message:', error);
+            console.error("Failed to parse WebSocket message:", error);
           }
         };
 
-        ws.onerror = (error) => {
-          console.warn('⚠️ WebSocket error (falling back to polling):', error);
+        ws.onerror = () => {
+          // Silently fail - WebSocket is optional enhancement
+          console.log("WebSocket not available - falling back to polling");
         };
 
         ws.onclose = () => {
-          console.log('🔌 WebSocket disconnected');
+          console.log("🔌 WebSocket disconnected");
         };
 
         return () => {
           ws.close();
         };
       } catch (error) {
-        console.warn('Failed to connect to WebSocket (using polling only):', error);
+        console.warn(
+          "Failed to connect to WebSocket (using polling only):",
+          error
+        );
       }
     }
   }, [userId, practiceId]);
@@ -218,7 +241,9 @@ export function NotificationProvider({ children, userId, practiceId }: Notificat
 export function useNotifications() {
   const context = useContext(NotificationContext);
   if (context === undefined) {
-    throw new Error('useNotifications must be used within a NotificationProvider');
+    throw new Error(
+      "useNotifications must be used within a NotificationProvider"
+    );
   }
   return context;
 }

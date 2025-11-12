@@ -79,11 +79,29 @@ export async function getPendingOperations(
       return [];
     }
 
-    let operations = await indexedDBManager.queryByIndex<SyncOperation>(
-      STORES.SYNC_QUEUE,
-      'status',
-      'pending'
-    );
+    // Get fresh verified connection
+    const db = await indexedDBManager.initialize(targetTenantId);
+    
+    // Verify store exists
+    if (!Array.from(db.objectStoreNames).includes(STORES.SYNC_QUEUE)) {
+      console.log(`[SyncQueue] Store "${STORES.SYNC_QUEUE}" not found`);
+      return [];
+    }
+
+    // Query using verified connection
+    let operations = await new Promise<SyncOperation[]>((resolve, reject) => {
+      try {
+        const tx = db.transaction(STORES.SYNC_QUEUE, 'readonly');
+        const store = tx.objectStore(STORES.SYNC_QUEUE);
+        const index = store.index('status');
+        const request = index.getAll('pending');
+
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
 
     // Filter by tenant
     operations = operations.filter((op) => op.tenantId === targetTenantId);
@@ -100,6 +118,7 @@ export async function getPendingOperations(
       operations = operations.slice(0, limit);
     }
 
+    console.log(`[SyncQueue] Found ${operations.length} pending operations for tenant ${targetTenantId}`);
     return operations;
   } catch (error) {
     console.error('[SyncQueue] Failed to get pending operations:', error);
@@ -120,14 +139,32 @@ export async function getAllOperations(tenantId?: string): Promise<SyncOperation
       return [];
     }
 
-    const operations = await indexedDBManager.queryByIndex<SyncOperation>(
-      STORES.SYNC_QUEUE,
-      'tenantId',
-      targetTenantId
-    );
+    // Get fresh verified connection
+    const db = await indexedDBManager.initialize(targetTenantId);
+    
+    // Verify store exists
+    if (!Array.from(db.objectStoreNames).includes(STORES.SYNC_QUEUE)) {
+      return [];
+    }
+
+    // Query using verified connection
+    const operations = await new Promise<SyncOperation[]>((resolve, reject) => {
+      try {
+        const tx = db.transaction(STORES.SYNC_QUEUE, 'readonly');
+        const store = tx.objectStore(STORES.SYNC_QUEUE);
+        const index = store.index('tenantId');
+        const request = index.getAll(targetTenantId);
+
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
 
     return operations;
   } catch (error) {
+    console.error('[SyncQueue] Failed to get all operations:', error);
     throw new DatabaseError('Failed to get all operations', error as Error);
   }
 }
@@ -137,8 +174,36 @@ export async function getAllOperations(tenantId?: string): Promise<SyncOperation
  */
 export async function getOperation(operationId: number): Promise<SyncOperation | null> {
   try {
-    return await indexedDBManager.get<SyncOperation>(STORES.SYNC_QUEUE, operationId);
+    const context = await getOfflineTenantContext();
+    if (!context) {
+      return null;
+    }
+
+    // Get fresh verified connection
+    const db = await indexedDBManager.initialize(context.tenantId);
+    
+    // Verify store exists
+    if (!Array.from(db.objectStoreNames).includes(STORES.SYNC_QUEUE)) {
+      return null;
+    }
+
+    // Get using verified connection
+    const operation = await new Promise<SyncOperation | undefined>((resolve, reject) => {
+      try {
+        const tx = db.transaction(STORES.SYNC_QUEUE, 'readonly');
+        const store = tx.objectStore(STORES.SYNC_QUEUE);
+        const request = store.get(operationId);
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
+
+    return operation || null;
   } catch (error) {
+    console.error(`[SyncQueue] Failed to get operation ${operationId}:`, error);
     throw new DatabaseError(`Failed to get operation ${operationId}`, error as Error);
   }
 }
@@ -152,7 +217,33 @@ export async function updateOperationStatus(
   error?: string
 ): Promise<void> {
   try {
-    const operation = await getOperation(operationId);
+    const context = await getOfflineTenantContext();
+    if (!context) {
+      throw new Error('No tenant context available');
+    }
+
+    // Get fresh verified connection
+    const db = await indexedDBManager.initialize(context.tenantId);
+    
+    // Verify store exists
+    if (!Array.from(db.objectStoreNames).includes(STORES.SYNC_QUEUE)) {
+      throw new DatabaseError(`Store "${STORES.SYNC_QUEUE}" not found`);
+    }
+
+    // Get operation using verified connection
+    const operation = await new Promise<SyncOperation | undefined>((resolve, reject) => {
+      try {
+        const tx = db.transaction(STORES.SYNC_QUEUE, 'readonly');
+        const store = tx.objectStore(STORES.SYNC_QUEUE);
+        const request = store.get(operationId);
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
+
     if (!operation) {
       throw new Error(`Operation ${operationId} not found`);
     }
@@ -168,8 +259,23 @@ export async function updateOperationStatus(
       operation.lastError = undefined;
     }
 
-    await indexedDBManager.put(STORES.SYNC_QUEUE, operation);
+    // Put using verified connection
+    await new Promise<void>((resolve, reject) => {
+      try {
+        const tx = db.transaction(STORES.SYNC_QUEUE, 'readwrite');
+        const store = tx.objectStore(STORES.SYNC_QUEUE);
+        const request = store.put(operation);
+
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
+
+    console.log(`[SyncQueue] Updated operation ${operationId} to ${status}`);
   } catch (error) {
+    console.error(`[SyncQueue] Failed to update operation ${operationId}:`, error);
     throw new DatabaseError(`Failed to update operation ${operationId}`, error as Error);
   }
 }
@@ -189,13 +295,53 @@ export async function markOperationCompleted(operationId: number): Promise<void>
 }
 
 /**
- * Mark operation as failed
+ * Mark operation as failed (but keep as pending for retry)
+ * Since we have unlimited retries, failed operations stay pending and will be retried
  */
 export async function markOperationFailed(
   operationId: number,
   error: string
 ): Promise<void> {
-  await updateOperationStatus(operationId, 'failed', error);
+  try {
+    const operation = await getOperation(operationId);
+    if (!operation) {
+      throw new Error(`Operation ${operationId} not found`);
+    }
+
+    // Mark as 'failed' - user must manually retry from Sync Queue
+    operation.status = 'failed';
+    operation.lastError = error;
+    operation.retryCount = (operation.retryCount || 0) + 1;
+
+    await indexedDBManager.put(STORES.SYNC_QUEUE, operation);
+    console.log(`[SyncQueue] Operation ${operationId} marked as failed (attempt ${operation.retryCount}): ${error}`);
+  } catch (err) {
+    throw new DatabaseError(`Failed to mark operation ${operationId} as failed`, err as Error);
+  }
+}
+
+/**
+ * Mark operation as permanently failed (max retries exceeded)
+ */
+export async function markOperationPermanentlyFailed(
+  operationId: number,
+  error: string
+): Promise<void> {
+  try {
+    const operation = await getOperation(operationId);
+    if (!operation) {
+      throw new Error(`Operation ${operationId} not found`);
+    }
+
+    operation.status = 'failed';
+    operation.lastError = `${error} (Max retries exceeded)`;
+    operation.retryCount = operation.maxRetries; // Set to max to prevent further retries
+
+    await indexedDBManager.put(STORES.SYNC_QUEUE, operation);
+    console.log(`[SyncQueue] Operation ${operationId} permanently failed: ${error}`);
+  } catch (err) {
+    throw new DatabaseError(`Failed to mark operation ${operationId} as permanently failed`, err as Error);
+  }
 }
 
 /**
@@ -413,15 +559,12 @@ export async function retryOperation(operationId: number): Promise<void> {
       throw new Error(`Operation ${operationId} not found`);
     }
 
-    if (operation.retryCount >= operation.maxRetries) {
-      throw new Error('Max retries exceeded');
-    }
-
+    // No max retry limit - always allow retry
     operation.status = 'pending';
     operation.lastError = undefined;
 
     await indexedDBManager.put(STORES.SYNC_QUEUE, operation);
-    console.log(`[SyncQueue] Retry operation ${operationId}`);
+    console.log(`[SyncQueue] Retry operation ${operationId} (attempt ${operation.retryCount + 1})`);
   } catch (error) {
     throw new DatabaseError(`Failed to retry operation ${operationId}`, error as Error);
   }

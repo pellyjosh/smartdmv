@@ -51,10 +51,10 @@ import {
   PermissionGuard,
   StorageUsage,
 } from "@/components/offline";
-import { useOfflineStorage } from "@/hooks/use-offline-storage";
-import { useOfflinePermissions } from "@/hooks/use-offline-permissions";
-import { useOfflineAuth } from "@/hooks/use-offline-auth";
-import { useSyncQueue } from "@/hooks/use-sync-queue";
+import { useOfflineStorage } from "@/hooks/offline/use-offline-storage";
+import { useOfflinePermissions } from "@/hooks/offline/use-offline-permissions";
+import { useOfflineAuth } from "@/hooks/offline/use-offline-auth";
+import { useSyncQueue } from "@/hooks/offline/use-sync-queue";
 import { useUser } from "@/context/UserContext";
 import { useTenant } from "@/context/TenantContext";
 import { EntityType } from "@/lib/offline/types/storage.types";
@@ -224,12 +224,14 @@ export default function OfflineDemoPage() {
           (onlineUser as any)?.roles?.map((r: any) => r.name) ||
           [],
       },
-      offlineContext: session ? {
-        userId: session.userId,
-        userIdType: typeof session.userId,
-        tenantId: session.tenantId,
-        practiceId: session.practiceId,
-      } : null,
+      offlineContext: session
+        ? {
+            userId: session.userId,
+            userIdType: typeof session.userId,
+            tenantId: session.tenantId,
+            practiceId: session.practiceId,
+          }
+        : null,
       cacheStatus: {
         isPermissionCacheValid,
         isOnline,
@@ -361,70 +363,107 @@ export default function OfflineDemoPage() {
                 <Building className="h-5 w-5" />
                 Tenant Information
               </CardTitle>
-              <CardDescription>
-                Current tenant context from API
-              </CardDescription>
+              <CardDescription>Current tenant context from API</CardDescription>
             </CardHeader>
             <CardContent>
               {tenant ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-sm text-muted-foreground">Tenant Name</Label>
-                      <div className="text-lg font-semibold mt-1">{tenant.name}</div>
+                      <Label className="text-sm text-muted-foreground">
+                        Tenant Name
+                      </Label>
+                      <div className="text-lg font-semibold mt-1">
+                        {tenant.name}
+                      </div>
                     </div>
                     <div>
-                      <Label className="text-sm text-muted-foreground">Subdomain</Label>
-                      <div className="text-lg font-mono mt-1">{tenant.subdomain || tenant.slug}</div>
+                      <Label className="text-sm text-muted-foreground">
+                        Subdomain
+                      </Label>
+                      <div className="text-lg font-mono mt-1">
+                        {tenant.subdomain || tenant.slug}
+                      </div>
                     </div>
                     <div>
-                      <Label className="text-sm text-muted-foreground">Status</Label>
+                      <Label className="text-sm text-muted-foreground">
+                        Status
+                      </Label>
                       <div className="mt-1">
-                        <Badge variant={tenant.status === 'active' ? 'default' : 'secondary'}>
+                        <Badge
+                          variant={
+                            tenant.status === "active" ? "default" : "secondary"
+                          }
+                        >
                           {tenant.status.toUpperCase()}
                         </Badge>
                       </div>
                     </div>
                     <div>
-                      <Label className="text-sm text-muted-foreground">Database Name</Label>
-                      <div className="text-lg font-mono mt-1">{tenant.databaseName}</div>
+                      <Label className="text-sm text-muted-foreground">
+                        Database Name
+                      </Label>
+                      <div className="text-lg font-mono mt-1">
+                        {tenant.databaseName}
+                      </div>
                     </div>
                     {tenant.domain && (
                       <div>
-                        <Label className="text-sm text-muted-foreground">Custom Domain</Label>
+                        <Label className="text-sm text-muted-foreground">
+                          Custom Domain
+                        </Label>
                         <div className="text-lg mt-1">{tenant.domain}</div>
                       </div>
                     )}
                     <div>
-                      <Label className="text-sm text-muted-foreground">Storage Path</Label>
-                      <div className="text-sm font-mono mt-1">{tenant.storagePath}</div>
+                      <Label className="text-sm text-muted-foreground">
+                        Storage Path
+                      </Label>
+                      <div className="text-sm font-mono mt-1">
+                        {tenant.storagePath}
+                      </div>
                     </div>
                   </div>
-                  
+
                   {tenant.settings && (
                     <div className="border-t pt-4">
-                      <Label className="text-sm text-muted-foreground">Settings</Label>
+                      <Label className="text-sm text-muted-foreground">
+                        Settings
+                      </Label>
                       <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
                         <div>
-                          <span className="text-muted-foreground">Timezone:</span>
-                          <span className="ml-2 font-mono">{tenant.settings.timezone || 'UTC'}</span>
+                          <span className="text-muted-foreground">
+                            Timezone:
+                          </span>
+                          <span className="ml-2 font-mono">
+                            {tenant.settings.timezone || "UTC"}
+                          </span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Theme:</span>
-                          <span className="ml-2">{tenant.settings.theme || 'default'}</span>
+                          <span className="ml-2">
+                            {tenant.settings.theme || "default"}
+                          </span>
                         </div>
-                        {tenant.settings.features && tenant.settings.features.length > 0 && (
-                          <div className="col-span-2">
-                            <span className="text-muted-foreground">Features:</span>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {tenant.settings.features.map((feature) => (
-                                <Badge key={feature} variant="outline" className="text-xs">
-                                  {feature}
-                                </Badge>
-                              ))}
+                        {tenant.settings.features &&
+                          tenant.settings.features.length > 0 && (
+                            <div className="col-span-2">
+                              <span className="text-muted-foreground">
+                                Features:
+                              </span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {tenant.settings.features.map((feature) => (
+                                  <Badge
+                                    key={feature}
+                                    variant="outline"
+                                    className="text-xs"
+                                  >
+                                    {feature}
+                                  </Badge>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
                       </div>
                     </div>
                   )}
@@ -456,28 +495,42 @@ export default function OfflineDemoPage() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-sm text-muted-foreground">Practice Name</Label>
-                      <div className="text-lg font-semibold mt-1">{practice.name}</div>
+                      <Label className="text-sm text-muted-foreground">
+                        Practice Name
+                      </Label>
+                      <div className="text-lg font-semibold mt-1">
+                        {practice.name}
+                      </div>
                     </div>
                     <div>
-                      <Label className="text-sm text-muted-foreground">Practice ID</Label>
-                      <div className="text-lg font-mono mt-1">{practice.id}</div>
+                      <Label className="text-sm text-muted-foreground">
+                        Practice ID
+                      </Label>
+                      <div className="text-lg font-mono mt-1">
+                        {practice.id}
+                      </div>
                     </div>
                     {practice.email && (
                       <div>
-                        <Label className="text-sm text-muted-foreground">Email</Label>
+                        <Label className="text-sm text-muted-foreground">
+                          Email
+                        </Label>
                         <div className="text-sm mt-1">{practice.email}</div>
                       </div>
                     )}
                     {practice.phone && (
                       <div>
-                        <Label className="text-sm text-muted-foreground">Phone</Label>
+                        <Label className="text-sm text-muted-foreground">
+                          Phone
+                        </Label>
                         <div className="text-sm mt-1">{practice.phone}</div>
                       </div>
                     )}
                     {practice.address && (
                       <div className="col-span-2">
-                        <Label className="text-sm text-muted-foreground">Address</Label>
+                        <Label className="text-sm text-muted-foreground">
+                          Address
+                        </Label>
                         <div className="text-sm mt-1">{practice.address}</div>
                       </div>
                     )}
@@ -506,14 +559,20 @@ export default function OfflineDemoPage() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground">Database Name:</span>
-                  <span className="font-mono">SmartDMV_Tenant_{tenant?.subdomain || tenant?.slug}</span>
+                  <span className="font-mono">
+                    SmartDMV_Tenant_{tenant?.subdomain || tenant?.slug}
+                  </span>
                 </div>
                 <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Practice Store Prefix:</span>
+                  <span className="text-muted-foreground">
+                    Practice Store Prefix:
+                  </span>
                   <span className="font-mono">practice_{practice?.id}_*</span>
                 </div>
                 <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Isolation Level:</span>
+                  <span className="text-muted-foreground">
+                    Isolation Level:
+                  </span>
                   <span className="font-semibold">Tenant + Practice</span>
                 </div>
                 <div className="flex justify-between py-2">
@@ -901,15 +960,22 @@ export default function OfflineDemoPage() {
                       <h4 className="font-medium mb-3">Offline Context</h4>
                       <div className="text-sm space-y-1">
                         <div>
-                          <span className="text-muted-foreground">User ID:</span>{" "}
-                          {permissionTestResults.offlineContext.userId} (type: {permissionTestResults.offlineContext.userIdType})
+                          <span className="text-muted-foreground">
+                            User ID:
+                          </span>{" "}
+                          {permissionTestResults.offlineContext.userId} (type:{" "}
+                          {permissionTestResults.offlineContext.userIdType})
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Tenant ID:</span>{" "}
+                          <span className="text-muted-foreground">
+                            Tenant ID:
+                          </span>{" "}
                           {permissionTestResults.offlineContext.tenantId}
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Practice ID:</span>{" "}
+                          <span className="text-muted-foreground">
+                            Practice ID:
+                          </span>{" "}
                           {permissionTestResults.offlineContext.practiceId}
                         </div>
                       </div>
@@ -1010,11 +1076,20 @@ export default function OfflineDemoPage() {
                     </div>
                     <div className="mt-3 pt-3 border-t">
                       <div className="text-sm">
-                        <span className="text-muted-foreground">Roles in Hook:</span>{" "}
-                        <span className="font-semibold">{permissionTestResults.cacheStatus.rolesCount}</span>
-                        {permissionTestResults.cacheStatus.roleNames.length > 0 && (
+                        <span className="text-muted-foreground">
+                          Roles in Hook:
+                        </span>{" "}
+                        <span className="font-semibold">
+                          {permissionTestResults.cacheStatus.rolesCount}
+                        </span>
+                        {permissionTestResults.cacheStatus.roleNames.length >
+                          0 && (
                           <span className="ml-2 text-xs">
-                            ({permissionTestResults.cacheStatus.roleNames.join(", ")})
+                            (
+                            {permissionTestResults.cacheStatus.roleNames.join(
+                              ", "
+                            )}
+                            )
                           </span>
                         )}
                       </div>
