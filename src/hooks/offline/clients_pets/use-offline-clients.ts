@@ -276,8 +276,11 @@ export function useOfflineClients(): UseOfflineClientsReturn {
     await refetch();
   }, [refetch]);
 
+  // Filter to only include users with CLIENT role
+  const filteredClients = clients.filter(client => client.role === 'CLIENT');
+
   return {
-    clients,
+    clients: filteredClients,
     isLoading,
     error,
     isOnline,
@@ -289,7 +292,7 @@ export function useOfflineClients(): UseOfflineClientsReturn {
     syncNow,
     refresh,
     pendingCount,
-    syncedCount: clients.filter(c => c.metadata?.syncStatus === 'synced').length,
-    errorCount: clients.filter(c => c.metadata?.syncStatus === 'error').length,
+    syncedCount: filteredClients.filter(c => c.metadata?.syncStatus === 'synced').length,
+    errorCount: filteredClients.filter(c => c.metadata?.syncStatus === 'error').length,
   };
 }
