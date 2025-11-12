@@ -188,15 +188,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const cachedUserData = sessionStorage.getItem(SESSION_TOKEN_COOKIE_NAME);
       if (cachedUserData) {
         const userData: User = JSON.parse(cachedUserData);
-        
+
         // Detect and clear old invalid cached data
-        if (userData && 'currentPracticeId' in userData && userData.currentPracticeId === 'practice_NONE') {
-          console.warn('[UserContext INIT_CACHE] Detected invalid cached data with practice_NONE, clearing cache');
+        if (
+          userData &&
+          "currentPracticeId" in userData &&
+          userData.currentPracticeId === "practice_NONE"
+        ) {
+          console.warn(
+            "[UserContext INIT_CACHE] Detected invalid cached data with practice_NONE, clearing cache"
+          );
           sessionStorage.removeItem(SESSION_TOKEN_COOKIE_NAME);
           setUser(null);
           return;
         }
-        
+
         if (userData && userData.id) {
           setUser(userData);
           console.log(

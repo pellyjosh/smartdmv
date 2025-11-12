@@ -30,9 +30,9 @@ export async function getOfflineTenantContext(): Promise<TenantContext | null> {
       if (sessionStr) {
         const session = JSON.parse(sessionStr);
         const context = {
-          tenantId: session.tenantId,
-          practiceId: session.practiceId,
-          userId: session.userId,
+          tenantId: String(session.tenantId),
+          practiceId: typeof session.practiceId === 'string' ? parseInt(session.practiceId, 10) : session.practiceId,
+          userId: typeof session.userId === 'string' ? parseInt(session.userId, 10) : session.userId,
           subdomain: session.subdomain,
         };
         console.log('[TenantContext] ✅ Retrieved context:', {
@@ -40,6 +40,7 @@ export async function getOfflineTenantContext(): Promise<TenantContext | null> {
           userIdType: typeof context.userId,
           tenantId: context.tenantId,
           practiceId: context.practiceId,
+          practiceIdType: typeof context.practiceId,
         });
         return context;
       }

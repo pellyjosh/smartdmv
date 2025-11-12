@@ -434,11 +434,7 @@ export class SyncEngine {
       this.updateProgress('syncing', operations.length, i);
 
       try {
-        // TEMPORARILY DISABLE CONFLICT DETECTION - causing issues with pending operations
-        // The server will handle conflicts and return conflict data if needed
-        // TODO: Re-enable conflict detection with proper server state checking
-        
-        // Send operation to server
+        // Send operation to server - conflict detection re-enabled with practice-scoped storage
         const syncResult = await this.sendOperationToServer(operation);
 
         if (syncResult.success) {
@@ -466,7 +462,13 @@ export class SyncEngine {
 
           // Mark operation as completed
           await syncQueueStorage.markOperationCompleted(operation.id!);
+        } else if (syncResult.conflictId) {
+          // Conflict detected - already saved to practice-scoped conflict store
+          result.conflicts++;
+          console.log(`⚠️ Conflict detected for operation ${operation.id} (severity: ${syncResult.conflictId})`);
+          // Note: Operation already marked as 'conflicted' in sendOperationToServer
         } else {
+          // Regular failure - not a conflict
           result.failed++;
           result.errors.push({
             operationId: operation.id!,
@@ -799,7 +801,7 @@ export class SyncEngine {
    */
   private async sendOperationToServer(
     operation: SyncOperation
-  ): Promise<{ success: boolean; realId?: number; error?: string }> {
+  ): Promise<{ success: boolean; realId?: number; error?: string; conflictId?: number }> {
     try {
       console.log(`📤 Sending ${operation.operation} for ${operation.entityType} ${operation.entityId}`);
 
@@ -822,17 +824,17 @@ export class SyncEngine {
         delete sanitizedData.metadata;
       }
 
-      // Prepare operation for API
+      // Prepare operation for API - ensure proper types
       const apiOperation = {
-        id: operation.id,
+        id: operation.id ? (typeof operation.id === 'string' ? parseInt(operation.id, 10) : operation.id) : undefined,
         operation: operation.operation,
         entityType: operation.entityType,
         entityId: operation.entityId,
         data: sanitizedData,
         timestamp: operation.timestamp,
-        userId: operation.userId,
-        practiceId: operation.practiceId,
-        tenantId: operation.tenantId,
+        userId: typeof operation.userId === 'string' ? parseInt(operation.userId, 10) : operation.userId,
+        practiceId: typeof operation.practiceId === 'string' ? parseInt(operation.practiceId, 10) : operation.practiceId,
+        tenantId: String(operation.tenantId),
       };
 
       console.log('📤 Sending operation to server:', {
@@ -873,10 +875,35 @@ export class SyncEngine {
         const opResult = result.results[0];
 
         if (opResult.conflict) {
-          console.warn('⚠️ Conflict detected:', opResult.conflictData);
+          console.warn('⚠️ Conflict detected from server:', opResult.conflictData);
+          
+          // Save conflict to practice-scoped conflicts store
+          const conflict: Conflict = {
+            id: 0, // Will be auto-generated
+            operation: operation,
+            localData: operation.data,
+            serverData: opResult.conflictData.serverData,
+            detectedAt: Date.now(),
+            conflictType: opResult.conflictData.conflictType || 'timestamp',
+            affectedFields: opResult.conflictData.affectedFields || [],
+            severity: this.determineConflictSeverity(opResult.conflictData.affectedFields || []),
+            autoResolvable: this.isAutoResolvable(opResult.conflictData),
+            resolved: false,
+          };
+
+          // Save to practice-scoped conflicts store
+          await conflictStorage.saveConflict(conflict);
+          console.log('💾 Conflict saved to practice-scoped store');
+
+          // Mark operation as conflicted in sync queue
+          if (operation.id) {
+            await syncQueueStorage.updateOperationStatus(operation.id, 'conflicted');
+          }
+
           return {
             success: false,
-            error: 'Conflict detected',
+            error: 'Conflict detected and saved',
+            conflictId: conflict.id,
           };
         }
 
@@ -1013,6 +1040,65 @@ export class SyncEngine {
    */
   updateConfig(config: Partial<SyncConfig>): void {
     this.config = { ...this.config, ...config };
+  }
+
+  /**
+   * Determine conflict severity based on affected fields
+   */
+  private determineConflictSeverity(affectedFields: string[]): ConflictSeverity {
+    if (affectedFields.length === 0) {
+      return 'low';
+    }
+
+    // Critical fields that should trigger high severity
+    const criticalFields = ['id', 'deletedAt', 'status', 'payment_status', 'appointment_status'];
+    const hasCritical = affectedFields.some(field => criticalFields.includes(field));
+    
+    if (hasCritical) {
+      return 'critical';
+    }
+
+    // High priority fields
+    const highPriorityFields = ['amount', 'total', 'date', 'time', 'practitioner_id', 'patient_id'];
+    const hasHighPriority = affectedFields.some(field => highPriorityFields.includes(field));
+    
+    if (hasHighPriority) {
+      return 'high';
+    }
+
+    // More than 5 fields changed
+    if (affectedFields.length > 5) {
+      return 'medium';
+    }
+
+    return 'low';
+  }
+
+  /**
+   * Check if conflict can be auto-resolved
+   */
+  private isAutoResolvable(conflictData: any): boolean {
+    // Auto-resolve if only metadata fields changed (timestamps, etc.)
+    const metadataFields = ['createdAt', 'updatedAt', 'lastModified', 'syncedAt'];
+    const affectedFields = conflictData.affectedFields || [];
+    
+    if (affectedFields.length === 0) {
+      return false;
+    }
+
+    // If only metadata fields changed, it's auto-resolvable
+    const onlyMetadata = affectedFields.every((field: string) => metadataFields.includes(field));
+    
+    if (onlyMetadata) {
+      return true;
+    }
+
+    // If conflict type is 'timestamp' and severity is low, auto-resolve
+    if (conflictData.conflictType === 'timestamp' && affectedFields.length <= 2) {
+      return true;
+    }
+
+    return false;
   }
 }
 

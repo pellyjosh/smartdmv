@@ -30,11 +30,15 @@ export async function queueOperation(
       throw new Error('No tenant context available');
     }
 
+    // Ensure practiceId and userId are numbers
+    const practiceId = operation.practiceId || context.practiceId;
+    const userId = operation.userId || context.userId;
+
     const syncOperation: Omit<SyncOperation, 'id'> = {
       ...operation,
       tenantId: operation.tenantId || context.tenantId,
-      practiceId: operation.practiceId || context.practiceId,
-      userId: operation.userId || context.userId,
+      practiceId: typeof practiceId === 'string' ? parseInt(practiceId, 10) : practiceId,
+      userId: typeof userId === 'string' ? parseInt(userId, 10) : userId,
       timestamp: Date.now(),
       retryCount: 0,
       status: 'pending',

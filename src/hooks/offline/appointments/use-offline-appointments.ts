@@ -8,23 +8,24 @@ import { useNetworkStatus } from '@/hooks/use-network-status';
 import { useOfflineStorage } from '@/hooks/offline/use-offline-storage';
 import { useSyncQueue } from '@/hooks/offline/use-sync-queue';
 import { useToast } from '@/hooks/use-toast';
+import * as entityStorage from '@/lib/offline/storage/entity-storage';
 import type { EntityType } from '@/lib/offline/types/storage.types';
 
 export interface Appointment {
-  id?: string;
+  id?: string | number;
   // Core appointment fields matching PostgreSQL schema
   title: string;
   description?: string | null;
   date: string; // ISO date string
-  durationMinutes?: string;
+  durationMinutes?: number;
   status: 'pending' | 'approved' | 'rejected' | 'triage' | 'active' | 'in_treatment' | 'in_progress' | 'completed' | 'pending_pickup' | 'cancelled' | 'no_show';
   
-  // Foreign keys
-  petId: string | null;
-  clientId: string | null;
-  staffId?: string | null;
-  practitionerId?: string | null;
-  practiceId?: string;
+  // Foreign keys (numbers, not strings)
+  petId: number | null;
+  clientId: number | null;
+  staffId?: number | null;
+  practitionerId?: number | null;
+  practiceId?: number;
   
   // Appointment details
   type?: string | null;
@@ -39,6 +40,19 @@ export interface Appointment {
   // Timestamps (managed by sync)
   createdAt?: string;
   updatedAt?: string;
+  
+  // Relationships (populated from IndexedDB)
+  pet?: any;
+  client?: any;
+  practitioner?: any;
+  
+  // Computed fields
+  clientName?: string;
+  clientEmail?: string;
+  petName?: string;
+  petType?: string;
+  
+  tenantId?: string;
   
   // Offline metadata
   metadata?: {
@@ -116,6 +130,58 @@ export function useOfflineAppointments(): UseOfflineAppointmentsReturn {
       
       // Remove any existing metadata to avoid conflicts
       const { metadata: _, ...appointmentData } = appointment as any;
+      
+      // Normalize numeric fields
+      const numericFields = ['durationMinutes', 'petId', 'clientId', 'staffId', 'practitionerId', 'practiceId'];
+      numericFields.forEach(field => {
+        if (appointmentData[field] !== null && appointmentData[field] !== undefined) {
+          const value = appointmentData[field];
+          if (typeof value === 'string') {
+            const num = parseInt(value, 10);
+            if (!isNaN(num)) {
+              appointmentData[field] = num;
+            }
+          }
+        }
+      });
+      
+      // Fetch and attach relationships
+      if (appointmentData.petId) {
+        try {
+          const pet = await entityStorage.getEntity<any>('pets', appointmentData.petId);
+          if (pet) {
+            appointmentData.pet = pet;
+            appointmentData.petName = pet.name;
+            appointmentData.petType = pet.species;
+          }
+        } catch (error) {
+          console.warn('[useOfflineAppointments] Failed to fetch pet:', error);
+        }
+      }
+      
+      if (appointmentData.clientId) {
+        try {
+          const client = await entityStorage.getEntity<any>('clients', appointmentData.clientId);
+          if (client) {
+            appointmentData.client = client;
+            appointmentData.clientName = client.name;
+            appointmentData.clientEmail = client.email;
+          }
+        } catch (error) {
+          console.warn('[useOfflineAppointments] Failed to fetch client:', error);
+        }
+      }
+      
+      if (appointmentData.practitionerId) {
+        try {
+          const practitioner = await entityStorage.getEntity<any>('users', appointmentData.practitionerId);
+          if (practitioner) {
+            appointmentData.practitioner = practitioner;
+          }
+        } catch (error) {
+          console.warn('[useOfflineAppointments] Failed to fetch practitioner:', error);
+        }
+      }
       
       const newAppointment: Appointment = {
         ...appointmentData,
@@ -245,13 +311,15 @@ export function useOfflineAppointments(): UseOfflineAppointmentsReturn {
   }, [appointments]);
 
   // Filter by client
-  const getAppointmentsByClient = useCallback((clientId: string): Appointment[] => {
-    return appointments.filter(apt => apt.clientId === clientId);
+  const getAppointmentsByClient = useCallback((clientId: string | number): Appointment[] => {
+    const numericClientId = typeof clientId === 'string' ? parseInt(clientId, 10) : clientId;
+    return appointments.filter(apt => apt.clientId === numericClientId);
   }, [appointments]);
 
   // Filter by pet
-  const getAppointmentsByPet = useCallback((petId: string): Appointment[] => {
-    return appointments.filter(apt => apt.petId === petId);
+  const getAppointmentsByPet = useCallback((petId: string | number): Appointment[] => {
+    const numericPetId = typeof petId === 'string' ? parseInt(petId, 10) : petId;
+    return appointments.filter(apt => apt.petId === numericPetId);
   }, [appointments]);
 
   // Filter by status

@@ -9,6 +9,7 @@ import * as entityStorage from '../storage/entity-storage';
 import * as authStorage from '../storage/auth-storage';
 import * as permissionStorage from '../storage/permission-storage';
 import * as syncQueueStorage from '../storage/sync-queue-storage';
+import * as conflictStorage from '../storage/conflict-storage';
 import type { StorageStats, StorageConfig } from '../types/storage.types';
 import type { SyncStatus } from '../types/storage.types';
 import { DEFAULT_STORAGE_CONFIG } from '../db/schema';
@@ -210,6 +211,9 @@ class StorageManager {
 
     // Clear sync queue
     await syncQueueStorage.clearAllOperations(context.tenantId);
+
+    // Clear conflicts
+    await conflictStorage.clearAllConflicts();
 
     // Clear auth and permissions
     await authStorage.clearAuth(context.userId, context.tenantId);

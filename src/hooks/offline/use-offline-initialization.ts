@@ -370,8 +370,7 @@ export function useOfflineInitialization() {
               slug: tenant.slug,
               name: tenant.name,
               domain: tenant.domain || null,
-              subdomain: tenant.subdomain, // Keep subdomain for routing, but ID is the database identifier
-              status: tenant.status,
+              subdomain: tenant.subdomain ,
               databaseName: tenant.databaseName,
               storagePath: tenant.storagePath,
               settings: {

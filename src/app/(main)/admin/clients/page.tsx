@@ -84,11 +84,18 @@ import {
   CheckCircle,
   RefreshCw,
   ArrowUpRight,
+  WifiOff,
 } from "lucide-react";
 import { useCustomFields } from "@/hooks/use-custom-fields";
 import { useTenantInfo } from "@/hooks/use-tenant-info";
 import { getPetImageUrlClient } from "@/lib/tenant-file-utils";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  useOfflineClients,
+  type Client,
+} from "@/hooks/offline/clients_pets/use-offline-clients";
+import { useOfflinePets } from "@/hooks/offline/clients_pets/use-offline-pets";
+import { useNetworkStatus } from "@/hooks/use-network-status";
 
 // Predefined lists for dropdowns
 const speciesList = [
@@ -316,6 +323,29 @@ export default function ClientsPage() {
   const tenantInfo = useTenantInfo();
   const { toast } = useToast();
   const searchParams = useSearchParams();
+
+  // Network status
+  const { isOnline } = useNetworkStatus();
+
+  // Offline hooks for clients and pets
+  const {
+    clients: offlineClients,
+    createClient: createOfflineClient,
+    updateClient: updateOfflineClient,
+    deleteClient: deleteOfflineClient,
+    refresh: refreshOfflineClients,
+    isLoading: isLoadingOfflineClients,
+  } = useOfflineClients();
+
+  const {
+    pets: offlinePets,
+    createPet: createOfflinePet,
+    updatePet: updateOfflinePet,
+    deletePet: deleteOfflinePet,
+    getPetsByOwner: getOfflinePetsByOwner,
+    refresh: refreshOfflinePets,
+    isLoading: isLoadingOfflinePets,
+  } = useOfflinePets();
 
   // Use the custom fields hook to access field values from the database
   const {
@@ -584,7 +614,7 @@ export default function ClientsPage() {
 
   // Fetch clients (users with CLIENT role)
   const {
-    data: clients,
+    data: apiClients,
     isLoading: isClientsLoading,
     refetch: refetchClients,
   } = useQuery<User[]>({
@@ -593,7 +623,8 @@ export default function ClientsPage() {
       !!user &&
       !hasRole(user as any, "CLIENT") &&
       !!userPracticeId &&
-      userPracticeId.toString().trim() !== "",
+      userPracticeId.toString().trim() !== "" &&
+      isOnline, // Only fetch when online
     queryFn: async () => {
       if (!userPracticeId || userPracticeId.toString().trim() === "") {
         throw new Error("Practice ID is required");
@@ -609,12 +640,12 @@ export default function ClientsPage() {
 
   // Fetch pets
   const {
-    data: pets,
+    data: apiPets,
     isLoading: isPetsLoading,
     refetch: refetchPets,
   } = useQuery<Pet[]>({
     queryKey: ["/api/pets", userPracticeId], // Include userPracticeId in the query key
-    enabled: !!user && !!userPracticeId, // Only enable if user and practiceId are available
+    enabled: !!user && !!userPracticeId && isOnline, // Only enable when online
     queryFn: async () => {
       // Define the query function
       const res = await fetch(`/api/pets?practiceId=${userPracticeId}`, {
@@ -625,6 +656,14 @@ export default function ClientsPage() {
       return res.json();
     },
   });
+
+  // Use offline data when offline, API data when online
+  const clients = isOnline ? apiClients : offlineClients;
+  const pets = isOnline ? apiPets : offlinePets;
+  const isLoadingClients = isOnline
+    ? isClientsLoading
+    : isLoadingOfflineClients;
+  const isLoadingPets = isOnline ? isPetsLoading : isLoadingOfflinePets;
 
   // Filter clients by search query
   const filteredClients = clients?.filter((client) => {
@@ -679,36 +718,39 @@ export default function ClientsPage() {
   // Create client mutation
   const createClientMutation = useMutation({
     mutationFn: async (data: ClientFormValues) => {
+      // If offline, use offline-first approach
+      if (!isOnline) {
+        return await createOfflineClient(data as any);
+      }
+
+      // If online, call API directly
       const res = await apiRequest("POST", "/api/auth/register", data);
       return await res.json();
     },
     onSuccess: (newClient) => {
-      // Debug: log what the registration endpoint returned for the created client
-      try {
-        console.log("[Clients] create onSuccess - newClient:", newClient);
-      } catch (e) {
-        console.log(
-          "[Clients] create onSuccess - failed to stringify newClient",
-          e
-        );
+      console.log("[Clients] create onSuccess - newClient:", newClient);
+
+      // Refresh data
+      if (isOnline) {
+        refetchClients();
+      } else {
+        refreshOfflineClients();
       }
-      // Immediately refetch clients list
-      refetchClients();
-      // Show success message
-      toast({
-        title: "Client created",
-        description: "The client has been successfully added.",
-      });
+
+      // Show success message - toast handled by hook for offline
+      if (isOnline) {
+        toast({
+          title: "Client created",
+          description: "The client has been successfully added.",
+        });
+      }
+
       // Close dialog and reset form
       setIsAddClientDialogOpen(false);
       clientForm.reset();
 
-      // Optional: Select the newly created client
-      // This helps avoid the 404 error by directly selecting the client instead of navigating
+      // Select the newly created client
       if (newClient) {
-        // If the registration endpoint returned the full user including optional
-        // address/contact fields, use it directly. Otherwise, fetch the full user
-        // record to ensure the UI has the persisted fields available.
         const hasAddressFields =
           Object.prototype.hasOwnProperty.call(newClient, "address") ||
           Object.prototype.hasOwnProperty.call(newClient, "phone");
@@ -756,6 +798,16 @@ export default function ClientsPage() {
     mutationFn: async (data: UpdateClientFormValues & { id: string }) => {
       const { id, password, ...clientData } = data as any;
 
+      // If offline, use offline-first approach
+      if (!isOnline) {
+        const updates: any = { ...clientData };
+        if (password && password.length > 0) {
+          updates.password = password; // Password will be handled by the hook
+        }
+        return await updateOfflineClient(id, updates);
+      }
+
+      // If online, use API
       const payload: any = { ...clientData };
 
       if (password && password.length > 0) {
@@ -771,11 +823,21 @@ export default function ClientsPage() {
       return await res.json();
     },
     onSuccess: (updatedClient) => {
-      refetchClients();
-      toast({
-        title: "Client updated",
-        description: "The client has been successfully updated.",
-      });
+      // Refresh appropriate data source
+      if (isOnline) {
+        refetchClients();
+      } else {
+        refreshOfflineClients();
+      }
+
+      // Only show toast if online (offline hook handles it)
+      if (isOnline) {
+        toast({
+          title: "Client updated",
+          description: "The client has been successfully updated.",
+        });
+      }
+
       setIsEditClientDialogOpen(false);
 
       // Reset the form with the updated client's data, but clear password field
@@ -812,6 +874,13 @@ export default function ClientsPage() {
   // Delete client mutation
   const deleteClientMutation = useMutation({
     mutationFn: async (id: string) => {
+      // If offline, use offline-first approach
+      if (!isOnline) {
+        await deleteOfflineClient(id);
+        return id;
+      }
+
+      // If online, use API
       const res = await apiRequest("DELETE", `/api/users/${id}`);
       if (!res.ok) {
         const errorData = await res.json();
@@ -820,16 +889,22 @@ export default function ClientsPage() {
       return id;
     },
     onSuccess: (deletedId) => {
-      // Immediately refetch clients list
-      refetchClients();
-      // Also refetch pets in case of cascade deletions or ownership changes
-      refetchPets();
+      // Refresh appropriate data source
+      if (isOnline) {
+        refetchClients();
+        refetchPets();
+      } else {
+        refreshOfflineClients();
+        refreshOfflinePets();
+      }
 
-      // Show success message
-      toast({
-        title: "Client deleted",
-        description: "The client has been successfully deleted.",
-      });
+      // Only show toast if online (offline hook handles it)
+      if (isOnline) {
+        toast({
+          title: "Client deleted",
+          description: "The client has been successfully deleted.",
+        });
+      }
 
       // Close dialog
       setIsDeleteClientDialogOpen(false);
@@ -893,20 +968,22 @@ export default function ClientsPage() {
   // Handle URL parameters for navigation from client detail pages
   useEffect(() => {
     if (clients && clients.length > 0 && searchParams) {
-      const addPet = searchParams.get('addPet');
+      const addPet = searchParams.get("addPet");
       if (addPet) {
         // Find the client with the matching ID
-        const clientToSelect = clients.find((client: User) => String(client.id) === String(addPet));
+        const clientToSelect = clients.find(
+          (client: User | Client) => String(client.id) === String(addPet)
+        );
         if (clientToSelect) {
           // Select the client and open the add pet dialog
-          setSelectedClient(clientToSelect);
+          setSelectedClient(clientToSelect as User);
           setIsAddPetDialogOpen(true);
 
           // Clean up the URL by removing the parameter (optional)
           // This prevents the dialog from reopening if user refreshes
           const newUrl = new URL(window.location.href);
-          newUrl.searchParams.delete('addPet');
-          window.history.replaceState({}, '', newUrl.toString());
+          newUrl.searchParams.delete("addPet");
+          window.history.replaceState({}, "", newUrl.toString());
         }
       }
     }
@@ -916,7 +993,12 @@ export default function ClientsPage() {
   const createPetMutation = useMutation({
     mutationFn: async (data: PetFormValues) => {
       try {
-        // If a photo was selected, upload it first
+        // If offline, use offline-first approach (photo will be uploaded on sync)
+        if (!isOnline) {
+          return await createOfflinePet(data as any, petPhoto);
+        }
+
+        // If online, upload photo first then create pet
         let photoPath: string | null = null;
         if (petPhoto) {
           const formData = new FormData();
@@ -958,11 +1040,21 @@ export default function ClientsPage() {
       }
     },
     onSuccess: () => {
-      refetchPets();
-      toast({
-        title: "Pet created",
-        description: "The pet has been successfully added.",
-      });
+      // Refresh data
+      if (isOnline) {
+        refetchPets();
+      } else {
+        refreshOfflinePets();
+      }
+
+      // Show success message - toast handled by hook for offline
+      if (isOnline) {
+        toast({
+          title: "Pet created",
+          description: "The pet has been successfully added.",
+        });
+      }
+
       setIsAddPetDialogOpen(false);
       setPetPhoto(null);
       if (fileInputRef.current) {
@@ -983,7 +1075,14 @@ export default function ClientsPage() {
   const updatePetMutation = useMutation({
     mutationFn: async (data: PetFormValues & { id: number }) => {
       try {
-        // If a photo was selected, upload it first
+        const { id, ...updateData } = data;
+
+        // If offline, use offline-first approach (photo will be uploaded on sync)
+        if (!isOnline) {
+          return await updateOfflinePet(id, updateData as any, petPhoto);
+        }
+
+        // If online, upload photo first then update pet
         let photoPath: string | undefined = undefined;
         if (petPhoto) {
           const formData = new FormData();
@@ -1006,7 +1105,6 @@ export default function ClientsPage() {
         }
 
         // Create the pet update data with the photo path
-        const { id, ...updateData } = data;
         const petData: any = { ...updateData };
         if (photoPath) petData.photoPath = photoPath;
 
@@ -1024,11 +1122,21 @@ export default function ClientsPage() {
       }
     },
     onSuccess: () => {
-      refetchPets();
-      toast({
-        title: "Pet updated",
-        description: "The pet has been successfully updated.",
-      });
+      // Refresh appropriate data source
+      if (isOnline) {
+        refetchPets();
+      } else {
+        refreshOfflinePets();
+      }
+
+      // Only show toast if online (offline hook handles it)
+      if (isOnline) {
+        toast({
+          title: "Pet updated",
+          description: "The pet has been successfully updated.",
+        });
+      }
+
       setIsEditPetDialogOpen(false);
       setPetPhoto(null);
       setEditPetId(null);
@@ -1049,12 +1157,31 @@ export default function ClientsPage() {
   // Delete pet mutation
   const deletePetMutation = useMutation({
     mutationFn: async (id: number) => {
+      // If offline, use offline-first approach
+      if (!isOnline) {
+        await deleteOfflinePet(id);
+        return {};
+      }
+
+      // If online, use API
       const res = await apiRequest("DELETE", `/api/pets/${id}`);
       return await res.json().catch(() => ({}));
     },
     onSuccess: () => {
-      refetchPets();
-      toast({ title: "Pet deleted", description: "The pet has been removed." });
+      // Refresh appropriate data source
+      if (isOnline) {
+        refetchPets();
+      } else {
+        refreshOfflinePets();
+      }
+
+      // Only show toast if online (offline hook handles it)
+      if (isOnline) {
+        toast({
+          title: "Pet deleted",
+          description: "The pet has been removed.",
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -1066,8 +1193,8 @@ export default function ClientsPage() {
   });
 
   // Handle selecting a client
-  const handleClientSelect = (client: User) => {
-    setSelectedClient(client);
+  const handleClientSelect = (client: User | Client) => {
+    setSelectedClient(client as User);
     // Set owner ID in pet form
     petForm.setValue("ownerId", String(client.id));
     // Set practice ID in pet form if it exists
@@ -1205,7 +1332,15 @@ export default function ClientsPage() {
   return (
     <div className="h-full">
       <main className="flex-1 overflow-y-auto pb-16 md:pb-0 p-4 md:p-6">
-        <h1 className="text-2xl font-bold mb-6">Clients & Pets</h1>
+        <h1 className="text-2xl font-bold mb-6 flex items-center gap-3">
+          Clients & Pets
+          {!isOnline && (
+            <Badge variant="secondary" className="gap-1.5">
+              <WifiOff className="h-3 w-3" />
+              Offline Mode
+            </Badge>
+          )}
+        </h1>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Client List */}
           <div className="md:col-span-1">
@@ -1504,7 +1639,7 @@ export default function ClientsPage() {
                 </div>
               </CardHeader>
               <CardContent className="pb-0 h-[calc(100vh-320px)] overflow-y-auto">
-                {isClientsLoading ? (
+                {isLoadingClients ? (
                   <div className="flex items-center justify-center h-40">
                     <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
                   </div>
@@ -1556,7 +1691,7 @@ export default function ClientsPage() {
                               className="shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedClient(client);
+                                setSelectedClient(client as User);
                                 setIsDeleteClientDialogOpen(true);
                               }}
                             >
@@ -2012,7 +2147,7 @@ export default function ClientsPage() {
                     </TabsList>
 
                     <TabsContent value="pets">
-                      {isPetsLoading ? (
+                      {isLoadingPets ? (
                         <div className="flex items-center justify-center h-40">
                           <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
                         </div>
@@ -2324,7 +2459,9 @@ export default function ClientsPage() {
                                     <span className="font-medium">
                                       SOAP Notes
                                     </span>
-                                    <Link href={`/admin/pet-soap-notes/${pet.id}`}>
+                                    <Link
+                                      href={`/admin/pet-soap-notes/${pet.id}`}
+                                    >
                                       <Button variant="outline" size="sm">
                                         View All
                                       </Button>
@@ -2335,7 +2472,9 @@ export default function ClientsPage() {
                                     <span className="font-medium">
                                       Lab Results
                                     </span>
-                                    <Link href={`/admin/pet-lab-results/${pet.id}`}>
+                                    <Link
+                                      href={`/admin/pet-lab-results/${pet.id}`}
+                                    >
                                       <Button variant="outline" size="sm">
                                         View All
                                       </Button>
@@ -2346,7 +2485,9 @@ export default function ClientsPage() {
                                     <span className="font-medium">
                                       Prescriptions
                                     </span>
-                                    <Link href={`/admin/pet-prescriptions/${pet.id}`}>
+                                    <Link
+                                      href={`/admin/pet-prescriptions/${pet.id}`}
+                                    >
                                       <Button variant="outline" size="sm">
                                         View All
                                       </Button>
@@ -3166,17 +3307,17 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
 
   return (
     <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex justify-between items-center">
-                <CardTitle className="text-lg">Client Appointments</CardTitle>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/admin/appointments?view=schedule">
-                    <Calendar className="mr-2 h-4 w-4" />
-                    Schedule New
-                  </Link>
-                </Button>
-              </div>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-lg">Client Appointments</CardTitle>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/appointments?view=schedule">
+                <Calendar className="mr-2 h-4 w-4" />
+                Schedule New
+              </Link>
+            </Button>
+          </div>
           <CardDescription>
             Showing {appointments.length} appointment
             {appointments.length !== 1 ? "s" : ""}

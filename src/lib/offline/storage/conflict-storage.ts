@@ -1,31 +1,53 @@
 /**
  * Conflict Storage
  * Manages sync conflict storage in IndexedDB
+ * PRACTICE SCOPED: Each practice has its own conflicts store
  */
 
 import type { Conflict, ConflictResolution, ConflictType, ConflictSeverity } from '../types/sync-engine.types';
 import { indexedDBManager } from '../db/manager';
-import { STORES } from '../db/schema';
+import { STORES, getPracticeStoreName } from '../db/schema';
+import { getOfflineTenantContext } from '../core/tenant-context';
+
+/**
+ * Get practice-specific conflicts store name
+ */
+async function getConflictsStoreName(): Promise<string | null> {
+  const context = await getOfflineTenantContext();
+  if (!context) {
+    return null;
+  }
+  return getPracticeStoreName(context.practiceId.toString(), STORES.CONFLICTS);
+}
 
 export async function saveConflict(conflict: Conflict): Promise<number> {
-  const id = await indexedDBManager.add(STORES.CONFLICTS, conflict);
-  console.log('💥 Conflict saved:', { id, type: conflict.conflictType });
+  const storeName = await getConflictsStoreName();
+  if (!storeName) {
+    throw new Error('No tenant context for saving conflict');
+  }
+  const id = await indexedDBManager.add(storeName, conflict);
+  console.log('💥 Conflict saved:', { id, type: conflict.conflictType, store: storeName });
   return id as number;
 }
 
 export async function getConflict(id: number): Promise<Conflict | null> {
-  return await indexedDBManager.get<Conflict>(STORES.CONFLICTS, id);
+  const storeName = await getConflictsStoreName();
+  if (!storeName) {
+    return null;
+  }
+  return await indexedDBManager.get<Conflict>(storeName, id);
 }
 
 export async function getAllConflicts(): Promise<Conflict[]> {
   try {
-    // Check if tenant context is set
-    const { tenantId } = indexedDBManager.getCurrentTenant();
-    if (!tenantId) {
+    const storeName = await getConflictsStoreName();
+    if (!storeName) {
       console.log('[ConflictStorage] No tenant context, returning empty conflicts');
       return [];
     }
-    return await indexedDBManager.getAll<Conflict>(STORES.CONFLICTS);
+
+    // Now each practice has its own conflicts store - no filtering needed!
+    return await indexedDBManager.getAll<Conflict>(storeName);
   } catch (error) {
     console.error('[ConflictStorage] Error getting conflicts:', error);
     return [];
@@ -43,7 +65,11 @@ export async function getConflictsByEntityType(entityType: string): Promise<Conf
 }
 
 export async function getConflictsByType(type: ConflictType): Promise<Conflict[]> {
-  return await indexedDBManager.queryByIndex<Conflict>(STORES.CONFLICTS, 'conflictType', type);
+  const storeName = await getConflictsStoreName();
+  if (!storeName) {
+    return [];
+  }
+  return await indexedDBManager.queryByIndex<Conflict>(storeName, 'conflictType', type);
 }
 
 export async function resolveConflict(id: number, resolution: ConflictResolution): Promise<void> {
@@ -54,7 +80,12 @@ export async function resolveConflict(id: number, resolution: ConflictResolution
   conflict.resolvedAt = Date.now();
   conflict.resolution = resolution;
   
-  await indexedDBManager.put(STORES.CONFLICTS, conflict);
+  const storeName = await getConflictsStoreName();
+  if (!storeName) {
+    throw new Error('No tenant context for resolving conflict');
+  }
+  
+  await indexedDBManager.put(storeName, conflict);
   console.log('✅ Conflict resolved:', { id, strategy: resolution.strategy });
 }
 
@@ -65,7 +96,48 @@ export async function bulkResolveConflicts(ids: number[], strategy: ConflictReso
 }
 
 export async function deleteConflict(id: number): Promise<void> {
-  await indexedDBManager.delete(STORES.CONFLICTS, id);
+  const storeName = await getConflictsStoreName();
+  if (!storeName) {
+    throw new Error('No tenant context for deleting conflict');
+  }
+  await indexedDBManager.delete(storeName, id);
+}
+
+export async function clearAllConflicts(): Promise<void> {
+  try {
+    const storeName = await getConflictsStoreName();
+    if (!storeName) {
+      console.log('[ConflictStorage] No tenant context, cannot clear conflicts');
+      return;
+    }
+
+    // Clear all conflicts in the practice-specific store
+    await indexedDBManager.clear(storeName);
+    
+    console.log(`🗑️ Cleared all conflicts from ${storeName}`);
+  } catch (error) {
+    console.error('[ConflictStorage] Error clearing conflicts:', error);
+  }
+}
+
+/**
+ * Clear ALL conflicts globally across all practices (use with caution - for debugging)
+ */
+export async function clearAllConflictsGlobally(): Promise<void> {
+  try {
+    const context = await getOfflineTenantContext();
+    if (!context) {
+      console.log('[ConflictStorage] No tenant context');
+      return;
+    }
+
+    // This is now more complex - we'd need to iterate through all practice stores
+    // For now, just log a warning
+    console.warn('⚠️ clearAllConflictsGlobally is deprecated - conflicts are now practice-scoped');
+    console.warn('⚠️ Delete the entire IndexedDB database to clear all conflicts');
+  } catch (error) {
+    console.error('[ConflictStorage] Error:', error);
+  }
 }
 
 export async function getConflictStats() {

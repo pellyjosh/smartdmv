@@ -416,7 +416,7 @@ class SyncQueueManager {
   /**
    * Approve an appointment request (offline-first)
    */
-  async approveAppointmentRequest(appointmentId: number): Promise<number> {
+  async approveAppointmentRequest(appointmentId: number | string): Promise<number> {
     const context = await getOfflineTenantContext();
     if (!context) {
       throw new Error('No tenant context available');
@@ -448,7 +448,7 @@ class SyncQueueManager {
   /**
    * Reject an appointment request (offline-first)
    */
-  async rejectAppointmentRequest(appointmentId: number, rejectionReason: string): Promise<number> {
+  async rejectAppointmentRequest(appointmentId: number | string, rejectionReason: string): Promise<number> {
     const context = await getOfflineTenantContext();
     if (!context) {
       throw new Error('No tenant context available');

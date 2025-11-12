@@ -40,6 +40,7 @@ import {
   Check,
   X,
   WifiOff,
+  Wifi,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input"; // Input is not used, can be removed if not needed elsewhere in future
@@ -104,6 +105,7 @@ export default function AppointmentRequestsPage() {
     isLoading: isLoadingOffline,
     isOnline,
     getAppointmentsByStatus,
+    refresh: refreshOfflineAppointments,
   } = useOfflineAppointments();
 
   // Fetch appointment requests from API (when online)
@@ -156,8 +158,22 @@ export default function AppointmentRequestsPage() {
       const aptDate = new Date(apt.date);
       const aptAny = apt as any;
 
+      // Generate unique ID - use original ID or create from tempId
+      let uniqueId: number;
+      if (typeof apt.id === "number" && apt.id > 0) {
+        uniqueId = apt.id;
+      } else if (typeof apt.id === "string" && apt.id.startsWith("temp_")) {
+        // Generate consistent numeric ID from temp string for React keys
+        uniqueId =
+          parseInt(apt.id.replace(/\D/g, "").slice(-9), 10) ||
+          Math.floor(Math.random() * 1000000000);
+      } else {
+        // Fallback to random ID
+        uniqueId = Math.floor(Math.random() * 1000000000);
+      }
+
       return {
-        id: Number(apt.id) || 0,
+        id: uniqueId,
         practiceId: Number(apt.practiceId || userPracticeId || 0),
         clientName: aptAny.clientName || aptAny.client?.name || "N/A",
         clientEmail: aptAny.clientEmail || aptAny.client?.email || "",
@@ -182,9 +198,10 @@ export default function AppointmentRequestsPage() {
             : "PENDING_APPROVAL",
         createdAt: apt.createdAt || new Date().toISOString(),
         updatedAt: apt.updatedAt || null,
-        appointmentId: Number(apt.id) || null,
+        appointmentId: uniqueId,
         rejectionReason: apt.status === "rejected" ? apt.description : null,
-      } as AppointmentRequest;
+        _originalId: apt.id, // Store original ID for operations
+      } as AppointmentRequest & { _originalId: string | number };
     });
   }, [offlineAppointments, activeTab, sourceFilter, userPracticeId]);
 
@@ -194,19 +211,23 @@ export default function AppointmentRequestsPage() {
 
   // Approve request mutation
   const approveMutation = useMutation({
-    mutationFn: async (id: number) => {
-      console.log(`Approving appointment request with ID: ${id}`);
+    mutationFn: async (
+      request: AppointmentRequest & { _originalId?: string | number }
+    ) => {
+      // Use original ID if available (for offline appointments with temp IDs)
+      const idToUse = (request as any)._originalId || request.id;
+      console.log(`Approving appointment request with ID: ${idToUse}`);
 
       // If offline, use offline-first approach
       if (!isOnline) {
-        await approveAppointmentRequest(id);
-        return { id, status: "approved" };
+        await approveAppointmentRequest(idToUse);
+        return { id: idToUse, status: "approved" };
       }
 
       // If online, call API directly
       const res = await apiRequest(
         "POST",
-        `/api/appointment-requests/${id}/approve`
+        `/api/appointment-requests/${idToUse}/approve`
       );
       if (!res.ok) {
         console.error(
@@ -222,6 +243,9 @@ export default function AppointmentRequestsPage() {
     onSuccess: () => {
       // Invalidate queries that start with 'appointment-requests'
       queryClient.invalidateQueries({ queryKey: ["appointment-requests"] });
+
+      // Refresh offline appointments to reflect status change
+      refreshOfflineAppointments();
 
       // Trigger sync if online
       if (isOnline) {
@@ -250,21 +274,29 @@ export default function AppointmentRequestsPage() {
 
   // Reject request mutation
   const rejectMutation = useMutation({
-    mutationFn: async ({ id, reason }: { id: number; reason: string }) => {
+    mutationFn: async ({
+      request,
+      reason,
+    }: {
+      request: AppointmentRequest & { _originalId?: string | number };
+      reason: string;
+    }) => {
+      // Use original ID if available (for offline appointments with temp IDs)
+      const idToUse = (request as any)._originalId || request.id;
       console.log(
-        `Rejecting appointment request with ID: ${id}, Reason: ${reason}`
+        `Rejecting appointment request with ID: ${idToUse}, Reason: ${reason}`
       );
 
       // If offline, use offline-first approach
       if (!isOnline) {
-        await rejectAppointmentRequest(id, reason);
-        return { id, status: "rejected" };
+        await rejectAppointmentRequest(idToUse, reason);
+        return { id: idToUse, status: "rejected" };
       }
 
       // If online, call API directly
       const res = await apiRequest(
         "POST",
-        `/api/appointment-requests/${id}/reject`,
+        `/api/appointment-requests/${idToUse}/reject`,
         {
           rejectionReason: reason,
         }
@@ -282,6 +314,9 @@ export default function AppointmentRequestsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["appointment-requests"] });
+
+      // Refresh offline appointments to reflect status change
+      refreshOfflineAppointments();
 
       // Trigger sync if online
       if (isOnline) {
@@ -352,13 +387,16 @@ export default function AppointmentRequestsPage() {
 
   const confirmApprove = () => {
     if (selectedRequest) {
-      approveMutation.mutate(selectedRequest.id);
+      approveMutation.mutate(selectedRequest as any);
     }
   };
 
   const confirmReject = () => {
     if (selectedRequest && rejectReason.trim()) {
-      rejectMutation.mutate({ id: selectedRequest.id, reason: rejectReason });
+      rejectMutation.mutate({
+        request: selectedRequest as any,
+        reason: rejectReason,
+      });
     }
   };
 
@@ -457,29 +495,32 @@ export default function AppointmentRequestsPage() {
       description="Manage appointment requests from your website integration. This feature requires the Website Integration add-on."
     >
       <div className="container mx-auto py-8">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Appointment Requests
-            </h1>
-            <p className="text-gray-600 text-lg">
-              Manage appointment requests from your website and internal
-              bookings
-            </p>
+        <div>
+          <div className="mb-8 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                Appointment Requests
+              </h1>
+              {/* Network Status & Sync Indicator */}
+              <div className="flex items-center gap-2">
+                {isOnline ? (
+                  <Badge variant="outline" className="gap-1.5">
+                    <Wifi className="h-3 w-3 text-green-600" />
+                    <span className="text-xs">Online</span>
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="gap-1.5">
+                    <WifiOff className="h-3 w-3 text-orange-600" />
+                    <span className="text-xs">Offline Mode</span>
+                  </Badge>
+                )}
+              </div>
+            </div>
           </div>
-
-          {/* Offline indicator */}
-          {!isOnline && (
-            <Badge
-              variant="outline"
-              className="bg-amber-50 text-amber-700 border-amber-200 h-fit"
-            >
-              <WifiOff className="h-3 w-3 mr-1" />
-              Offline Mode
-            </Badge>
-          )}
+          <p className="text-gray-600 text-lg">
+            Manage appointment requests from your website and internal bookings
+          </p>
         </div>
-
         <div className="mb-6 flex items-center justify-between">
           <Tabs
             defaultValue="pending"

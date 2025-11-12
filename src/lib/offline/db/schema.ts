@@ -8,11 +8,8 @@
  */
 
 export const DB_NAME_PREFIX = 'SmartDMV_Tenant';
-export const DB_VERSION = 3; // Updated for Sprint 2: conflicts and ID mappings
+export const DB_VERSION = 5;
 
-/**
- * Get tenant-specific database name
- */
 export function getTenantDatabaseName(tenantId: string): string {
   if (!tenantId) {
     throw new Error('tenantId is required for database operations');
@@ -32,7 +29,6 @@ export function extractTenantFromDatabaseName(dbName: string): string | null {
  * Store names
  */
 export const STORES = {
-  // Core entity stores (will be prefixed with tenant ID)
   PETS: 'pets',
   APPOINTMENTS: 'appointments',
   CLIENTS: 'clients',
@@ -54,11 +50,11 @@ export const STORES = {
   METADATA: 'metadata',
   ATTACHMENTS: 'attachments',
   ID_MAPPINGS: 'idMappings',
-  CONFLICTS: 'conflicts', // NEW Sprint 2: Sync conflicts
+  CONFLICTS: 'conflicts',
   USER_PREFERENCES: 'userPreferences',
-  PRACTICES: 'practices', // Store accessible practices per user
-  CURRENT_PRACTICE: 'current_practice', // Store current active practice per user
-  CACHE: 'cache', // Cache for tenant info and other temporary data
+  PRACTICES: 'practices',
+  CURRENT_PRACTICE: 'current_practice',
+  CACHE: 'cache',
 } as const;
 
 /**
@@ -76,6 +72,7 @@ export const TENANT_ISOLATED_STORES = [
   STORES.MEDICAL_RECORDS,
   STORES.VACCINATIONS,
   STORES.PRACTITIONERS,
+  STORES.CONFLICTS, // Practice-scoped conflict storage
 ] as const;
 
 /**
@@ -90,7 +87,6 @@ export const SYSTEM_STORES = [
   STORES.METADATA,
   STORES.ATTACHMENTS,
   STORES.ID_MAPPINGS,
-  STORES.CONFLICTS,
   STORES.USER_PREFERENCES,
   STORES.PRACTICES,
   STORES.CURRENT_PRACTICE,
