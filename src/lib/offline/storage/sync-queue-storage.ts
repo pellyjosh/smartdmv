@@ -17,9 +17,11 @@ import type {
 } from '../types/sync.types';
 import { validateSyncOperation } from '../utils/validation';
 import { ValidationError, DatabaseError } from '../utils/error-handlers';
+import { isTempId } from '../utils/encryption';
 
 /**
  * Add operation to sync queue
+ * Handles temp ID logic: updates to temp IDs are converted to creates or merged with existing creates
  */
 export async function queueOperation(
   operation: Omit<SyncOperation, 'id' | 'timestamp' | 'retryCount' | 'status'>
@@ -34,8 +36,72 @@ export async function queueOperation(
     const practiceId = operation.practiceId || context.practiceId;
     const userId = operation.userId || context.userId;
 
+    // TEMP ID HANDLING: If updating a temp ID, it should remain a CREATE
+    let finalOperation = operation.operation;
+    let finalData = operation.data;
+    
+    if (operation.operation === 'update' && isTempId(operation.entityId)) {
+      console.log(`[SyncQueue] ⚠️ Detected UPDATE on temp ID ${operation.entityId} - checking for existing CREATE`);
+      
+      // Check if there's already a CREATE operation for this temp ID
+      const existingOperations = await getOperationsByEntity(
+        operation.entityType,
+        operation.entityId,
+        context.tenantId
+      );
+      
+      const existingCreate = existingOperations.find(
+        op => op.operation === 'create' && op.status === 'pending'
+      );
+      
+      if (existingCreate) {
+        // Merge updates into existing CREATE operation
+        console.log(`[SyncQueue] ✅ Found existing CREATE (id: ${existingCreate.id}) - merging updates`);
+        
+        const mergedData = {
+          ...existingCreate.data,
+          ...operation.data, // Updates override existing data
+        };
+        
+        // Update the existing CREATE operation with merged data
+        if (existingCreate.id) {
+          // Get fresh connection
+          const db = await indexedDBManager.initialize(context.tenantId);
+          
+          // Update the operation directly
+          const updatedOperation = {
+            ...existingCreate,
+            data: mergedData,
+            timestamp: Date.now(), // Update timestamp to reflect latest change
+          };
+          
+          await new Promise<void>((resolve, reject) => {
+            try {
+              const tx = db.transaction(STORES.SYNC_QUEUE, 'readwrite');
+              const store = tx.objectStore(STORES.SYNC_QUEUE);
+              const request = store.put(updatedOperation);
+
+              request.onsuccess = () => resolve();
+              request.onerror = () => reject(request.error);
+            } catch (err) {
+              reject(err);
+            }
+          });
+          
+          console.log(`[SyncQueue] ✅ Merged UPDATE into existing CREATE (id: ${existingCreate.id})`);
+          return existingCreate.id;
+        }
+      } else {
+        // No existing CREATE found - convert UPDATE to CREATE
+        console.log(`[SyncQueue] ✅ No existing CREATE found - converting UPDATE to CREATE`);
+        finalOperation = 'create';
+      }
+    }
+
     const syncOperation: Omit<SyncOperation, 'id'> = {
       ...operation,
+      operation: finalOperation,
+      data: finalData,
       tenantId: operation.tenantId || context.tenantId,
       practiceId: typeof practiceId === 'string' ? parseInt(practiceId, 10) : practiceId,
       userId: typeof userId === 'string' ? parseInt(userId, 10) : userId,
@@ -54,7 +120,7 @@ export async function queueOperation(
 
     const id = await indexedDBManager.add(STORES.SYNC_QUEUE, syncOperation);
     
-    console.log(`[SyncQueue] Queued ${operation.operation} for ${operation.entityType} ${operation.entityId}`);
+    console.log(`[SyncQueue] ✅ Queued ${syncOperation.operation} for ${operation.entityType} ${operation.entityId}`);
     return id as number;
   } catch (error) {
     if (error instanceof ValidationError) {

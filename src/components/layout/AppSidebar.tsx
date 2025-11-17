@@ -246,7 +246,7 @@ const menuGroups: MenuGroup[] = [
         ],
       },
       {
-        title: "Contact Requests",
+        title: "Messages",
         href: "/admin/contact-requests",
         icon: Mail,
         roles: [

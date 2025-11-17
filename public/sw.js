@@ -366,13 +366,13 @@ async function handleNextStaticAsset(request) {
 
   // Return cached immediately if available
   if (cachedResponse) {
+    console.log('[SW] Serving Next.js asset from cache:', request.url);
     // Update cache in background
     fetch(request).then(response => {
       if (response && response.status === 200) {
         cache.put(request, response.clone());
       }
     }).catch(() => {
-      // Network failed, keep using cached version
     });
 
     return cachedResponse;
@@ -387,8 +387,14 @@ async function handleNextStaticAsset(request) {
     }
     return networkResponse;
   } catch (error) {
-    console.error('[SW] Failed to fetch Next.js asset:', request.url);
-    throw error;
+    console.error('[SW] Failed to fetch Next.js asset (offline):', request.url);
+    // Return a basic response to prevent page crash
+    // The page might not work perfectly, but won't show chunk loading error
+    return new Response('// Offline - chunk not available', {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'Content-Type': 'application/javascript' }
+    });
   }
 }
 

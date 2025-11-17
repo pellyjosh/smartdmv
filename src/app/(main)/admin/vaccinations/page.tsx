@@ -3,6 +3,9 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
+import { useNetworkStatus } from "@/hooks/use-network-status";
+import { useOfflineVaccinations } from "@/hooks/offline/vaccinations/use-offline-vaccinations";
+import { useOfflinePets } from "@/hooks/offline/clients_pets/use-offline-pets";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -61,9 +64,23 @@ const VaccinationsPage = () => {
   const { user, isLoading, userPracticeId } = useUser();
   const practiceId = userPracticeId;
   const { toast } = useToast();
+  const { isOnline } = useNetworkStatus();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("all"); // "all", "upcoming", "expired"
   const [speciesFilter, setSpeciesFilter] = useState("all"); // "all", "dog", "cat", etc.
+
+  // Initialize offline hooks
+  const {
+    vaccinations: offlineVaccinations,
+    isLoading: isLoadingOfflineVaccinations,
+    refresh: refreshOfflineVaccinations,
+  } = useOfflineVaccinations();
+
+  const {
+    pets: offlinePets,
+    isLoading: isLoadingOfflinePets,
+    refresh: refreshOfflinePets,
+  } = useOfflinePets();
 
   // Fetch vaccinations for the current practice
   const {
@@ -97,7 +114,7 @@ const VaccinationsPage = () => {
       }
       return response.json();
     },
-    enabled: !!practiceId,
+    enabled: !!practiceId && isOnline,
   });
 
   // Fetch pet details for each vaccination
@@ -110,8 +127,17 @@ const VaccinationsPage = () => {
       }
       return response.json();
     },
-    enabled: !!practiceId,
+    enabled: !!practiceId && isOnline,
   });
+
+  // Create display variables for seamless online/offline switching
+  const displayVaccinations = isOnline
+    ? vaccinations
+    : (offlineVaccinations as any[]);
+  const displayPets = isOnline ? pets : (offlinePets as any[]);
+  const displayIsLoading = isOnline
+    ? isLoadingVaccinations
+    : isLoadingOfflineVaccinations;
 
   // If we have an error fetching vaccinations, use useEffect to prevent infinite re-renders
   const [errorToastShown, setErrorToastShown] = useState(false);
@@ -159,10 +185,10 @@ const VaccinationsPage = () => {
   // Filter vaccinations based on search term and species filter
   const filteredVaccinations = error
     ? []
-    : vaccinations
+    : displayVaccinations
         ?.filter((vaccination: any) => {
           // Find the associated pet for this vaccination
-          const pet = pets?.find((p: any) => p.id === vaccination.petId);
+          const pet = displayPets?.find((p: any) => p.id === vaccination.petId);
 
           // Apply species filter
           if (
@@ -199,19 +225,19 @@ const VaccinationsPage = () => {
 
   // Find pet name by ID
   const getPetName = (petId: any): string => {
-    const pet = pets?.find((p: any) => p.id === petId);
+    const pet = displayPets?.find((p: any) => p.id === petId);
     return pet ? pet.name : "Unknown Pet";
   };
 
   // Get pet species by ID
   const getPetSpecies = (petId: any): string => {
-    const pet = pets?.find((p: any) => p.id === petId);
+    const pet = displayPets?.find((p: any) => p.id === petId);
     return pet ? pet.species : "Unknown";
   };
 
   // Calculate statistics
   const getVaccinationStats = () => {
-    if (!vaccinations)
+    if (!displayVaccinations)
       return { total: 0, overdue: 0, dueThisMonth: 0, valid: 0 };
 
     const today = new Date();
@@ -222,7 +248,7 @@ const VaccinationsPage = () => {
     let dueThisMonth = 0;
     let valid = 0;
 
-    vaccinations.forEach((vaccination: any) => {
+    displayVaccinations.forEach((vaccination: any) => {
       const priority = getVaccinationPriority(vaccination);
       if (priority >= 4) overdue++;
       else if (priority >= 2) dueThisMonth++;
@@ -230,7 +256,7 @@ const VaccinationsPage = () => {
     });
 
     return {
-      total: vaccinations.length,
+      total: displayVaccinations.length,
       overdue,
       dueThisMonth,
       valid,
@@ -349,14 +375,24 @@ const VaccinationsPage = () => {
           <div>
             <h1 className="text-3xl font-bold">Vaccination Records</h1>
             <p className="text-muted-foreground">
-              Manage and track pet vaccinations
+              Manage and track pet vaccinations {!isOnline && "(Offline Mode)"}
             </p>
           </div>
 
           {canManageVaccinations && (
             <div className="flex gap-2">
               <Link href="/admin/vaccinations/types">
-                <Button variant="outline">Manage Vaccine Types</Button>
+                <Button
+                  variant="outline"
+                  disabled={!isOnline}
+                  title={
+                    !isOnline
+                      ? "Vaccine types can only be managed when online"
+                      : "Manage vaccine types"
+                  }
+                >
+                  Manage Vaccine Types
+                </Button>
               </Link>
               <Link href="/admin/vaccinations/add">
                 <Button>
@@ -369,7 +405,7 @@ const VaccinationsPage = () => {
         </div>
 
         {/* Statistics Cards */}
-        {!isLoadingVaccinations && (
+        {!displayIsLoading && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <Card>
               <CardContent className="p-6">
@@ -500,7 +536,7 @@ const VaccinationsPage = () => {
               </div>
             </div>
 
-            {isLoadingVaccinations ? (
+            {displayIsLoading ? (
               <div className="h-[300px] flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>

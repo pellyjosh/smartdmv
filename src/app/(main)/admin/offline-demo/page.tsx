@@ -875,6 +875,203 @@ export default function OfflineDemoPage() {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Sync Queue Items Viewer */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Sync Queue Items</CardTitle>
+              <CardDescription>
+                View all operations in the sync queue
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="pending" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="pending">
+                    Pending ({pendingOperations.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="failed">
+                    Failed ({failedOperations.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="conflicted">
+                    Conflicts ({conflictedOperations.length})
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Pending Operations */}
+                <TabsContent value="pending" className="space-y-2">
+                  {pendingOperations.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Activity className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No pending operations</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {pendingOperations.map((op) => (
+                        <Card key={op.id} className="bg-muted/50">
+                          <CardContent className="pt-4">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-1 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline">
+                                    {op.operation.toUpperCase()}
+                                  </Badge>
+                                  <Badge variant="secondary">
+                                    {op.entityType}
+                                  </Badge>
+                                  {op.priority !== "normal" && (
+                                    <Badge variant="destructive">
+                                      {op.priority}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm font-medium">
+                                  Entity ID: {op.entityId}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Created:{" "}
+                                  {new Date(op.timestamp).toLocaleString()}
+                                </p>
+                                {op.retryCount > 0 && (
+                                  <p className="text-xs text-muted-foreground">
+                                    Retry Count: {op.retryCount}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            {op.data && (
+                              <details className="mt-2">
+                                <summary className="text-xs cursor-pointer text-muted-foreground hover:text-foreground">
+                                  View Data
+                                </summary>
+                                <pre className="mt-2 text-xs bg-background p-2 rounded overflow-auto max-h-32">
+                                  {JSON.stringify(op.data, null, 2)}
+                                </pre>
+                              </details>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* Failed Operations */}
+                <TabsContent value="failed" className="space-y-2">
+                  {failedOperations.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <AlertCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No failed operations</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {failedOperations.map((op) => (
+                        <Card key={op.id} className="border-destructive">
+                          <CardContent className="pt-4">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-1 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="destructive">
+                                    {op.operation.toUpperCase()}
+                                  </Badge>
+                                  <Badge variant="outline">
+                                    {op.entityType}
+                                  </Badge>
+                                </div>
+                                <p className="text-sm font-medium">
+                                  Entity ID: {op.entityId}
+                                </p>
+                                <p className="text-xs text-destructive">
+                                  Error: {op.lastError || "Unknown error"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Timestamp:{" "}
+                                  {new Date(op.timestamp).toLocaleString()}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Retries: {op.retryCount} / {op.maxRetries}
+                                </p>
+                              </div>
+                            </div>
+                            {op.data && (
+                              <details className="mt-2">
+                                <summary className="text-xs cursor-pointer text-muted-foreground hover:text-foreground">
+                                  View Data
+                                </summary>
+                                <pre className="mt-2 text-xs bg-background p-2 rounded overflow-auto max-h-32">
+                                  {JSON.stringify(op.data, null, 2)}
+                                </pre>
+                              </details>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* Conflicted Operations */}
+                <TabsContent value="conflicted" className="space-y-2">
+                  {conflictedOperations.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Shield className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No conflicted operations</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {conflictedOperations.map((op) => (
+                        <Card key={op.id} className="border-amber-500">
+                          <CardContent className="pt-4">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-1 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <Badge
+                                    variant="outline"
+                                    className="border-amber-500"
+                                  >
+                                    {op.operation.toUpperCase()}
+                                  </Badge>
+                                  <Badge variant="secondary">
+                                    {op.entityType}
+                                  </Badge>
+                                  <Badge
+                                    variant="outline"
+                                    className="text-amber-600"
+                                  >
+                                    CONFLICT
+                                  </Badge>
+                                </div>
+                                <p className="text-sm font-medium">
+                                  Entity ID: {op.entityId}
+                                </p>
+                                <p className="text-xs text-amber-600">
+                                  {op.lastError || "Data conflict detected"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Created:{" "}
+                                  {new Date(op.timestamp).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                            {op.data && (
+                              <details className="mt-2">
+                                <summary className="text-xs cursor-pointer text-muted-foreground hover:text-foreground">
+                                  View Data
+                                </summary>
+                                <pre className="mt-2 text-xs bg-background p-2 rounded overflow-auto max-h-32">
+                                  {JSON.stringify(op.data, null, 2)}
+                                </pre>
+                              </details>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Tab 5: CRUD Operations */}

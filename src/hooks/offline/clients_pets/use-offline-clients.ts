@@ -161,6 +161,8 @@ export function useOfflineClients(): UseOfflineClientsReturn {
   // Update client
   const updateClient = useCallback(async (id: string | number, updates: Partial<Client>): Promise<Client> => {
     try {
+      console.log('[useOfflineClients] Update client:', { id, updates });
+      
       const existing = await getById(id);
       if (!existing) {
         throw new Error('Client not found');
@@ -190,8 +192,12 @@ export function useOfflineClients(): UseOfflineClientsReturn {
         }
       };
 
+      console.log('[useOfflineClients] Updating IndexedDB with:', updatedData);
+      
       // Update in IndexedDB (will throw on error)
       const result = await update(id, updatedData);
+
+      console.log('[useOfflineClients] IndexedDB update result:', result);
 
       // Add to sync queue with password if provided
       const syncData = { ...updateData };
@@ -200,6 +206,8 @@ export function useOfflineClients(): UseOfflineClientsReturn {
       }
       
       await addOperation(ENTITY_TYPE, id, 'update', syncData);
+      
+      console.log('[useOfflineClients] Added to sync queue:', { id, syncData });
 
       toast({
         title: isOnline ? 'Client updated' : 'Changes saved offline',

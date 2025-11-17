@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 // Navigation components are now provided by AppLayout
@@ -66,8 +66,9 @@ import {
 } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
 import { useToast } from "@/hooks/use-toast";
-import { useAppointments } from "@/hooks/use-appointments";
 import { useNetworkStatus } from "@/hooks/use-network-status";
+import { useOfflineAppointments } from "@/hooks/offline/appointments";
+import type { Appointment } from "@/hooks/offline/appointments/use-offline-appointments";
 import { Badge } from "@/components/ui/badge";
 
 // Form schema for creating appointments
@@ -97,24 +98,155 @@ export default function AppointmentsPage() {
   const { toast } = useToast();
   const { isOnline } = useNetworkStatus();
 
+  // Keep a ref to the current network status to avoid closure issues
+  const isOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
+
   // Next.js Router hooks instead of Wouter
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
-  // Use the hybrid appointments hook (auto-switches between online/offline)
+  // Offline hook for fallback when network goes down
+  const offlineAppointments = useOfflineAppointments();
+
+  // Online query for appointments
   const {
-    appointments,
+    data: appointments,
     isLoading: isLoadingAppointments,
-    createAppointment,
-    updateAppointment,
-    deleteAppointment,
-    pendingCount,
-    syncedCount,
-    errorCount,
-    syncNow,
-    refresh,
-  } = useAppointments();
+    refetch,
+  } = useQuery<Appointment[]>({
+    queryKey: ["/api/appointments"],
+    enabled: !!user && !!userPracticeId && isOnline,
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/appointments?practiceId=${userPracticeId}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch appointments");
+      return res.json();
+    },
+  });
+
+  // Create appointment mutation with networkMode: 'always'
+  const createAppointmentMutation = useMutation({
+    networkMode: "always", // Execute even when offline is detected
+    mutationFn: async (data: AppointmentFormValues) => {
+      console.log("[Appointment Mutation] Starting mutation");
+      console.log(
+        "[Appointment Mutation] isOnlineRef.current:",
+        isOnlineRef.current
+      );
+      console.log("[Appointment Mutation] navigator.onLine:", navigator.onLine);
+
+      // Check current network status using ref to avoid stale closure
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+      console.log(
+        "[Appointment Mutation] currentNetworkStatus:",
+        currentNetworkStatus
+      );
+
+      if (!currentNetworkStatus) {
+        console.log("[Appointment Mutation] Using OFFLINE path");
+        // Find the selected pet to get clientId
+        const selectedPet = pets?.find(
+          (p: any) => String(p.id) === String(data.petId)
+        );
+        const clientId = selectedPet?.clientId || selectedPet?.ownerId || null;
+        console.log("[Appointment Mutation] Selected pet:", selectedPet);
+        console.log("[Appointment Mutation] Client ID:", clientId);
+
+        // Use offline hook
+        const offlineData: Omit<Appointment, "id"> = {
+          title: data.title,
+          type: data.type,
+          date:
+            data.date instanceof Date
+              ? data.date.toISOString()
+              : String(data.date),
+          durationMinutes: data.duration,
+          petId: Number(data.petId),
+          clientId: clientId ? Number(clientId) : null,
+          practitionerId: data.practitionerId
+            ? Number(data.practitionerId)
+            : null,
+          practiceId: data.practiceId ? Number(data.practiceId) : undefined,
+          notes: data.notes || null,
+          status: data.status || "pending",
+        };
+        console.log(
+          "[Appointment Mutation] Calling offline createAppointment with:",
+          offlineData
+        );
+        const result = await offlineAppointments.createAppointment(offlineData);
+        console.log(
+          "[Appointment Mutation] Offline createAppointment result:",
+          result
+        );
+        return result;
+      }
+
+      console.log("[Appointment Mutation] Using ONLINE path");
+      // Online path
+      const transformedData = {
+        title: data.title,
+        type: data.type,
+        date: data.date,
+        durationMinutes: data.duration.toString(),
+        petId: data.petId,
+        practitionerId: data.practitionerId,
+        practiceId: data.practiceId,
+        notes: data.notes,
+        status: data.status || "pending",
+      };
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Request timeout")), 10000)
+      );
+
+      const fetchPromise = fetch("/api/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(transformedData),
+        credentials: "include",
+      });
+
+      const res = (await Promise.race([
+        fetchPromise,
+        timeoutPromise,
+      ])) as Response;
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`${res.status}: ${errorText}`);
+      }
+
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+      toast({
+        title: "Appointment created",
+        description: isOnlineRef.current
+          ? "The appointment has been successfully created."
+          : "The appointment will be synced when you're back online.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to create appointment",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Get sync status from offline hook
+  const pendingCount = offlineAppointments.pendingCount;
+  const errorCount = offlineAppointments.errorCount;
+  const syncNow = offlineAppointments.syncNow;
 
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentFormSchema),
@@ -168,6 +300,8 @@ export default function AppointmentsPage() {
       return res.json();
     },
     enabled: !!user,
+    staleTime: 5 * 60 * 1000, // Keep data fresh for 5 minutes
+    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
   });
 
   // Fetch staff for dropdown (only when needed)
@@ -185,7 +319,7 @@ export default function AppointmentsPage() {
 
   // Filter appointments for the selected date
   const filteredAppointments = useMemo(() => {
-    return appointments?.filter((appointment) => {
+    return appointments?.filter((appointment: Appointment) => {
       const appointmentDate = new Date(appointment.date);
       return (
         appointmentDate.getDate() === selectedDate.getDate() &&
@@ -197,25 +331,22 @@ export default function AppointmentsPage() {
 
   // Sort appointments by time
   const sortedAppointments = useMemo(() => {
-    return filteredAppointments?.sort((a, b) => {
+    return filteredAppointments?.sort((a: Appointment, b: Appointment) => {
       return new Date(a.date).getTime() - new Date(b.date).getTime();
     });
   }, [filteredAppointments]);
 
-  // Handle appointment submission (uses hybrid hook automatically)
+  // Handle appointment submission
   const onSubmit = async (data: AppointmentFormValues) => {
+    console.log("[onSubmit] Starting submission");
+    console.log("[onSubmit] Form data:", data);
+    console.log("[onSubmit] isOnline:", isOnline);
+    console.log("[onSubmit] isOnlineRef.current:", isOnlineRef.current);
+
     const formattedData = { ...data };
 
     if (user && userPracticeId) {
       formattedData.practiceId = userPracticeId;
-    }
-
-    if (formattedData.petId) {
-      formattedData.petId = formattedData.petId;
-    }
-
-    if (formattedData.practitionerId) {
-      formattedData.practitionerId = formattedData.practitionerId.toString();
     }
 
     if (!formattedData.status) {
@@ -224,14 +355,17 @@ export default function AppointmentsPage() {
 
     try {
       setIsSubmitting(true);
-      await createAppointment(formattedData);
+      console.log("[onSubmit] Calling mutateAsync with:", formattedData);
+      const result = await createAppointmentMutation.mutateAsync(formattedData);
+      console.log("[onSubmit] Mutation result:", result);
       setIsDialogOpen(false);
       form.reset();
       router.replace(pathname);
     } catch (error) {
-      // Error already handled by the hook
-      console.error("Failed to create appointment:", error);
+      // Error already handled by the mutation
+      console.error("[onSubmit] Failed to create appointment:", error);
     } finally {
+      console.log("[onSubmit] Finally block - setting isSubmitting to false");
       setIsSubmitting(false);
     }
   };
@@ -720,10 +854,10 @@ export default function AppointmentsPage() {
 
             {sortedAppointments && sortedAppointments.length > 0 ? (
               <div className="space-y-3">
-                {sortedAppointments.map((appointment) => (
+                {sortedAppointments.map((appointment: Appointment) => (
                   <AppointmentCard
                     key={appointment.id}
-                    appointment={appointment}
+                    {...({ appointment } as any)}
                   />
                 ))}
               </div>

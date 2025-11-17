@@ -21,8 +21,9 @@ import type {
 
 import * as conflictStorage from '../storage/conflict-storage';
 import * as syncQueueStorage from '../storage/sync-queue-storage';
-import * as tempIdResolver from './temp-id-resolver';
 import * as relationshipManager from './relationship-manager';
+import { indexedDBManager } from '../db/manager';
+import { STORES } from '../db/schema';
 import { 
   generateFieldDiffs, 
   hashObject, 
@@ -141,16 +142,11 @@ export class SyncEngine {
 
     this.updateProgress('syncing', pendingOps.length, 0);
 
-    // Build dependency graph and sort operations
+    // Sort operations by entity type dependency (clients before pets, pets before appointments, etc.)
     const sortedOps = relationshipManager.sortByEntityTypeDependency(pendingOps);
-    const graph = relationshipManager.buildDependencyGraph(sortedOps);
 
-    if (graph.cycles.length > 0) {
-      console.warn('⚠️ Circular dependencies detected:', graph.cycles);
-    }
-
-    // Process operations in batches
-    return await this.processSyncBatch(graph.sortedOperations);
+    // Process operations in sorted order
+    return await this.processSyncBatch(sortedOps);
   }
 
   /**
@@ -172,16 +168,22 @@ export class SyncEngine {
       // Get last sync timestamp from metadata
       const lastSyncTimestamp = await this.getLastSyncTimestamp();
 
-      // Pull changes from server - include pets and all appointments
-      const response = await fetch(
-        `/api/sync/pull?lastSyncTimestamp=${lastSyncTimestamp}&practiceId=${context.practiceId}&entityTypes=appointments,pets,clients`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+  const entityTypesToSync = 'appointments,pets,clients,practitioners,soapNotes,rooms,admissions,vaccinations,vaccine_types,kennels,boarding_stays';
+      const syncUrl = `/api/sync/pull?lastSyncTimestamp=${lastSyncTimestamp}&practiceId=${context.practiceId}&entityTypes=${entityTypesToSync}`;
+      
+      console.log('[SyncEngine] 🔄 Initiating sync pull...');
+      console.log('[SyncEngine] 📍 Practice ID:', context.practiceId);
+      console.log('[SyncEngine] 📦 Entity types:', entityTypesToSync);
+      console.log('[SyncEngine] 🕒 Last sync:', new Date(lastSyncTimestamp).toISOString());
+      console.log('[SyncEngine] 🌐 Request URL:', syncUrl);
+
+      // Pull changes from server - include all offline-enabled entities
+      const response = await fetch(syncUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
       if (!response.ok) {
         throw new Error(`Sync pull failed: ${response.statusText}`);
@@ -413,6 +415,71 @@ export class SyncEngine {
   }
 
   /**
+   * Pull a newly created record from server and save to local storage
+   */
+  private async pullAndSaveNewRecord(entityType: string, realId: number): Promise<void> {
+    const context = await getOfflineTenantContext();
+    if (!context) {
+      throw new Error('No tenant context available');
+    }
+
+    // Fetch the record from the appropriate API endpoint
+    const apiEndpoint = this.getApiEndpointForEntity(entityType, realId);
+    console.log(`[SyncEngine] Fetching new record from ${apiEndpoint}`);
+
+    const response = await fetch(apiEndpoint, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${entityType} ${realId}: ${response.statusText}`);
+    }
+
+    const newRecord = await response.json();
+
+    // Save to local storage
+    const { saveEntity } = await import('../storage/entity-storage');
+    await saveEntity(entityType, newRecord, 'synced');
+
+    console.log(`[SyncEngine] ✅ Saved new ${entityType} record with ID ${realId} to local storage`);
+  }
+
+  /**
+   * Get API endpoint for fetching a specific entity
+   */
+  private getApiEndpointForEntity(entityType: string, id: number): string {
+    // Normalize entity type to API path
+    const apiPaths: Record<string, string> = {
+      'appointments': '/api/appointments',
+      'appointment': '/api/appointments',
+      'pets': '/api/pets',
+      'pet': '/api/pets',
+      'clients': '/api/users',
+      'client': '/api/users',
+      'users': '/api/users',
+      'user': '/api/users',
+      'soapNotes': '/api/soap-notes',
+      'soapNote': '/api/soap-notes',
+      'admissions': '/api/admissions',
+      'admission': '/api/admissions',
+      'rooms': '/api/admission-rooms',
+      'room': '/api/admission-rooms',
+      'vaccinations': '/api/vaccinations',
+      'vaccination': '/api/vaccinations',
+      'vaccine_types': '/api/vaccine-types',
+    };
+  // Add boarding-specific endpoints
+  apiPaths['kennels'] = '/api/boarding/kennels';
+  apiPaths['boarding_stays'] = '/api/boarding/stays';
+
+    const basePath = apiPaths[entityType] || `/api/${entityType}`;
+    return `${basePath}/${id}`;
+  }
+
+  /**
    * Process a batch of sync operations
    */
   async processSyncBatch(operations: SyncOperation[]): Promise<SyncResult> {
@@ -441,8 +508,11 @@ export class SyncEngine {
           result.synced++;
           result.operations.push(operation);
 
-          // Handle ID mapping for CREATE operations
+          // Handle CREATE operations - delete temp record after successful sync
           if (operation.operation === 'create' && syncResult.realId) {
+            console.log(`[SyncEngine] Processing successful CREATE: ${operation.entityType} ${operation.entityId} → ${syncResult.realId}`);
+
+            // Store the mapping for tracking
             const mapping: IdMapping = {
               tempId: String(operation.entityId),
               realId: syncResult.realId,
@@ -452,12 +522,20 @@ export class SyncEngine {
               operationId: operation.id!
             };
             result.idMappings.push(mapping);
-            await tempIdResolver.mapTempToReal(
-              mapping.tempId,
-              mapping.realId,
-              mapping.entityType,
-              mapping.operationId
-            );
+
+            // Delete the temporary record from local storage
+            await this.deleteLocalTempRecord(operation.entityType, mapping.tempId);
+
+            // Fetch the newly created record from server and save to local
+            try {
+              await this.pullAndSaveNewRecord(operation.entityType, syncResult.realId);
+              console.log(`✅ Pulled and saved new record: ${operation.entityType} ${syncResult.realId}`);
+            } catch (pullError) {
+              console.error(`❌ Failed to pull new record ${operation.entityType} ${syncResult.realId}:`, pullError);
+              // Don't fail the sync if pull fails - record is still created on server
+            }
+
+            console.log(`✅ Synced create: ${operation.entityType} ${mapping.tempId} → ${mapping.realId}`);
           }
 
           // Mark operation as completed
@@ -794,6 +872,25 @@ export class SyncEngine {
     }
 
     console.log(`✅ Conflict ${conflict.id} resolved with ${resolution!.strategy} strategy`);
+  }
+
+  /**
+   * Delete local temporary record after successful sync
+   * The fresh record will be pulled from server during next sync
+   */
+  private async deleteLocalTempRecord(entityType: string, tempId: string): Promise<void> {
+    try {
+      console.log(`[SyncEngine] Attempting to delete temp record: ${entityType} ${tempId}`);
+
+      // Use entity storage's hard delete function which properly handles practice-scoped stores
+      const { hardDeleteEntity } = await import('../storage/entity-storage');
+      await hardDeleteEntity(entityType, tempId);
+
+      console.log(`🗑️ Deleted local temp record: ${entityType} ${tempId}`);
+    } catch (error) {
+      console.error(`[SyncEngine] Failed to delete temp record ${tempId}:`, error);
+      // Don't throw - this is a cleanup operation, sync should continue
+    }
   }
 
   /**

@@ -3,7 +3,7 @@
  */
 
 export type PermissionAction = 'create' | 'read' | 'update' | 'delete';
-export type EntityType = 'pet' | 'appointment' | 'client' | 'soapNote' | 'invoice' | 'inventory' | 'prescription' | 'labResult' | 'medicalRecord' | 'vaccination';
+export type EntityType = 'pet' | 'appointment' | 'client' | 'soapNote' | 'prescription' | 'labResult' | 'medicalRecord' | 'vaccination';
 
 /**
  * Permission object

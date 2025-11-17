@@ -76,6 +76,12 @@ import { getPetAvatarColors } from "@/lib/utils";
 import { SimpleCustomFieldSelect } from "@/components/form/simple-custom-field-select";
 import { useCustomFields } from "@/hooks/use-custom-fields";
 import { queryClient } from "@/lib/queryClient";
+import {
+  useOfflineClients,
+  type Client,
+} from "@/hooks/offline/clients_pets/use-offline-clients";
+import { useOfflinePets } from "@/hooks/offline/clients_pets/use-offline-pets";
+import { useNetworkStatus } from "@/hooks/use-network-status";
 
 // Predefined lists for dropdowns
 const speciesList = [
@@ -256,6 +262,21 @@ export default function ClientDetailPage() {
   const { toast } = useToast();
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
+  // Network status - use ref to always get current value
+  const { isOnline } = useNetworkStatus();
+  const isOnlineRef = useRef(isOnline);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
+
+  // Offline hooks
+  const { updateClient: updateOfflineClient, refresh: refreshOfflineClients } =
+    useOfflineClients();
+
+  const { refresh: refreshOfflinePets } = useOfflinePets();
+
   // Fetch client data
   const {
     data: client,
@@ -371,66 +392,120 @@ export default function ClientDetailPage() {
 
   // Update client mutation
   const updateClientMutation = useMutation({
+    // CRITICAL: Set networkMode to 'always' to execute mutation even when offline
+    // Without this, React Query pauses mutations when it detects offline status
+    networkMode: "always",
     mutationFn: async (data: ClientEditFormValues) => {
       // Debug: log the outgoing request body
       try {
         console.log("[ClientDetail] update mutation - sending body:", data);
+        console.log("[ClientDetail] isOnlineRef.current:", isOnlineRef.current);
+        console.log("[ClientDetail] navigator.onLine:", navigator.onLine);
       } catch (e) {
         console.log("[ClientDetail] update mutation - stringify failed", e);
       }
-      const res = await fetch(`/api/users/${clientId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to update client");
-      const json = await res.json();
-      try {
-        console.log("[ClientDetail] update mutation - server response:", json);
-      } catch (e) {
-        console.log(
-          "[ClientDetail] update mutation - response stringify failed",
-          e
-        );
+
+      // CRITICAL: Use ref to get CURRENT network status at execution time
+      // Check both the ref and navigator.onLine for accuracy
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      // If offline, use offline-first approach
+      if (!currentNetworkStatus) {
+        console.log("[ClientDetail] 🔌 OFFLINE - Using offline update");
+        const result = await updateOfflineClient(clientId, data as any);
+        // Manually refresh to ensure UI updates
+        await refreshOfflineClients();
+        return result;
       }
-      return json;
-    },
-    onSuccess: async () => {
-      // Ensure we have fresh data from the server before closing the dialog.
+
+      // If online, use API with timeout
+      console.log("[ClientDetail] 🌐 ONLINE - Using API update");
+
+      // Create fetch with timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
       try {
-        // Invalidate caches and fetch the latest user row
-        queryClient.invalidateQueries({ queryKey: ["/api/users/clients"] });
-        const fresh = await fetch(`/api/users/${clientId}`, {
+        const res = await fetch(`/api/users/${clientId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(data),
           credentials: "include",
+          signal: controller.signal,
         });
-        if (fresh.ok) {
-          const freshJson = await fresh.json();
-          try {
-            console.log(
-              "[ClientDetail] onSuccess - fresh user after update:",
-              freshJson
-            );
-          } catch {}
-          // Prime the react-query cache with the fresh value
-          queryClient.setQueryData(["/api/users", clientId], freshJson);
-        } else {
-          console.warn(
-            "[ClientDetail] onSuccess - failed to fetch fresh user after update"
+        clearTimeout(timeoutId);
+
+        if (!res.ok) throw new Error("Failed to update client");
+        const json = await res.json();
+        try {
+          console.log(
+            "[ClientDetail] update mutation - server response:",
+            json
+          );
+        } catch (e) {
+          console.log(
+            "[ClientDetail] update mutation - response stringify failed",
+            e
           );
         }
-      } catch (e) {
-        console.warn(
-          "[ClientDetail] onSuccess - error fetching fresh user:",
-          e
-        );
+        return json;
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+
+        // If fetch was aborted or network error, try offline update as fallback
+        if (error.name === "AbortError" || error.message.includes("fetch")) {
+          console.log(
+            "[ClientDetail] ⚠️ Fetch failed/timeout - Falling back to offline update"
+          );
+          const result = await updateOfflineClient(clientId, data as any);
+          await refreshOfflineClients();
+          return result;
+        }
+        throw error;
       }
-      toast({
-        title: "Client updated",
-        description: "Client information has been successfully updated.",
-      });
+    },
+    onSuccess: async () => {
+      // CRITICAL: Check network status before attempting to fetch fresh data
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      // Only fetch fresh data when online
+      if (currentNetworkStatus) {
+        try {
+          // Invalidate caches and fetch the latest user row
+          queryClient.invalidateQueries({ queryKey: ["/api/users/clients"] });
+          const fresh = await fetch(`/api/users/${clientId}`, {
+            credentials: "include",
+          });
+          if (fresh.ok) {
+            const freshJson = await fresh.json();
+            try {
+              console.log(
+                "[ClientDetail] onSuccess - fresh user after update:",
+                freshJson
+              );
+            } catch {}
+            // Prime the react-query cache with the fresh value
+            queryClient.setQueryData(["/api/users", clientId], freshJson);
+          } else {
+            console.warn(
+              "[ClientDetail] onSuccess - failed to fetch fresh user after update"
+            );
+          }
+        } catch (e) {
+          console.warn(
+            "[ClientDetail] onSuccess - error fetching fresh user:",
+            e
+          );
+        }
+
+        toast({
+          title: "Client updated",
+          description: "Client information has been successfully updated.",
+        });
+      }
+
       setIsEditDialogOpen(false);
     },
     onError: (error: Error) => {
@@ -444,7 +519,22 @@ export default function ClientDetailPage() {
 
   // SMS opt-out mutation
   const updateSmsOptOutMutation = useMutation({
+    // CRITICAL: Set networkMode to 'always' to execute mutation even when offline
+    networkMode: "always",
     mutationFn: async (optOut: boolean) => {
+      // Check current network status
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      // If offline, use offline-first approach
+      if (!currentNetworkStatus) {
+        const result = await updateOfflineClient(clientId, {
+          smsOptOut: optOut,
+        } as any);
+        await refreshOfflineClients();
+        return result;
+      }
+
+      // If online, use API
       const res = await fetch(`/api/clients/${clientId}/sms-preference`, {
         method: "PATCH",
         headers: {
@@ -457,13 +547,17 @@ export default function ClientDetailPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users", clientId] });
-      toast({
-        title: "SMS preferences updated",
-        description: `SMS notifications ${
-          client?.smsOptOut ? "enabled" : "disabled"
-        } for this client.`,
-      });
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+      if (currentNetworkStatus) {
+        queryClient.invalidateQueries({ queryKey: ["/api/users", clientId] });
+
+        toast({
+          title: "SMS preferences updated",
+          description: `SMS notifications ${
+            client?.smsOptOut ? "enabled" : "disabled"
+          } for this client.`,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({

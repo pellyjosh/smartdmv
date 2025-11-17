@@ -326,6 +326,10 @@ export default function ClientsPage() {
 
   // Network status
   const { isOnline } = useNetworkStatus();
+  const isOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
 
   // Offline hooks for clients and pets
   const {
@@ -717,9 +721,12 @@ export default function ClientsPage() {
 
   // Create client mutation
   const createClientMutation = useMutation({
+    networkMode: "always",
     mutationFn: async (data: ClientFormValues) => {
-      // If offline, use offline-first approach
-      if (!isOnline) {
+      // Check if offline using current network status
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      if (!currentNetworkStatus) {
         return await createOfflineClient(data as any);
       }
 
@@ -795,16 +802,22 @@ export default function ClientsPage() {
 
   // Update client mutation
   const updateClientMutation = useMutation({
+    networkMode: "always",
     mutationFn: async (data: UpdateClientFormValues & { id: string }) => {
       const { id, password, ...clientData } = data as any;
 
-      // If offline, use offline-first approach
-      if (!isOnline) {
+      // Check if offline using current network status
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      if (!currentNetworkStatus) {
         const updates: any = { ...clientData };
         if (password && password.length > 0) {
           updates.password = password; // Password will be handled by the hook
         }
-        return await updateOfflineClient(id, updates);
+        const result = await updateOfflineClient(id, updates);
+        // Manually refresh to ensure UI updates
+        await refreshOfflineClients();
+        return result;
       }
 
       // If online, use API
@@ -823,15 +836,10 @@ export default function ClientsPage() {
       return await res.json();
     },
     onSuccess: (updatedClient) => {
-      // Refresh appropriate data source
+      // Refresh appropriate data source (skip for offline since already refreshed in mutationFn)
       if (isOnline) {
         refetchClients();
-      } else {
-        refreshOfflineClients();
-      }
 
-      // Only show toast if online (offline hook handles it)
-      if (isOnline) {
         toast({
           title: "Client updated",
           description: "The client has been successfully updated.",
@@ -873,9 +881,12 @@ export default function ClientsPage() {
 
   // Delete client mutation
   const deleteClientMutation = useMutation({
+    networkMode: "always",
     mutationFn: async (id: string) => {
-      // If offline, use offline-first approach
-      if (!isOnline) {
+      // Check if offline using current network status
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      if (!currentNetworkStatus) {
         await deleteOfflineClient(id);
         return id;
       }
@@ -991,10 +1002,13 @@ export default function ClientsPage() {
 
   // Create pet mutation
   const createPetMutation = useMutation({
+    networkMode: "always",
     mutationFn: async (data: PetFormValues) => {
       try {
-        // If offline, use offline-first approach (photo will be uploaded on sync)
-        if (!isOnline) {
+        // Check if offline using current network status
+        const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+        if (!currentNetworkStatus) {
           return await createOfflinePet(data as any, petPhoto);
         }
 
@@ -1073,13 +1087,23 @@ export default function ClientsPage() {
 
   // Update pet mutation
   const updatePetMutation = useMutation({
+    networkMode: "always",
     mutationFn: async (data: PetFormValues & { id: number }) => {
       try {
         const { id, ...updateData } = data;
 
-        // If offline, use offline-first approach (photo will be uploaded on sync)
-        if (!isOnline) {
-          return await updateOfflinePet(id, updateData as any, petPhoto);
+        // Check if offline using current network status
+        const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+        if (!currentNetworkStatus) {
+          const result = await updateOfflinePet(
+            id,
+            updateData as any,
+            petPhoto
+          );
+          // Manually refresh to ensure UI updates
+          await refreshOfflinePets();
+          return result;
         }
 
         // If online, upload photo first then update pet
@@ -1122,15 +1146,10 @@ export default function ClientsPage() {
       }
     },
     onSuccess: () => {
-      // Refresh appropriate data source
+      // Refresh appropriate data source (skip for offline since already refreshed in mutationFn)
       if (isOnline) {
         refetchPets();
-      } else {
-        refreshOfflinePets();
-      }
 
-      // Only show toast if online (offline hook handles it)
-      if (isOnline) {
         toast({
           title: "Pet updated",
           description: "The pet has been successfully updated.",
@@ -1156,9 +1175,12 @@ export default function ClientsPage() {
 
   // Delete pet mutation
   const deletePetMutation = useMutation({
+    networkMode: "always",
     mutationFn: async (id: number) => {
-      // If offline, use offline-first approach
-      if (!isOnline) {
+      // Check if offline using current network status
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      if (!currentNetworkStatus) {
         await deleteOfflinePet(id);
         return {};
       }

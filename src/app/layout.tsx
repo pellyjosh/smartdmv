@@ -5,6 +5,7 @@ import "./globals.css";
 import ReactQueryProvider from "@/components/providers/ReactQueryProvider";
 import ConditionalProviders from "@/components/providers/ConditionalProviders";
 import { PWAInitializer } from "@/components/pwa/PWAInitializer";
+import { OfflinePreloader } from "@/components/offline/OfflinePreloader";
 
 export const metadata: Metadata = {
   title: "SmartDVM",
@@ -39,6 +40,7 @@ export default function RootLayout({
     >
       <body className="antialiased">
         <PWAInitializer />
+        <OfflinePreloader />
         <ReactQueryProvider>
           <ConditionalProviders>{children}</ConditionalProviders>
         </ReactQueryProvider>

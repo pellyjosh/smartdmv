@@ -1,8 +1,9 @@
-'use client'
+"use client";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
+import { useNetworkStatus } from "@/hooks/use-network-status";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -40,12 +41,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Plus, Search, Edit, Trash2, AlertCircle, ArrowLeft } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  AlertCircle,
+  ArrowLeft,
+} from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import Link from "next/link";
 
 // Define the schema for adding/editing vaccine types
@@ -71,6 +88,7 @@ const VaccineTypesPage = () => {
   const { userPracticeId } = useUser();
   const router = useRouter();
   const { toast } = useToast();
+  const { isOnline } = useNetworkStatus();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [editingVaccineType, setEditingVaccineType] = useState<any>(null);
@@ -102,10 +120,16 @@ const VaccineTypesPage = () => {
   });
 
   // Fetch vaccine types
-  const { data: vaccineTypes, isLoading: isLoadingVaccineTypes, error } = useQuery({
+  const {
+    data: vaccineTypes,
+    isLoading: isLoadingVaccineTypes,
+    error,
+  } = useQuery({
     queryKey: ["/api/vaccinations/types", userPracticeId],
     queryFn: async () => {
-      const response = await fetch(`/api/vaccinations/types?practiceId=${userPracticeId}`);
+      const response = await fetch(
+        `/api/vaccinations/types?practiceId=${userPracticeId}`
+      );
       if (!response.ok) throw new Error("Failed to fetch vaccine types");
       return response.json();
     },
@@ -127,7 +151,9 @@ const VaccineTypesPage = () => {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vaccinations/types", userPracticeId] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/vaccinations/types", userPracticeId],
+      });
       toast({
         title: "Success",
         description: "Vaccine type has been created successfully",
@@ -146,7 +172,13 @@ const VaccineTypesPage = () => {
 
   // Update vaccine type mutation
   const updateVaccineTypeMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<VaccineTypeFormValues> }) => {
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: number;
+      data: Partial<VaccineTypeFormValues>;
+    }) => {
       const response = await fetch(`/api/vaccinations/types/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -159,7 +191,9 @@ const VaccineTypesPage = () => {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vaccinations/types", userPracticeId] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/vaccinations/types", userPracticeId],
+      });
       toast({
         title: "Success",
         description: "Vaccine type has been updated successfully",
@@ -189,7 +223,9 @@ const VaccineTypesPage = () => {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vaccinations/types", userPracticeId] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/vaccinations/types", userPracticeId],
+      });
       toast({
         title: "Success",
         description: "Vaccine type has been deleted successfully",
@@ -236,7 +272,7 @@ const VaccineTypesPage = () => {
   // Open edit dialog and set form values
   const handleEditVaccineType = (vaccineType: any): void => {
     setEditingVaccineType(vaccineType);
-    
+
     // Convert array of diseases to comma-separated string for the form
     // Handle both string and array formats for diseasesProtected
     let diseasesProtectedString = "";
@@ -247,12 +283,12 @@ const VaccineTypesPage = () => {
         diseasesProtectedString = String(vaccineType.diseasesProtected);
       }
     }
-      
+
     form.reset({
       ...vaccineType,
       diseasesProtected: diseasesProtectedString,
     });
-    
+
     setIsEditDialogOpen(true);
   };
 
@@ -263,26 +299,28 @@ const VaccineTypesPage = () => {
   };
 
   // Filter vaccine types based on search term and tab
-  const filteredVaccineTypes = error 
+  const filteredVaccineTypes = error
     ? []
     : vaccineTypes?.filter((vaccineType: any) => {
-      // Apply tab filter
-      if (activeTab !== "all" && vaccineType.type !== activeTab) {
-        return false;
-      }
-      
-      // Apply search term filter
-      const searchLower = searchTerm.toLowerCase();
-      return searchTerm === "" || 
-             vaccineType.name.toLowerCase().includes(searchLower) ||
-             vaccineType.species.toLowerCase().includes(searchLower) ||
-             vaccineType.manufacturer?.toLowerCase().includes(searchLower) ||
-             vaccineType.description?.toLowerCase().includes(searchLower);
-    });
+        // Apply tab filter
+        if (activeTab !== "all" && vaccineType.type !== activeTab) {
+          return false;
+        }
+
+        // Apply search term filter
+        const searchLower = searchTerm.toLowerCase();
+        return (
+          searchTerm === "" ||
+          vaccineType.name.toLowerCase().includes(searchLower) ||
+          vaccineType.species.toLowerCase().includes(searchLower) ||
+          vaccineType.manufacturer?.toLowerCase().includes(searchLower) ||
+          vaccineType.description?.toLowerCase().includes(searchLower)
+        );
+      });
 
   // Error handling with useEffect to prevent infinite re-renders
   const [errorToastShown, setErrorToastShown] = useState(false);
-  
+
   useEffect(() => {
     if (error && !errorToastShown) {
       toast({
@@ -296,20 +334,37 @@ const VaccineTypesPage = () => {
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'core':
-        return 'bg-blue-100 text-blue-800';
-      case 'non-core':
-        return 'bg-purple-100 text-purple-800';
-      case 'optional':
-        return 'bg-gray-100 text-gray-800';
+      case "core":
+        return "bg-blue-100 text-blue-800";
+      case "non-core":
+        return "bg-purple-100 text-purple-800";
+      case "optional":
+        return "bg-gray-100 text-gray-800";
       default:
-        return 'bg-gray-100 text-gray-800';
+        return "bg-gray-100 text-gray-800";
     }
   };
 
   return (
     <>
       <div className="container mx-auto py-6 space-y-6">
+        {!isOnline && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900 rounded-lg p-4">
+            <div className="flex items-start">
+              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 mt-0.5 mr-3" />
+              <div>
+                <h3 className="font-semibold text-yellow-800 dark:text-yellow-200">
+                  Read-Only Mode (Offline)
+                </h3>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                  You're currently offline. Vaccine types are view-only and can
+                  only be created, edited, or deleted when you're back online.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold">Vaccine Types</h1>
@@ -325,11 +380,19 @@ const VaccineTypesPage = () => {
                 Back to Vaccinations
               </Button>
             </Link>
-            <Button onClick={() => {
-              form.reset(defaultValues);
-              setIsAddDialogOpen(true);
-            }}>
-              <Plus className="h-4 w-4 mr-2" /> 
+            <Button
+              onClick={() => {
+                form.reset(defaultValues);
+                setIsAddDialogOpen(true);
+              }}
+              disabled={!isOnline}
+              title={
+                !isOnline
+                  ? "Vaccine types can only be managed when online"
+                  : "Add new vaccine type"
+              }
+            >
+              <Plus className="h-4 w-4 mr-2" />
               Add Vaccine Type
             </Button>
           </div>
@@ -343,8 +406,8 @@ const VaccineTypesPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs 
-              defaultValue="all" 
+            <Tabs
+              defaultValue="all"
               className="w-full mb-6"
               onValueChange={setActiveTab}
               value={activeTab}
@@ -376,14 +439,22 @@ const VaccineTypesPage = () => {
               <div className="h-[300px] flex flex-col items-center justify-center text-center p-4">
                 <h3 className="text-lg font-medium">No vaccine types found</h3>
                 <p className="text-sm text-muted-foreground mt-1 mb-4">
-                  {activeTab === "all" 
+                  {activeTab === "all"
                     ? "No vaccine types found. Add some vaccine types to get started."
-                    : `No ${activeTab.replace('-', ' ')} vaccine types found.`}
+                    : `No ${activeTab.replace("-", " ")} vaccine types found.`}
                 </p>
-                <Button onClick={() => {
-                  form.reset(defaultValues);
-                  setIsAddDialogOpen(true);
-                }}>
+                <Button
+                  onClick={() => {
+                    form.reset(defaultValues);
+                    setIsAddDialogOpen(true);
+                  }}
+                  disabled={!isOnline}
+                  title={
+                    !isOnline
+                      ? "Vaccine types can only be managed when online"
+                      : "Add new vaccine type"
+                  }
+                >
                   <Plus className="h-4 w-4 mr-2" /> Add Vaccine Type
                 </Button>
               </div>
@@ -413,37 +484,62 @@ const VaccineTypesPage = () => {
                           )}
                         </TableCell>
                         <TableCell>
-                          <span className={`px-2 py-1 rounded-full text-xs ${getTypeColor(vaccineType.type)}`}>
-                            {vaccineType.type === 'non-core' ? 'Non-Core' : 
-                             vaccineType.type === 'core' ? 'Core' : 'Optional'}
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs ${getTypeColor(
+                              vaccineType.type
+                            )}`}
+                          >
+                            {vaccineType.type === "non-core"
+                              ? "Non-Core"
+                              : vaccineType.type === "core"
+                              ? "Core"
+                              : "Optional"}
                           </span>
                         </TableCell>
                         <TableCell>{vaccineType.species}</TableCell>
                         <TableCell>{vaccineType.manufacturer || "—"}</TableCell>
-                        <TableCell>{vaccineType.durationOfImmunity || "—"}</TableCell>
                         <TableCell>
-                          <span className={`px-2 py-1 rounded-full text-xs ${
-                            vaccineType.isActive 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {vaccineType.isActive ? 'Active' : 'Inactive'}
+                          {vaccineType.durationOfImmunity || "—"}
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs ${
+                              vaccineType.isActive
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {vaccineType.isActive ? "Active" : "Inactive"}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end space-x-2">
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="icon"
                               onClick={() => handleEditVaccineType(vaccineType)}
+                              disabled={!isOnline}
+                              title={
+                                !isOnline
+                                  ? "Vaccine types can only be edited when online"
+                                  : "Edit vaccine type"
+                              }
                             >
                               <Edit className="h-4 w-4" />
                               <span className="sr-only">Edit</span>
                             </Button>
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="icon"
-                              onClick={() => handleDeleteVaccineType(vaccineType)}
+                              onClick={() =>
+                                handleDeleteVaccineType(vaccineType)
+                              }
+                              disabled={!isOnline}
+                              title={
+                                !isOnline
+                                  ? "Vaccine types can only be deleted when online"
+                                  : "Delete vaccine type"
+                              }
                             >
                               <Trash2 className="h-4 w-4" />
                               <span className="sr-only">Delete</span>
@@ -466,10 +562,11 @@ const VaccineTypesPage = () => {
           <DialogHeader>
             <DialogTitle>Add New Vaccine Type</DialogTitle>
             <DialogDescription>
-              Create a new vaccine type for your practice. All fields marked with * are required.
+              Create a new vaccine type for your practice. All fields marked
+              with * are required.
             </DialogDescription>
           </DialogHeader>
-          
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -486,7 +583,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="type"
@@ -509,13 +606,14 @@ const VaccineTypesPage = () => {
                         </SelectContent>
                       </Select>
                       <FormDescription>
-                        Core vaccines are recommended for all animals of that species.
+                        Core vaccines are recommended for all animals of that
+                        species.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="species"
@@ -536,7 +634,9 @@ const VaccineTypesPage = () => {
                           <SelectItem value="Cat">Cat</SelectItem>
                           <SelectItem value="Bird">Bird</SelectItem>
                           <SelectItem value="Reptile">Reptile</SelectItem>
-                          <SelectItem value="Small Mammal">Small Mammal</SelectItem>
+                          <SelectItem value="Small Mammal">
+                            Small Mammal
+                          </SelectItem>
                           <SelectItem value="Other">Other</SelectItem>
                         </SelectContent>
                       </Select>
@@ -544,7 +644,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="manufacturer"
@@ -559,7 +659,7 @@ const VaccineTypesPage = () => {
                   )}
                 />
               </div>
-              
+
               <FormField
                 control={form.control}
                 name="description"
@@ -567,7 +667,7 @@ const VaccineTypesPage = () => {
                   <FormItem>
                     <FormLabel>Description</FormLabel>
                     <FormControl>
-                      <Textarea 
+                      <Textarea
                         placeholder="Brief description of the vaccine"
                         className="resize-none"
                         {...field}
@@ -577,7 +677,7 @@ const VaccineTypesPage = () => {
                   </FormItem>
                 )}
               />
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -586,7 +686,7 @@ const VaccineTypesPage = () => {
                     <FormItem>
                       <FormLabel>Diseases Protected Against</FormLabel>
                       <FormControl>
-                        <Textarea 
+                        <Textarea
                           placeholder="Separate diseases with commas"
                           className="resize-none"
                           {...field}
@@ -599,7 +699,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="recommendedSchedule"
@@ -607,7 +707,7 @@ const VaccineTypesPage = () => {
                     <FormItem>
                       <FormLabel>Recommended Schedule</FormLabel>
                       <FormControl>
-                        <Textarea 
+                        <Textarea
                           placeholder="e.g., Initial: 8 weeks, Booster: 12 weeks"
                           className="resize-none"
                           {...field}
@@ -617,7 +717,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="durationOfImmunity"
@@ -631,7 +731,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="sideEffects"
@@ -639,7 +739,7 @@ const VaccineTypesPage = () => {
                     <FormItem>
                       <FormLabel>Potential Side Effects</FormLabel>
                       <FormControl>
-                        <Textarea 
+                        <Textarea
                           placeholder="Common side effects"
                           className="resize-none"
                           {...field}
@@ -649,7 +749,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="contraindications"
@@ -657,7 +757,7 @@ const VaccineTypesPage = () => {
                     <FormItem>
                       <FormLabel>Contraindications</FormLabel>
                       <FormControl>
-                        <Textarea 
+                        <Textarea
                           placeholder="When not to administer"
                           className="resize-none"
                           {...field}
@@ -667,7 +767,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="isActive"
@@ -691,12 +791,19 @@ const VaccineTypesPage = () => {
                   )}
                 />
               </div>
-              
+
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsAddDialogOpen(false)}
+                >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createVaccineTypeMutation.isPending}>
+                <Button
+                  type="submit"
+                  disabled={createVaccineTypeMutation.isPending}
+                >
                   {createVaccineTypeMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
@@ -714,12 +821,16 @@ const VaccineTypesPage = () => {
           <DialogHeader>
             <DialogTitle>Edit Vaccine Type</DialogTitle>
             <DialogDescription>
-              Update the details of this vaccine type. All fields marked with * are required.
+              Update the details of this vaccine type. All fields marked with *
+              are required.
             </DialogDescription>
           </DialogHeader>
-          
+
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmitEdit)} className="space-y-6">
+            <form
+              onSubmit={form.handleSubmit(onSubmitEdit)}
+              className="space-y-6"
+            >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -734,7 +845,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="type"
@@ -758,13 +869,14 @@ const VaccineTypesPage = () => {
                         </SelectContent>
                       </Select>
                       <FormDescription>
-                        Core vaccines are recommended for all animals of that species.
+                        Core vaccines are recommended for all animals of that
+                        species.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="species"
@@ -786,7 +898,9 @@ const VaccineTypesPage = () => {
                           <SelectItem value="Cat">Cat</SelectItem>
                           <SelectItem value="Bird">Bird</SelectItem>
                           <SelectItem value="Reptile">Reptile</SelectItem>
-                          <SelectItem value="Small Mammal">Small Mammal</SelectItem>
+                          <SelectItem value="Small Mammal">
+                            Small Mammal
+                          </SelectItem>
                           <SelectItem value="Other">Other</SelectItem>
                         </SelectContent>
                       </Select>
@@ -794,7 +908,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="manufacturer"
@@ -802,14 +916,18 @@ const VaccineTypesPage = () => {
                     <FormItem>
                       <FormLabel>Manufacturer</FormLabel>
                       <FormControl>
-                        <Input placeholder="Manufacturer name" {...field} value={field.value || ""} />
+                        <Input
+                          placeholder="Manufacturer name"
+                          {...field}
+                          value={field.value || ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-              
+
               <FormField
                 control={form.control}
                 name="description"
@@ -817,7 +935,7 @@ const VaccineTypesPage = () => {
                   <FormItem>
                     <FormLabel>Description</FormLabel>
                     <FormControl>
-                      <Textarea 
+                      <Textarea
                         placeholder="Brief description of the vaccine"
                         className="resize-none"
                         {...field}
@@ -828,7 +946,7 @@ const VaccineTypesPage = () => {
                   </FormItem>
                 )}
               />
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -837,7 +955,7 @@ const VaccineTypesPage = () => {
                     <FormItem>
                       <FormLabel>Diseases Protected Against</FormLabel>
                       <FormControl>
-                        <Textarea 
+                        <Textarea
                           placeholder="Separate diseases with commas"
                           className="resize-none"
                           {...field}
@@ -851,7 +969,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="recommendedSchedule"
@@ -859,7 +977,7 @@ const VaccineTypesPage = () => {
                     <FormItem>
                       <FormLabel>Recommended Schedule</FormLabel>
                       <FormControl>
-                        <Textarea 
+                        <Textarea
                           placeholder="e.g., Initial: 8 weeks, Booster: 12 weeks"
                           className="resize-none"
                           {...field}
@@ -870,7 +988,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="durationOfImmunity"
@@ -878,13 +996,17 @@ const VaccineTypesPage = () => {
                     <FormItem>
                       <FormLabel>Duration of Immunity</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., 1 year, 3 years" {...field} value={field.value || ""} />
+                        <Input
+                          placeholder="e.g., 1 year, 3 years"
+                          {...field}
+                          value={field.value || ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="sideEffects"
@@ -892,7 +1014,7 @@ const VaccineTypesPage = () => {
                     <FormItem>
                       <FormLabel>Potential Side Effects</FormLabel>
                       <FormControl>
-                        <Textarea 
+                        <Textarea
                           placeholder="Common side effects"
                           className="resize-none"
                           {...field}
@@ -903,7 +1025,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="contraindications"
@@ -911,7 +1033,7 @@ const VaccineTypesPage = () => {
                     <FormItem>
                       <FormLabel>Contraindications</FormLabel>
                       <FormControl>
-                        <Textarea 
+                        <Textarea
                           placeholder="When not to administer"
                           className="resize-none"
                           {...field}
@@ -922,7 +1044,7 @@ const VaccineTypesPage = () => {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="isActive"
@@ -946,12 +1068,19 @@ const VaccineTypesPage = () => {
                   )}
                 />
               </div>
-              
+
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditDialogOpen(false)}
+                >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={updateVaccineTypeMutation.isPending}>
+                <Button
+                  type="submit"
+                  disabled={updateVaccineTypeMutation.isPending}
+                >
                   {updateVaccineTypeMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
@@ -969,33 +1098,57 @@ const VaccineTypesPage = () => {
           <DialogHeader>
             <DialogTitle>Delete Vaccine Type</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this vaccine type? This action cannot be undone.
+              Are you sure you want to delete this vaccine type? This action
+              cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          
+
           {vaccineTypeToDelete && (
             <div className="py-4">
               <div className="flex items-center space-x-2 text-amber-600 mb-4">
                 <AlertCircle className="h-5 w-5" />
-                <p className="font-medium">Warning: This will also affect all vaccination records using this type.</p>
+                <p className="font-medium">
+                  Warning: This will also affect all vaccination records using
+                  this type.
+                </p>
               </div>
-              
+
               <div className="space-y-2">
-                <p><span className="font-medium">Name:</span> {vaccineTypeToDelete.name}</p>
-                <p><span className="font-medium">Type:</span> {vaccineTypeToDelete.type === 'non-core' ? 'Non-Core' : vaccineTypeToDelete.type === 'core' ? 'Core' : 'Optional'}</p>
-                <p><span className="font-medium">Species:</span> {vaccineTypeToDelete.species}</p>
+                <p>
+                  <span className="font-medium">Name:</span>{" "}
+                  {vaccineTypeToDelete.name}
+                </p>
+                <p>
+                  <span className="font-medium">Type:</span>{" "}
+                  {vaccineTypeToDelete.type === "non-core"
+                    ? "Non-Core"
+                    : vaccineTypeToDelete.type === "core"
+                    ? "Core"
+                    : "Optional"}
+                </p>
+                <p>
+                  <span className="font-medium">Species:</span>{" "}
+                  {vaccineTypeToDelete.species}
+                </p>
               </div>
             </div>
           )}
-          
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+            >
               Cancel
             </Button>
-            <Button 
-              type="button" 
-              variant="destructive" 
-              onClick={() => vaccineTypeToDelete && deleteVaccineTypeMutation.mutate(vaccineTypeToDelete.id)}
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() =>
+                vaccineTypeToDelete &&
+                deleteVaccineTypeMutation.mutate(vaccineTypeToDelete.id)
+              }
               disabled={deleteVaccineTypeMutation.isPending}
             >
               {deleteVaccineTypeMutation.isPending && (

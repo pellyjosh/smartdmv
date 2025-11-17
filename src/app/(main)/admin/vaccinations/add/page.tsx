@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
@@ -10,6 +10,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, ArrowLeft, Calendar } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/hooks/use-toast";
+import { useOfflineVaccinations } from "@/hooks/offline/vaccinations/use-offline-vaccinations";
+import { useNetworkStatus } from "@/hooks/use-network-status";
 import {
   isPracticeAdministrator,
   isVeterinarian,
@@ -88,6 +90,16 @@ const AddVaccinationPage = () => {
   const [selectedPet, setSelectedPet] = useState<any>(null);
   const [selectedVaccineType, setSelectedVaccineType] = useState<any>(null);
 
+  // Network status and offline support
+  const { isOnline } = useNetworkStatus();
+  const isOnlineRef = useRef(isOnline);
+  const offlineVaccinations = useOfflineVaccinations();
+
+  // Sync isOnlineRef with isOnline state
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
+
   const petId = searchParams.get("petId");
 
   // Authorization check
@@ -162,7 +174,19 @@ const AddVaccinationPage = () => {
 
   // Create vaccination mutation
   const createVaccinationMutation = useMutation({
+    networkMode: "always",
     mutationFn: async (data: any) => {
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      if (!currentNetworkStatus) {
+        // Use offline vaccination hook
+        return await offlineVaccinations.createVaccination({
+          ...data,
+          practiceId: userPracticeId,
+        });
+      }
+
+      // Online path - existing API call
       const response = await fetch("/api/vaccinations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

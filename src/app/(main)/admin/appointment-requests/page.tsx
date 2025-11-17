@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { MarketplaceFeatureContainer } from "@/components/features/marketplace-feature-message";
 import {
   Card,
@@ -108,6 +108,12 @@ export default function AppointmentRequestsPage() {
     refresh: refreshOfflineAppointments,
   } = useOfflineAppointments();
 
+  // Keep ref in sync with isOnline state for mutations
+  const isOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
+
   // Fetch appointment requests from API (when online)
   const { data: apiRequests, isLoading: isLoadingApi } = useQuery<
     AppointmentRequest[]
@@ -211,6 +217,7 @@ export default function AppointmentRequestsPage() {
 
   // Approve request mutation
   const approveMutation = useMutation({
+    networkMode: "always", // Execute immediately regardless of network status
     mutationFn: async (
       request: AppointmentRequest & { _originalId?: string | number }
     ) => {
@@ -218,13 +225,18 @@ export default function AppointmentRequestsPage() {
       const idToUse = (request as any)._originalId || request.id;
       console.log(`Approving appointment request with ID: ${idToUse}`);
 
+      // Check current network status at execution time
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
       // If offline, use offline-first approach
-      if (!isOnline) {
+      if (!currentNetworkStatus) {
+        console.log("[AppointmentRequests] 🔌 OFFLINE - Using offline approve");
         await approveAppointmentRequest(idToUse);
         return { id: idToUse, status: "approved" };
       }
 
       // If online, call API directly
+      console.log("[AppointmentRequests] 🌐 ONLINE - Using API approve");
       const res = await apiRequest(
         "POST",
         `/api/appointment-requests/${idToUse}/approve`
@@ -274,6 +286,7 @@ export default function AppointmentRequestsPage() {
 
   // Reject request mutation
   const rejectMutation = useMutation({
+    networkMode: "always", // Execute immediately regardless of network status
     mutationFn: async ({
       request,
       reason,
@@ -287,13 +300,18 @@ export default function AppointmentRequestsPage() {
         `Rejecting appointment request with ID: ${idToUse}, Reason: ${reason}`
       );
 
+      // Check current network status at execution time
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
       // If offline, use offline-first approach
-      if (!isOnline) {
+      if (!currentNetworkStatus) {
+        console.log("[AppointmentRequests] 🔌 OFFLINE - Using offline reject");
         await rejectAppointmentRequest(idToUse, reason);
         return { id: idToUse, status: "rejected" };
       }
 
       // If online, call API directly
+      console.log("[AppointmentRequests] 🌐 ONLINE - Using API reject");
       const res = await apiRequest(
         "POST",
         `/api/appointment-requests/${idToUse}/reject`,
@@ -346,7 +364,19 @@ export default function AppointmentRequestsPage() {
 
   // Delete request mutation
   const deleteMutation = useMutation({
+    networkMode: "always", // Execute immediately regardless of network status
     mutationFn: async (id: number) => {
+      // Check current network status at execution time
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      if (!currentNetworkStatus) {
+        console.log(
+          "[AppointmentRequests] 🔌 OFFLINE - Cannot delete (API only operation)"
+        );
+        throw new Error("Delete operation requires internet connection");
+      }
+
+      console.log("[AppointmentRequests] 🌐 ONLINE - Using API delete");
       const res = await apiRequest("DELETE", `/api/appointment-requests/${id}`);
       if (!res.ok) {
         throw new Error(`Failed to delete request: ${res.statusText}`);

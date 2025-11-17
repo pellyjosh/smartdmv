@@ -83,7 +83,14 @@ export function StorageManager() {
     { value: STORES.APPOINTMENTS, label: "appointments" },
     { value: STORES.PETS, label: "pets" },
     { value: STORES.CLIENTS, label: "Clients" },
+    { value: STORES.PRACTITIONERS, label: "Practitioners" },
     { value: STORES.SOAP_NOTES, label: "SOAP Notes" },
+    { value: STORES.ROOMS, label: "Admission Rooms" },
+    { value: STORES.ADMISSIONS, label: "Pet Admissions" },
+    { value: STORES.VACCINATIONS, label: "Vaccinations" },
+    { value: STORES.VACCINE_TYPES, label: "Vaccine Types" },
+    { value: STORES.KENNELS, label: "Kennels" },
+    { value: STORES.BOARDING_STAYS, label: "Boarding Stays" },
   ];
 
   useEffect(() => {
@@ -126,7 +133,14 @@ export function StorageManager() {
         STORES.APPOINTMENTS, // 'appointments'
         STORES.PETS, // 'pets'
         STORES.CLIENTS, // 'clients'
+        STORES.PRACTITIONERS, // 'practitioners'
         STORES.SOAP_NOTES, // 'soapNotes'
+        STORES.ROOMS, // 'rooms'
+        STORES.ADMISSIONS, // 'admissions'
+        STORES.VACCINATIONS, // 'vaccinations'
+        STORES.VACCINE_TYPES, // 'vaccine_types'
+        STORES.KENNELS,
+        STORES.BOARDING_STAYS,
       ];
 
       console.log(
@@ -205,7 +219,31 @@ export function StorageManager() {
       console.log(
         `[StorageManager] 📊 Loaded ${allRecords.length} total records from ${storesToLoad.length} stores`
       );
-      setRecords(allRecords);
+
+      // Sort records by updatedAt in descending order (most recent first)
+      const sortedRecords = allRecords.sort((a, b) => {
+        const aUpdatedAt =
+          a.data?.updatedAt ||
+          a.data?.updated_at ||
+          a.data?.createdAt ||
+          a.data?.created_at;
+        const bUpdatedAt =
+          b.data?.updatedAt ||
+          b.data?.updated_at ||
+          b.data?.createdAt ||
+          b.data?.created_at;
+
+        if (!aUpdatedAt && !bUpdatedAt) return 0;
+        if (!aUpdatedAt) return 1;
+        if (!bUpdatedAt) return -1;
+
+        const aTime = new Date(aUpdatedAt).getTime();
+        const bTime = new Date(bUpdatedAt).getTime();
+
+        return bTime - aTime; // Descending order (most recent first)
+      });
+
+      setRecords(sortedRecords);
     } catch (error) {
       console.error("[StorageManager] Failed to load records:", error);
       toast({
@@ -292,7 +330,9 @@ export function StorageManager() {
         STORES.APPOINTMENTS,
         STORES.PETS,
         STORES.CLIENTS,
+        STORES.PRACTITIONERS,
         STORES.SOAP_NOTES,
+        STORES.KENNELS,
       ];
 
       // Find practice-prefixed stores
@@ -418,7 +458,10 @@ export function StorageManager() {
       [STORES.APPOINTMENTS]: "default",
       [STORES.PETS]: "secondary",
       [STORES.CLIENTS]: "outline",
+      [STORES.PRACTITIONERS]: "outline",
       [STORES.SOAP_NOTES]: "secondary",
+      [STORES.KENNELS]: "secondary",
+      [STORES.BOARDING_STAYS]: "default",
     };
     return (
       <Badge variant={variants[record.store] || "default"}>

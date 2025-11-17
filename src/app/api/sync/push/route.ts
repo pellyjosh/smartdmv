@@ -13,7 +13,10 @@ import {
   pets, 
   users,
   soapNotes,
-  invoices 
+  vaccinations,
+  admissions,
+  kennels,
+  boardingStays
 } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
@@ -79,8 +82,14 @@ function getEntityTable(entityType: string) {
     users: users,
     soapNote: soapNotes,
     soapNotes: soapNotes,
-    invoice: invoices,
-    invoices: invoices,
+    vaccination: vaccinations,
+    vaccinations: vaccinations,
+    admission: admissions,
+    admissions: admissions,
+    kennel: kennels,
+    kennels: kennels,
+    boarding_stay: boardingStays,
+    boarding_stays: boardingStays,
   };
   return tables[entityType];
 }
@@ -173,6 +182,30 @@ export async function POST(req: NextRequest) {
             const { id, ...dataWithoutId } = op.data;
             const tempId = id;
 
+            // Special handling for clients - check for duplicate email
+            // This prevents duplicate key violations when sync is retried after a partial success
+            // (e.g., record was created in DB but sync queue wasn't updated due to network issues)
+            if ((op.entityType === 'clients' || op.entityType === 'client' || op.entityType === 'users' || op.entityType === 'user') && dataWithoutId.email) {
+              const existingUser = await db.query.users.findFirst({
+                where: eq(users.email, dataWithoutId.email),
+              });
+              
+              if (existingUser) {
+                // Email already exists - this is likely a retry of a previously succeeded sync
+                console.log(`[SyncPush] Client with email ${dataWithoutId.email} already exists (ID: ${existingUser.id}), using existing record`);
+                
+                result.processed++;
+                result.results.push({
+                  operationId: op.id,
+                  success: true,
+                  realId: existingUser.id,
+                  tempId: tempId,
+                  entityType: op.entityType,
+                });
+                continue;
+              }
+            }
+
             // Special handling for appointments - derive clientId from pet
             let finalData = { ...dataWithoutId };
             
@@ -206,6 +239,69 @@ export async function POST(req: NextRequest) {
               // Convert duration to string if it's a number
               if (finalData.durationMinutes && typeof finalData.durationMinutes === 'number') {
                 finalData.durationMinutes = finalData.durationMinutes.toString();
+              }
+            }
+
+            // Special handling for admissions - convert date strings to Date objects
+            if (op.entityType === 'admissions' || op.entityType === 'admission') {
+              // Remove relationship objects that shouldn't be inserted
+              delete finalData.pet;
+              delete finalData.petName;
+              delete finalData.client;
+              delete finalData.clientName;
+              delete finalData.room;
+              delete finalData.roomNumber;
+              delete finalData.metadata;
+              
+              // Ensure dates are Date objects
+              if (finalData.admissionDate && typeof finalData.admissionDate === 'string') {
+                finalData.admissionDate = new Date(finalData.admissionDate);
+              }
+              if (finalData.dischargeDate && typeof finalData.dischargeDate === 'string') {
+                finalData.dischargeDate = new Date(finalData.dischargeDate);
+              }
+            }
+
+            // Special handling for boarding stays - normalize fields and strip relationships
+            if (op.entityType === 'boarding_stays' || op.entityType === 'boarding_stay') {
+              // Remove relationship objects
+              delete finalData.pet;
+              delete finalData.petName;
+              delete finalData.kennel;
+              delete finalData.kennelName;
+              delete finalData.createdBy;
+              delete finalData.createdByName;
+              delete finalData.metadata;
+
+              // Support both startDate/endDate (client form) and checkInDate/plannedCheckOutDate (db)
+              if (finalData.startDate && typeof finalData.startDate === 'string') {
+                finalData.checkInDate = new Date(finalData.startDate);
+                delete finalData.startDate;
+              }
+              if (finalData.endDate && typeof finalData.endDate === 'string') {
+                finalData.plannedCheckOutDate = new Date(finalData.endDate);
+                delete finalData.endDate;
+              }
+
+              // Convert existing date strings if present
+              if (finalData.checkInDate && typeof finalData.checkInDate === 'string') {
+                finalData.checkInDate = new Date(finalData.checkInDate);
+              }
+              if (finalData.plannedCheckOutDate && typeof finalData.plannedCheckOutDate === 'string') {
+                finalData.plannedCheckOutDate = new Date(finalData.plannedCheckOutDate);
+              }
+              if (finalData.actualCheckOutDate && typeof finalData.actualCheckOutDate === 'string') {
+                finalData.actualCheckOutDate = new Date(finalData.actualCheckOutDate);
+              }
+
+              // Ensure createdById is set (use op.userId as fallback)
+              if (!finalData.createdById && op.userId) {
+                finalData.createdById = typeof op.userId === 'string' ? parseInt(op.userId, 10) : op.userId;
+              }
+
+              // Default status
+              if (!finalData.status) {
+                finalData.status = 'scheduled';
               }
             }
 
@@ -269,11 +365,52 @@ export async function POST(req: NextRequest) {
               continue;
             }
 
+            // Prepare update data - convert date strings to Date objects if needed
+            let updateData = { ...op.data };
+            
+            // Handle admissions date fields
+            if (op.entityType === 'admissions' || op.entityType === 'admission') {
+              if (updateData.admissionDate && typeof updateData.admissionDate === 'string') {
+                updateData.admissionDate = new Date(updateData.admissionDate);
+              }
+              if (updateData.dischargeDate && typeof updateData.dischargeDate === 'string') {
+                updateData.dischargeDate = new Date(updateData.dischargeDate);
+              }
+            }
+            
+            // Handle appointments date fields
+            if (op.entityType === 'appointments' || op.entityType === 'appointment') {
+              if (updateData.date && typeof updateData.date === 'string') {
+                updateData.date = new Date(updateData.date);
+              }
+            }
+
+            // Handle boarding stays date fields
+            if (op.entityType === 'boarding_stays' || op.entityType === 'boarding_stay') {
+              if (updateData.startDate && typeof updateData.startDate === 'string') {
+                updateData.checkInDate = new Date(updateData.startDate);
+                delete updateData.startDate;
+              }
+              if (updateData.endDate && typeof updateData.endDate === 'string') {
+                updateData.plannedCheckOutDate = new Date(updateData.endDate);
+                delete updateData.endDate;
+              }
+              if (updateData.checkInDate && typeof updateData.checkInDate === 'string') {
+                updateData.checkInDate = new Date(updateData.checkInDate);
+              }
+              if (updateData.plannedCheckOutDate && typeof updateData.plannedCheckOutDate === 'string') {
+                updateData.plannedCheckOutDate = new Date(updateData.plannedCheckOutDate);
+              }
+              if (updateData.actualCheckOutDate && typeof updateData.actualCheckOutDate === 'string') {
+                updateData.actualCheckOutDate = new Date(updateData.actualCheckOutDate);
+              }
+            }
+
             // Update record
             await db
               .update(table)
               .set({
-                ...op.data,
+                ...updateData,
                 updatedAt: new Date(),
               })
               .where(eq(table.id, op.entityId));
@@ -440,12 +577,47 @@ export async function POST(req: NextRequest) {
         }
       } catch (error) {
         console.error('[SyncPush] Operation error:', error);
+        
+        // Check if this is a duplicate key violation (PostgreSQL error code 23505)
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const isDuplicateKeyError = errorMessage.includes('duplicate key value violates unique constraint') || 
+                                   errorMessage.includes('violates unique constraint');
+        
+        if (isDuplicateKeyError && op.operation === 'create') {
+          // For duplicate key errors on create, try to find the existing record
+          console.log(`[SyncPush] Duplicate key error detected for ${op.entityType}, attempting to find existing record`);
+          
+          try {
+            // Special handling for clients - find by email
+            if ((op.entityType === 'clients' || op.entityType === 'client' || op.entityType === 'users' || op.entityType === 'user') && op.data.email) {
+              const existingUser = await db.query.users.findFirst({
+                where: eq(users.email, op.data.email),
+              });
+              
+              if (existingUser) {
+                console.log(`[SyncPush] Found existing user with email ${op.data.email}, using ID ${existingUser.id}`);
+                result.processed++;
+                result.results.push({
+                  operationId: op.id,
+                  success: true,
+                  realId: existingUser.id,
+                  tempId: op.data.id,
+                  entityType: op.entityType,
+                });
+                continue;
+              }
+            }
+          } catch (lookupError) {
+            console.error('[SyncPush] Error looking up existing record:', lookupError);
+          }
+        }
+        
         result.failed++;
         result.results.push({
           operationId: op.id,
           success: false,
           entityType: op.entityType,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: errorMessage,
         });
       }
     }

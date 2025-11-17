@@ -7,6 +7,7 @@
  */
 
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useRef, useEffect } from "react";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useOfflineAppointments } from "@/hooks/offline/appointments";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -49,6 +50,12 @@ export function useAppointments() {
   const { userPracticeId } = useUser();
   const { toast } = useToast();
 
+  // Keep a ref to the current network status to avoid closure issues
+  const isOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
+
   // Offline hook (always initialized, but only used when offline)
   const offlineHook = useOfflineAppointments();
 
@@ -68,7 +75,17 @@ export function useAppointments() {
 
   // Online mutation for creating appointments
   const onlineCreateMutation = useMutation({
+    networkMode: 'always', // Execute mutation even when offline is detected
     mutationFn: async (data: AppointmentFormValues) => {
+      // Use ref for current network status to avoid closure stale state
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+      
+      if (!currentNetworkStatus) {
+        // Network went offline, use offline hook instead
+        const transformedData = transformFormToSchema(data);
+        return offlineHook.createAppointment(transformedData);
+      }
+      
       const transformedData = transformFormToSchema(data);
       const res = await fetch("/api/appointments", {
         method: "POST",
@@ -104,7 +121,17 @@ export function useAppointments() {
 
   // Online mutation for updating appointments
   const onlineUpdateMutation = useMutation({
+    networkMode: 'always', // Execute mutation even when offline is detected
     mutationFn: async ({ id, data }: { id: string; data: Partial<AppointmentFormValues> }) => {
+      // Use ref for current network status to avoid closure stale state
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+      
+      if (!currentNetworkStatus) {
+        // Network went offline, use offline hook instead
+        const transformedData = transformFormToSchema(data as AppointmentFormValues);
+        return offlineHook.updateAppointment(id, transformedData);
+      }
+      
       const res = await fetch(`/api/appointments/${id}`, {
         method: "PATCH",
         headers: {
@@ -139,7 +166,16 @@ export function useAppointments() {
 
   // Online mutation for deleting appointments
   const onlineDeleteMutation = useMutation({
+    networkMode: 'always', // Execute mutation even when offline is detected
     mutationFn: async (id: string) => {
+      // Use ref for current network status to avoid closure stale state
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+      
+      if (!currentNetworkStatus) {
+        // Network went offline, use offline hook instead
+        return offlineHook.deleteAppointment(id);
+      }
+      
       const res = await fetch(`/api/appointments/${id}`, {
         method: "DELETE",
         credentials: "include",
@@ -168,79 +204,56 @@ export function useAppointments() {
     },
   });
 
-  // Return appropriate interface based on network status
-  if (isOnline) {
-    return {
-      // Data
-      appointments: onlineQuery.data || [],
-      isLoading: onlineQuery.isLoading,
-      error: onlineQuery.error,
-      
-      // Actions
-      createAppointment: async (data: AppointmentFormValues) => {
-        return onlineCreateMutation.mutateAsync(data);
-      },
-      updateAppointment: async (id: string, data: Partial<AppointmentFormValues>) => {
-        return onlineUpdateMutation.mutateAsync({ id, data });
-      },
-      deleteAppointment: async (id: string) => {
-        return onlineDeleteMutation.mutateAsync(id);
-      },
-      getAppointment: (id: string) => {
-        return onlineQuery.data?.find(apt => String(apt.id) === id);
-      },
-      
-      // Status
-      isOnline: true,
-      pendingCount: 0,
-      syncedCount: onlineQuery.data?.length || 0,
-      errorCount: 0,
-      
-      // Sync actions (no-op when online)
-      syncNow: async () => {
-        await onlineQuery.refetch();
-      },
-      refresh: async () => {
-        await onlineQuery.refetch();
-      },
-    };
-  } else {
-    // Offline mode - use IndexedDB
-    // Note: Offline appointments use a different schema, so we need to normalize
-    const offlineAppointments = offlineHook.appointments.map((apt: any) => ({
+  // Return unified interface that works in both online and offline modes
+  // The mutations themselves handle the network status check
+  return {
+    // Data - prefer online when available, fallback to offline
+    appointments: isOnline ? (onlineQuery.data || []) : (offlineHook.appointments.map((apt: any) => ({
       ...apt,
-      // Ensure compatibility with the online schema
       id: apt.id ? Number(apt.id) : undefined,
       date: apt.date || new Date(apt.appointmentDate),
-    })) as any[];
+    })) as any[]),
+    isLoading: isOnline ? onlineQuery.isLoading : offlineHook.isLoading,
+    error: isOnline ? onlineQuery.error : offlineHook.error,
     
-    return {
-      // Data
-      appointments: offlineAppointments,
-      isLoading: offlineHook.isLoading,
-      error: offlineHook.error,
-      
-      // Actions (wrap to transform data)
-      createAppointment: async (data: AppointmentFormValues) => {
-        const transformedData = transformFormToSchema(data);
-        return offlineHook.createAppointment(transformedData);
-      },
-      updateAppointment: async (id: string, data: Partial<AppointmentFormValues>) => {
-        const transformedData = transformFormToSchema(data as AppointmentFormValues);
-        return offlineHook.updateAppointment(id, transformedData);
-      },
-      deleteAppointment: offlineHook.deleteAppointment,
-      getAppointment: offlineHook.getAppointment,
-      
-      // Status
-      isOnline: false,
-      pendingCount: offlineHook.pendingCount,
-      syncedCount: offlineHook.syncedCount,
-      errorCount: offlineHook.errorCount,
-      
-      // Sync actions
-      syncNow: offlineHook.syncNow,
-      refresh: offlineHook.refresh,
-    };
-  }
+    // Actions - always use the online mutations which fallback to offline when needed
+    createAppointment: async (data: AppointmentFormValues) => {
+      return onlineCreateMutation.mutateAsync(data);
+    },
+    updateAppointment: async (id: string, data: Partial<AppointmentFormValues>) => {
+      return onlineUpdateMutation.mutateAsync({ id, data });
+    },
+    deleteAppointment: async (id: string) => {
+      return onlineDeleteMutation.mutateAsync(id);
+    },
+    getAppointment: (id: string) => {
+      if (isOnline) {
+        return onlineQuery.data?.find(apt => String(apt.id) === id);
+      } else {
+        return offlineHook.getAppointment(id);
+      }
+    },
+    
+    // Status
+    isOnline,
+    pendingCount: isOnline ? 0 : offlineHook.pendingCount,
+    syncedCount: isOnline ? (onlineQuery.data?.length || 0) : offlineHook.syncedCount,
+    errorCount: isOnline ? 0 : offlineHook.errorCount,
+    
+    // Sync actions
+    syncNow: async () => {
+      if (isOnline) {
+        await onlineQuery.refetch();
+      } else {
+        await offlineHook.syncNow();
+      }
+    },
+    refresh: async () => {
+      if (isOnline) {
+        await onlineQuery.refetch();
+      } else {
+        await offlineHook.refresh();
+      }
+    },
+  };
 }

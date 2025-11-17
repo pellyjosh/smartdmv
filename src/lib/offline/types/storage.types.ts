@@ -9,13 +9,16 @@ export type EntityType =
   | 'appointments'
   | 'clients'
   | 'soapNotes'
-  | 'invoices'
-  | 'inventory'
   | 'prescriptions'
   | 'labResults'
   | 'medicalRecords'
   | 'vaccinations'
+  | 'vaccine_types'
   | 'practitioners'
+  | 'rooms'
+  | 'admissions'
+  | 'kennels'
+  | 'boarding_stays'
   | 'userRoles'
   | 'permissions';
 

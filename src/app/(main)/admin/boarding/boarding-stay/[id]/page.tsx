@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   PawPrint,
+  WifiOff,
   Home,
   Clock,
   Phone,
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useNetworkStatus } from "@/hooks/use-network-status";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -209,6 +211,7 @@ export default function BoardingStayPage() {
   const { user } = useUser();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isOnline } = useNetworkStatus();
   const [activeTab, setActiveTab] = useState("overview");
 
   // Dialog states
@@ -852,9 +855,15 @@ export default function BoardingStayPage() {
         </Link>
         <div className="flex-1">
           <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold tracking-tight flex items-center">
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
               <PawPrint className="h-6 w-6 mr-2" />
               {displayStay.pet.name} - Boarding Details
+              {!isOnline && (
+                <Badge variant="secondary" className="gap-1.5">
+                  <WifiOff className="h-3 w-3" />
+                  Offline Mode
+                </Badge>
+              )}
             </h1>
             <StatusBadge status={displayStay.status} />
           </div>

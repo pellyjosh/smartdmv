@@ -1,9 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { hasRole } from "@/lib/rbac-helpers";
 import { useToast } from "@/hooks/use-toast";
+import { useNetworkStatus } from "@/hooks/use-network-status";
+import { useOfflineRooms } from "@/hooks/offline/admissions/use-offline-rooms";
+import { useOfflineAdmissions } from "@/hooks/offline/admissions/use-offline-admissions";
+import { useOfflinePets } from "@/hooks/offline/clients_pets/use-offline-pets";
+import { useOfflineClients } from "@/hooks/offline/clients_pets/use-offline-clients";
+import * as entityStorage from "@/lib/offline/storage/entity-storage";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -216,6 +222,54 @@ const PetAdmissionPage = () => {
 
   const { userPracticeId } = useUser();
 
+  // Offline support
+  const { isOnline } = useNetworkStatus();
+  const isOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
+
+  const {
+    rooms: offlineRooms,
+    refresh: refreshOfflineRooms,
+    isLoading: isLoadingOfflineRooms,
+  } = useOfflineRooms();
+
+  const {
+    admissions: offlineAdmissions,
+    createAdmission: createOfflineAdmission,
+    updateAdmission: updateOfflineAdmission,
+    dischargeAdmission: dischargeOfflineAdmission,
+    refresh: refreshOfflineAdmissions,
+    isLoading: isLoadingOfflineAdmissions,
+  } = useOfflineAdmissions();
+
+  const { pets: offlinePets, refresh: refreshOfflinePets } = useOfflinePets();
+
+  const { clients: offlineClients, refresh: refreshOfflineClients } =
+    useOfflineClients();
+
+  // State for offline practitioners
+  const [offlinePractitioners, setOfflinePractitioners] = useState<any[]>([]);
+
+  // Fetch offline practitioners
+  useEffect(() => {
+    if (!isOnline && userPracticeId) {
+      entityStorage
+        .getAllEntities<any>("practitioners")
+        .then((practitioners: any[]) => {
+          setOfflinePractitioners(practitioners || []);
+        })
+        .catch((err: any) => {
+          console.error(
+            "[Admissions] Failed to fetch offline practitioners:",
+            err
+          );
+          setOfflinePractitioners([]);
+        });
+    }
+  }, [isOnline, userPracticeId]);
+
   // Queries
   const {
     data: admissions = [],
@@ -232,8 +286,14 @@ const PetAdmissionPage = () => {
       }
       return await res.json();
     },
+    enabled: isOnline, // Only fetch when online
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
+
+  // Use offline admissions when offline or online admissions when online
+  const displayAdmissions = isOnline
+    ? admissions
+    : (offlineAdmissions as any[]);
 
   const {
     data: rooms = [],
@@ -250,8 +310,15 @@ const PetAdmissionPage = () => {
       }
       return await res.json();
     },
+    enabled: isOnline, // Only fetch when online
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
+
+  // Use offline rooms when offline or online rooms when online
+  const displayRooms = isOnline ? rooms : (offlineRooms as any[]);
+  const displayAvailableRooms = isOnline
+    ? rooms.filter((r: any) => r.status === "available")
+    : (offlineRooms.filter((r: any) => r.status === "available") as any[]);
 
   const { data: availableRooms = [], refetch: refetchAvailableRooms } =
     useQuery<AdmissionRoom[]>({
@@ -267,6 +334,7 @@ const PetAdmissionPage = () => {
         }
         return await res.json();
       },
+      enabled: isOnline, // Only fetch when online
       staleTime: 1000 * 60 * 5,
     });
 
@@ -284,8 +352,12 @@ const PetAdmissionPage = () => {
       }
       return await res.json();
     },
+    enabled: isOnline, // Only fetch when online
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
+
+  // Use offline pets when offline
+  const displayPets = isOnline ? pets : (offlinePets as any[]);
 
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
@@ -300,8 +372,17 @@ const PetAdmissionPage = () => {
       }
       return await res.json();
     },
+    enabled: isOnline, // Only fetch when online
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
+
+  // Use offline clients when offline (for pet owner selection)
+  const displayClients = isOnline ? users : (offlineClients as any[]);
+
+  // Use offline practitioners when offline (for veterinarian selection)
+  const displayVeterinarians = isOnline
+    ? users
+    : (offlinePractitioners as any[]);
 
   // Form setup
   const admissionForm = useForm<z.infer<typeof admissionFormSchema>>({
@@ -353,8 +434,29 @@ const PetAdmissionPage = () => {
 
   // Mutations
   const createAdmissionMutation = useMutation({
+    networkMode: "always",
     mutationFn: async (data: z.infer<typeof admissionFormSchema>) => {
-      // Convert string IDs into numbers expected by backend
+      // Check if offline using current network status
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      if (!currentNetworkStatus) {
+        const result = await createOfflineAdmission({
+          petId: Number(data.petId),
+          clientId: Number(data.clientId),
+          attendingVetId: Number(data.attendingVetId),
+          roomId: data.roomId ? Number(data.roomId) : null,
+          practiceId: Number(data.practiceId),
+          reason: data.reason,
+          notes: data.notes || null,
+          status: data.status as any,
+          admissionDate: new Date().toISOString(),
+        });
+        await refreshOfflineAdmissions();
+        await refreshOfflineRooms();
+        return result;
+      }
+
+      // Online - use API
       const payload = {
         ...data,
         petId: Number(data.petId),
@@ -391,7 +493,19 @@ const PetAdmissionPage = () => {
   });
 
   const dischargeAdmissionMutation = useMutation({
+    networkMode: "always",
     mutationFn: async ({ id, notes }: { id: number; notes?: string }) => {
+      // Check if offline using current network status
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      if (!currentNetworkStatus) {
+        const result = await dischargeOfflineAdmission(id, notes);
+        await refreshOfflineAdmissions();
+        await refreshOfflineRooms();
+        return result;
+      }
+
+      // Online - use API
       const res = await apiRequest("POST", `/api/admissions/${id}/discharge`, {
         notes,
       });
@@ -423,6 +537,7 @@ const PetAdmissionPage = () => {
   });
 
   const addNoteMutation = useMutation({
+    networkMode: "always",
     mutationFn: async ({
       admissionId,
       note,
@@ -430,6 +545,26 @@ const PetAdmissionPage = () => {
       admissionId: number;
       note: string;
     }) => {
+      // Check if offline using current network status
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      if (!currentNetworkStatus) {
+        // Store note offline by updating the admission with appended notes
+        const admission = displayAdmissions.find((a) => a.id === admissionId);
+        if (admission) {
+          const timestamp = new Date().toISOString();
+          const noteEntry = `\n[${new Date(
+            timestamp
+          ).toLocaleString()}] ${note}`;
+          const updatedNotes = (admission.notes || "") + noteEntry;
+
+          await updateOfflineAdmission(admissionId, { notes: updatedNotes });
+          await refreshOfflineAdmissions();
+          return { success: true, note: noteEntry };
+        }
+        throw new Error("Admission not found offline");
+      }
+
       const res = await apiRequest(
         "POST",
         `/api/admissions/${admissionId}/notes`,
@@ -465,6 +600,7 @@ const PetAdmissionPage = () => {
   });
 
   const addMedicationMutation = useMutation({
+    networkMode: "always",
     mutationFn: async ({
       admissionId,
       medicationName,
@@ -476,6 +612,28 @@ const PetAdmissionPage = () => {
       dosage: string;
       notes?: string;
     }) => {
+      // Check if offline using current network status
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      if (!currentNetworkStatus) {
+        // Store medication offline by updating the admission with appended medication notes
+        const admission = displayAdmissions.find((a) => a.id === admissionId);
+        if (admission) {
+          const timestamp = new Date().toISOString();
+          const medEntry = `\n[${new Date(
+            timestamp
+          ).toLocaleString()}] MEDICATION: ${medicationName} - ${dosage}${
+            notes ? ` (${notes})` : ""
+          }`;
+          const updatedNotes = (admission.notes || "") + medEntry;
+
+          await updateOfflineAdmission(admissionId, { notes: updatedNotes });
+          await refreshOfflineAdmissions();
+          return { success: true, medication: medEntry };
+        }
+        throw new Error("Admission not found offline");
+      }
+
       const res = await apiRequest(
         "POST",
         `/api/admissions/${admissionId}/medications`,
@@ -510,9 +668,25 @@ const PetAdmissionPage = () => {
     },
   });
 
+  // Create room mutation - online only (rooms are managed online)
   const createRoomMutation = useMutation({
+    networkMode: "always",
     mutationFn: async (data: z.infer<typeof roomFormSchema>) => {
-      const payload = { ...data, practiceId: userPracticeId };
+      // Rooms can only be created online - check current network status
+      const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+
+      if (!currentNetworkStatus) {
+        throw new Error(
+          "Rooms can only be created when online. Please connect to the internet to manage rooms."
+        );
+      }
+
+      const payload = {
+        ...data,
+        practiceId: userPracticeId,
+        status: "available" as const,
+      };
+
       const res = await apiRequest("POST", "/api/admission-rooms", payload);
       if (!res.ok) {
         const error = await res.json();
@@ -599,10 +773,10 @@ const PetAdmissionPage = () => {
   // Filter admissions by status for active tab
   const filteredAdmissions =
     activeTab === "active"
-      ? admissions.filter((a) =>
+      ? displayAdmissions.filter((a) =>
           ["admitted", "hold", "isolation"].includes(a.status)
         )
-      : admissions.filter((a) => a.status === "discharged"); // Ensure 'discharged' is correctly filtered
+      : displayAdmissions.filter((a) => a.status === "discharged"); // Ensure 'discharged' is correctly filtered
 
   // Component
   return (
@@ -637,7 +811,7 @@ const PetAdmissionPage = () => {
                       <Select
                         onValueChange={(value) => {
                           field.onChange(value); // Update the petId field
-                          const selectedPet = pets.find(
+                          const selectedPet = displayPets.find(
                             (pet) => pet.id.toString() === value
                           );
                           if (selectedPet) {
@@ -662,7 +836,7 @@ const PetAdmissionPage = () => {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {pets.map((pet) => (
+                          {displayPets.map((pet) => (
                             <SelectItem key={pet.id} value={pet.id.toString()}>
                               {pet.name} ({pet.species})
                             </SelectItem>
@@ -678,7 +852,7 @@ const PetAdmissionPage = () => {
                   control={admissionForm.control}
                   name="clientId"
                   render={({ field }) => {
-                    const selectedClient = users.find(
+                    const selectedClient = displayClients.find(
                       (user) => user.id.toString() === field.value
                     );
                     return (
@@ -721,19 +895,21 @@ const PetAdmissionPage = () => {
                         <SelectContent>
                           {(() => {
                             // Include both new roles-array based vets and legacy single role field vets
-                            const vets = users.filter((u: any) => {
-                              const legacyRole = (u.role || "")
-                                .toString()
-                                .toLowerCase();
-                              return (
-                                hasRole(u as any, "VETERINARIAN") ||
-                                legacyRole === "veterinarian"
-                              );
-                            });
+                            const vets = displayVeterinarians.filter(
+                              (u: any) => {
+                                const legacyRole = (u.role || "")
+                                  .toString()
+                                  .toLowerCase();
+                                return (
+                                  hasRole(u as any, "VETERINARIAN") ||
+                                  legacyRole === "veterinarian"
+                                );
+                              }
+                            );
                             if (vets.length === 0) {
                               console.debug(
                                 "[Admissions] No veterinarians found in users list. First 3 users sample:",
-                                users.slice(0, 3)
+                                displayVeterinarians.slice(0, 3)
                               );
                             }
                             if (vets.length === 0) {
@@ -815,7 +991,7 @@ const PetAdmissionPage = () => {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {availableRooms.map((room) => (
+                            {displayAvailableRooms.map((room) => (
                               <SelectItem
                                 key={room.id}
                                 value={room.id.toString()}
@@ -829,6 +1005,12 @@ const PetAdmissionPage = () => {
                           type="button"
                           variant="outline"
                           onClick={() => setAddRoomDialogOpen(true)}
+                          disabled={!isOnline}
+                          title={
+                            !isOnline
+                              ? "Rooms can only be managed when online"
+                              : "Add new room"
+                          }
                         >
                           <Plus className="h-4 w-4" />
                         </Button>
@@ -1009,7 +1191,6 @@ const PetAdmissionPage = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
                   <TableHead>Pet</TableHead>
                   <TableHead>Reason</TableHead>
                   <TableHead>Status</TableHead>
@@ -1020,12 +1201,13 @@ const PetAdmissionPage = () => {
               </TableHeader>
               <TableBody>
                 {filteredAdmissions.map((admission) => {
-                  const pet = pets.find((p) => p.id === admission.petId);
-                  const room = rooms.find((r) => r.id === admission.roomId);
+                  const pet = displayPets.find((p) => p.id === admission.petId);
+                  const room = displayRooms.find(
+                    (r) => r.id === admission.roomId
+                  );
 
                   return (
                     <TableRow key={admission.id}>
-                      <TableCell>{admission.id}</TableCell>
                       <TableCell>{pet?.name || "Unknown"}</TableCell>
                       <TableCell className="max-w-xs truncate">
                         {admission.reason}
@@ -1083,9 +1265,17 @@ const PetAdmissionPage = () => {
       <div className="w-full gap-6 mt-6">
         <Card>
           <CardHeader>
-            <CardTitle>Admission Rooms</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>Admission Rooms</span>
+              {!isOnline && (
+                <span className="text-xs font-normal text-muted-foreground bg-yellow-100 dark:bg-yellow-900 px-2 py-1 rounded">
+                  Read-only (Offline)
+                </span>
+              )}
+            </CardTitle>
             <CardDescription>
               Available and occupied rooms for inpatient care
+              {!isOnline && " • Rooms can only be managed when online"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1108,7 +1298,7 @@ const PetAdmissionPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rooms.map((room) => (
+                  {displayRooms.map((room) => (
                     <TableRow key={room.id}>
                       <TableCell>{room.roomNumber}</TableCell>
                       <TableCell>{room.type}</TableCell>
@@ -1136,6 +1326,12 @@ const PetAdmissionPage = () => {
             <Button
               variant="outline"
               onClick={() => setAddRoomDialogOpen(true)}
+              disabled={!isOnline}
+              title={
+                !isOnline
+                  ? "Rooms can only be managed when online"
+                  : "Add new room"
+              }
             >
               <Plus className="mr-2 h-4 w-4" />
               Add Room

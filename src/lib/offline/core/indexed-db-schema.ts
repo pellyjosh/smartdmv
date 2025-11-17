@@ -37,13 +37,14 @@ export const STORES = {
   APPOINTMENTS: 'appointments',
   CLIENTS: 'clients',
   SOAP_NOTES: 'soapNotes',
-  INVOICES: 'invoices',
-  INVENTORY: 'inventory',
   PRESCRIPTIONS: 'prescriptions',
   LAB_RESULTS: 'labResults',
   MEDICAL_RECORDS: 'medicalRecords',
   VACCINATIONS: 'vaccinations',
+  VACCINE_TYPES: 'vaccine_types',
   PRACTITIONERS: 'practitioners',
+  ROOMS: 'rooms',
+  ADMISSIONS: 'admissions',
   
   // System stores (global, not tenant-prefixed)
   AUTH_TOKENS: 'authTokens',
@@ -69,13 +70,14 @@ export const TENANT_ISOLATED_STORES = [
   STORES.APPOINTMENTS,
   STORES.CLIENTS,
   STORES.SOAP_NOTES,
-  STORES.INVOICES,
-  STORES.INVENTORY,
   STORES.PRESCRIPTIONS,
   STORES.LAB_RESULTS,
   STORES.MEDICAL_RECORDS,
   STORES.VACCINATIONS,
+  STORES.VACCINE_TYPES,
   STORES.PRACTITIONERS,
+  STORES.ROOMS,
+  STORES.ADMISSIONS,
 ] as const;
 
 /**

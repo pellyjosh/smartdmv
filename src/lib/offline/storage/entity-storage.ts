@@ -33,7 +33,6 @@ function normalizeEntityType(entityType: string): string {
     'appointment': 'appointments',
     'client': 'clients',
     'soapNote': 'soapNotes',
-    'invoice': 'invoices',
     'practitioner': 'practitioners',
     'prescription': 'prescriptions',
     'labResult': 'labResults',

@@ -11,7 +11,9 @@ import {
   ClipboardCheck,
   SquarePen,
   Layers,
+  WifiOff,
 } from "lucide-react";
+import { useNetworkStatus } from "@/hooks/use-network-status";
 import {
   Card,
   CardContent,
@@ -90,6 +92,7 @@ export default function BoardingPage() {
   const queryClient = useQueryClient();
   const { user } = useUser();
   const { toast } = useToast();
+  const { isOnline } = useNetworkStatus();
   const [checkInLoadingId, setCheckInLoadingId] = useState<number | null>(null);
 
   // Filter function for search
@@ -194,8 +197,14 @@ export default function BoardingPage() {
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             Boarding Management
+            {!isOnline && (
+              <Badge variant="secondary" className="gap-1.5">
+                <WifiOff className="h-3 w-3" />
+                Offline Mode
+              </Badge>
+            )}
           </h1>
           <p className="text-muted-foreground">
             Manage pet boarding stays and kennels

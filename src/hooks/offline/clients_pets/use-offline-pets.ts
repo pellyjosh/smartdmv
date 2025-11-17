@@ -188,6 +188,8 @@ export function useOfflinePets(): UseOfflinePetsReturn {
   // Update pet
   const updatePet = useCallback(async (id: string | number, updates: Partial<Pet>, photo?: File | null): Promise<Pet> => {
     try {
+      console.log('[useOfflinePets] Update pet:', { id, updates, hasPhoto: !!photo });
+      
       const existing = await getById(id);
       if (!existing) {
         throw new Error('Pet not found');
@@ -236,8 +238,12 @@ export function useOfflinePets(): UseOfflinePetsReturn {
         }
       };
 
+      console.log('[useOfflinePets] Updating IndexedDB with:', updatedData);
+
       // Update in IndexedDB (will throw on error)
       const result = await update(id, updatedData);
+
+      console.log('[useOfflinePets] IndexedDB update result:', result);
 
       // Add to sync queue
       const syncData = { ...updateData };
@@ -248,6 +254,8 @@ export function useOfflinePets(): UseOfflinePetsReturn {
       }
       
       await addOperation(ENTITY_TYPE, id, 'update', syncData);
+
+      console.log('[useOfflinePets] Added to sync queue:', { id, syncData });
 
       toast({
         title: isOnline ? 'Pet updated' : 'Changes saved offline',

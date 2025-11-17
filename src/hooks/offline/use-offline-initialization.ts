@@ -113,8 +113,9 @@ async function cacheAdditionalOfflineData(tenantId: string, practiceIdNum: numbe
 function getSyntheticPermissionsForRole(role: string): any[] {
   const allPermissions = ['create', 'read', 'update', 'delete', 'manage'];
   const entities = [
-    'pets', 'appointments', 'clients', 'invoices', 'inventory',
+    'pets', 'appointments', 'clients',
     'prescriptions', 'medicalRecords', 'vaccinations', 'practitioners',
+    'rooms', 'admissions', 'vaccine_types',
     'users', 'roles', 'practices', 'settings'
   ];
   
@@ -370,7 +371,8 @@ export function useOfflineInitialization() {
               slug: tenant.slug,
               name: tenant.name,
               domain: tenant.domain || null,
-              subdomain: tenant.subdomain ,
+              subdomain: tenant.subdomain || '', // Provide empty string as fallback
+              status: tenant.status || 'active', // Default to active if not provided
               databaseName: tenant.databaseName,
               storagePath: tenant.storagePath,
               settings: {

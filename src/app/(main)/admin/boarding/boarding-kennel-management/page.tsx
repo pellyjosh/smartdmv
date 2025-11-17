@@ -1,24 +1,47 @@
-'use client';
+"use client";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { 
-  Plus, 
-  Search, 
+import {
+  Plus,
+  Search,
   Edit,
   Trash,
   ArrowLeft,
   Tag,
   Home,
-  Ruler
+  Ruler,
 } from "lucide-react";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { WifiOff } from "lucide-react";
+import { useNetworkStatus } from "@/hooks/use-network-status";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePracticeId } from "@/hooks/use-practice-id";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -28,7 +51,14 @@ interface Kennel {
   id: number;
   name: string;
   practiceId: number;
-  type: "standard" | "deluxe" | "premium" | "isolation" | "outdoor" | "cats_only" | "special_needs";
+  type:
+    | "standard"
+    | "deluxe"
+    | "premium"
+    | "isolation"
+    | "outdoor"
+    | "cats_only"
+    | "special_needs";
   size: "small" | "medium" | "large" | "extra_large";
   location: string | null;
   description: string | null;
@@ -44,6 +74,7 @@ export default function BoardingKennelManagementPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingKennel, setEditingKennel] = useState<Kennel | null>(null);
   const { toast } = useToast();
+  const { isOnline } = useNetworkStatus();
 
   // Create form state
   const [formData, setFormData] = useState({
@@ -52,14 +83,21 @@ export default function BoardingKennelManagementPage() {
     size: "medium",
     location: "",
     description: "",
-    isActive: true
+    isActive: true,
   });
 
   // Fetch kennels
-  const { data: kennels, isLoading: kennelsLoading, refetch } = useQuery({
+  const {
+    data: kennels,
+    isLoading: kennelsLoading,
+    refetch,
+  } = useQuery({
     queryKey: ["/api/boarding/kennels", practiceId],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/boarding/kennels?practiceId=${practiceId}`);
+      const res = await apiRequest(
+        "GET",
+        `/api/boarding/kennels?practiceId=${practiceId}`
+      );
       return await res.json();
     },
     enabled: !!practiceId,
@@ -69,49 +107,62 @@ export default function BoardingKennelManagementPage() {
   const displayKennels = kennels || [];
 
   // Filter function for search and filters
-  const filterKennels = (kennels: Kennel[], query: string, type: string, size: string, showInactive: boolean) => {
-    return kennels.filter(kennel => {
-      const matchesSearch = !query || 
+  const filterKennels = (
+    kennels: Kennel[],
+    query: string,
+    type: string,
+    size: string,
+    showInactive: boolean
+  ) => {
+    return kennels.filter((kennel) => {
+      const matchesSearch =
+        !query ||
         kennel.name.toLowerCase().includes(query.toLowerCase()) ||
-        (kennel.location && kennel.location.toLowerCase().includes(query.toLowerCase())) ||
-        (kennel.description && kennel.description.toLowerCase().includes(query.toLowerCase()));
-      
+        (kennel.location &&
+          kennel.location.toLowerCase().includes(query.toLowerCase())) ||
+        (kennel.description &&
+          kennel.description.toLowerCase().includes(query.toLowerCase()));
+
       const matchesType = type === "all" || kennel.type === type;
       const matchesSize = size === "all" || kennel.size === size;
       const matchesActive = showInactive || kennel.isActive;
-      
+
       return matchesSearch && matchesType && matchesSize && matchesActive;
     });
   };
 
   // Handle form input changes
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
   // Handle checkbox changes
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: checked
+      [name]: checked,
     }));
   };
 
   // Handle form submission for new kennel
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       // If editing, update the kennel
       if (editingKennel) {
         await apiRequest("PATCH", `/api/boarding/kennels/${editingKennel.id}`, {
           ...formData,
-          practiceId
+          practiceId,
         });
         toast({
           title: "Kennel updated",
@@ -121,14 +172,14 @@ export default function BoardingKennelManagementPage() {
         // Otherwise create a new kennel
         await apiRequest("POST", "/api/boarding/kennels", {
           ...formData,
-          practiceId
+          practiceId,
         });
         toast({
           title: "Kennel created",
           description: `${formData.name} has been added to your kennel inventory.`,
         });
       }
-      
+
       // Reset form and close dialog
       setFormData({
         name: "",
@@ -136,11 +187,11 @@ export default function BoardingKennelManagementPage() {
         size: "medium",
         location: "",
         description: "",
-        isActive: true
+        isActive: true,
       });
       setEditingKennel(null);
       setIsAddDialogOpen(false);
-      
+
       // Refresh the kennel list
       refetch();
     } catch (error) {
@@ -159,12 +210,14 @@ export default function BoardingKennelManagementPage() {
       await apiRequest("PATCH", `/api/boarding/kennels/${kennel.id}`, {
         isActive: !kennel.isActive,
       });
-      
+
       toast({
         title: kennel.isActive ? "Kennel deactivated" : "Kennel activated",
-        description: `${kennel.name} has been ${kennel.isActive ? "deactivated" : "activated"} successfully.`,
+        description: `${kennel.name} has been ${
+          kennel.isActive ? "deactivated" : "activated"
+        } successfully.`,
       });
-      
+
       // Refresh the kennel list
       refetch();
     } catch (error) {
@@ -186,7 +239,7 @@ export default function BoardingKennelManagementPage() {
       size: kennel.size,
       location: kennel.location || "",
       description: kennel.description || "",
-      isActive: kennel.isActive
+      isActive: kennel.isActive,
     });
     setIsAddDialogOpen(true);
   };
@@ -217,7 +270,7 @@ export default function BoardingKennelManagementPage() {
         variant = "yellow";
         break;
     }
-    
+
     return (
       <Badge variant={variant as any} className="capitalize">
         {type.replace("_", " ")}
@@ -244,54 +297,76 @@ export default function BoardingKennelManagementPage() {
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <h1 className="text-3xl font-bold tracking-tight">Kennel Management</h1>
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+              Kennel Management
+              {!isOnline && (
+                <Badge variant="secondary" className="gap-1.5">
+                  <WifiOff className="h-3 w-3" />
+                  Offline Mode
+                </Badge>
+              )}
+            </h1>
           </div>
-          <p className="text-muted-foreground">Manage boarding kennels and cages</p>
+          <p className="text-muted-foreground">
+            Manage boarding kennels and cages
+          </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={() => {
-              setEditingKennel(null);
-              setFormData({
-                name: "",
-                type: "standard",
-                size: "medium",
-                location: "",
-                description: "",
-                isActive: true
-              });
-            }}>
+            <Button
+              onClick={() => {
+                setEditingKennel(null);
+                setFormData({
+                  name: "",
+                  type: "standard",
+                  size: "medium",
+                  location: "",
+                  description: "",
+                  isActive: true,
+                });
+              }}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Add Kennel
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editingKennel ? "Edit Kennel" : "Add New Kennel"}</DialogTitle>
+              <DialogTitle>
+                {editingKennel ? "Edit Kennel" : "Add New Kennel"}
+              </DialogTitle>
               <DialogDescription>
-                {editingKennel ? "Update the kennel details below." : "Enter the details for the new kennel."}
+                {editingKennel
+                  ? "Update the kennel details below."
+                  : "Enter the details for the new kennel."}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit}>
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="name" className="text-right">Name</Label>
-                  <Input 
-                    id="name" 
-                    name="name" 
-                    value={formData.name} 
-                    onChange={handleInputChange} 
-                    className="col-span-3" 
-                    placeholder="A1" 
-                    required 
+                  <Label htmlFor="name" className="text-right">
+                    Name
+                  </Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    className="col-span-3"
+                    placeholder="A1"
+                    required
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="type" className="text-right">Type</Label>
-                  <Select 
-                    name="type" 
-                    value={formData.type} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, type: value as any }))}
+                  <Label htmlFor="type" className="text-right">
+                    Type
+                  </Label>
+                  <Select
+                    name="type"
+                    value={formData.type}
+                    onValueChange={(value) =>
+                      setFormData((prev) => ({ ...prev, type: value as any }))
+                    }
                   >
                     <SelectTrigger className="col-span-3">
                       <SelectValue placeholder="Select type" />
@@ -303,16 +378,22 @@ export default function BoardingKennelManagementPage() {
                       <SelectItem value="isolation">Isolation</SelectItem>
                       <SelectItem value="outdoor">Outdoor</SelectItem>
                       <SelectItem value="cats_only">Cats Only</SelectItem>
-                      <SelectItem value="special_needs">Special Needs</SelectItem>
+                      <SelectItem value="special_needs">
+                        Special Needs
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="size" className="text-right">Size</Label>
-                  <Select 
-                    name="size" 
-                    value={formData.size} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, size: value as any }))}
+                  <Label htmlFor="size" className="text-right">
+                    Size
+                  </Label>
+                  <Select
+                    name="size"
+                    value={formData.size}
+                    onValueChange={(value) =>
+                      setFormData((prev) => ({ ...prev, size: value as any }))
+                    }
                   >
                     <SelectTrigger className="col-span-3">
                       <SelectValue placeholder="Select size" />
@@ -326,44 +407,54 @@ export default function BoardingKennelManagementPage() {
                   </Select>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="location" className="text-right">Location</Label>
-                  <Input 
-                    id="location" 
-                    name="location" 
-                    value={formData.location} 
-                    onChange={handleInputChange} 
-                    className="col-span-3" 
-                    placeholder="Main Building - Room 1" 
+                  <Label htmlFor="location" className="text-right">
+                    Location
+                  </Label>
+                  <Input
+                    id="location"
+                    name="location"
+                    value={formData.location}
+                    onChange={handleInputChange}
+                    className="col-span-3"
+                    placeholder="Main Building - Room 1"
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="description" className="text-right">Description</Label>
-                  <Textarea 
-                    id="description" 
-                    name="description" 
-                    value={formData.description} 
-                    onChange={handleInputChange} 
-                    className="col-span-3" 
-                    placeholder="Standard kennel with outdoor access" 
+                  <Label htmlFor="description" className="text-right">
+                    Description
+                  </Label>
+                  <Textarea
+                    id="description"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    className="col-span-3"
+                    placeholder="Standard kennel with outdoor access"
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="isActive" className="text-right">Active</Label>
+                  <Label htmlFor="isActive" className="text-right">
+                    Active
+                  </Label>
                   <div className="col-span-3 flex items-center gap-2">
-                    <input 
-                      id="isActive" 
-                      name="isActive" 
-                      type="checkbox" 
-                      checked={formData.isActive} 
-                      onChange={handleCheckboxChange} 
-                      className="h-4 w-4" 
+                    <input
+                      id="isActive"
+                      name="isActive"
+                      type="checkbox"
+                      checked={formData.isActive}
+                      onChange={handleCheckboxChange}
+                      className="h-4 w-4"
                     />
-                    <Label htmlFor="isActive" className="font-normal">Kennel is available for booking</Label>
+                    <Label htmlFor="isActive" className="font-normal">
+                      Kennel is available for booking
+                    </Label>
                   </div>
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit">{editingKennel ? "Update Kennel" : "Add Kennel"}</Button>
+                <Button type="submit">
+                  {editingKennel ? "Update Kennel" : "Add Kennel"}
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -413,14 +504,16 @@ export default function BoardingKennelManagementPage() {
               </SelectContent>
             </Select>
             <div className="flex items-center gap-2">
-              <input 
-                id="showInactive" 
-                type="checkbox" 
-                checked={showInactiveKennels} 
-                onChange={(e) => setShowInactiveKennels(e.target.checked)} 
-                className="h-4 w-4" 
+              <input
+                id="showInactive"
+                type="checkbox"
+                checked={showInactiveKennels}
+                onChange={(e) => setShowInactiveKennels(e.target.checked)}
+                className="h-4 w-4"
               />
-              <Label htmlFor="showInactive" className="font-normal text-sm">Show inactive kennels</Label>
+              <Label htmlFor="showInactive" className="font-normal text-sm">
+                Show inactive kennels
+              </Label>
             </div>
           </div>
         </CardHeader>
@@ -429,7 +522,13 @@ export default function BoardingKennelManagementPage() {
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : filterKennels(displayKennels, searchQuery, typeFilter, sizeFilter, showInactiveKennels).length === 0 ? (
+          ) : filterKennels(
+              displayKennels,
+              searchQuery,
+              typeFilter,
+              sizeFilter,
+              showInactiveKennels
+            ).length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No kennels found matching the current filters
             </div>
@@ -441,14 +540,26 @@ export default function BoardingKennelManagementPage() {
                     <th className="py-3 px-4 text-left font-medium">Name</th>
                     <th className="py-3 px-4 text-left font-medium">Type</th>
                     <th className="py-3 px-4 text-left font-medium">Size</th>
-                    <th className="py-3 px-4 text-left font-medium">Location</th>
-                    <th className="py-3 px-4 text-left font-medium">Description</th>
+                    <th className="py-3 px-4 text-left font-medium">
+                      Location
+                    </th>
+                    <th className="py-3 px-4 text-left font-medium">
+                      Description
+                    </th>
                     <th className="py-3 px-4 text-left font-medium">Status</th>
-                    <th className="py-3 px-4 text-right font-medium">Actions</th>
+                    <th className="py-3 px-4 text-right font-medium">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filterKennels(displayKennels, searchQuery, typeFilter, sizeFilter, showInactiveKennels).map((kennel) => (
+                  {filterKennels(
+                    displayKennels,
+                    searchQuery,
+                    typeFilter,
+                    sizeFilter,
+                    showInactiveKennels
+                  ).map((kennel) => (
                     <tr key={kennel.id} className="border-b hover:bg-muted/50">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
@@ -471,18 +582,27 @@ export default function BoardingKennelManagementPage() {
                       <td className="py-3 px-4">{kennel.location}</td>
                       <td className="py-3 px-4">{kennel.description}</td>
                       <td className="py-3 px-4">
-                        <Badge variant={kennel.isActive ? "default" : "secondary"}>
+                        <Badge
+                          variant={kennel.isActive ? "default" : "secondary"}
+                        >
                           {kennel.isActive ? "Active" : "Inactive"}
                         </Badge>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex justify-end gap-1">
-                          <Button variant="outline" size="icon" title="Edit" onClick={() => handleEdit(kennel)}>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            title="Edit"
+                            onClick={() => handleEdit(kennel)}
+                          >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant={kennel.isActive ? "destructive" : "default"} 
-                            size="icon" 
+                          <Button
+                            variant={
+                              kennel.isActive ? "destructive" : "default"
+                            }
+                            size="icon"
                             title={kennel.isActive ? "Deactivate" : "Activate"}
                             onClick={() => handleToggleActive(kennel)}
                           >

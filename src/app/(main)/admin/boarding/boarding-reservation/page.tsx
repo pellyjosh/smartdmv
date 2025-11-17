@@ -6,19 +6,46 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronLeft, Calendar, PawPrint, Trash } from "lucide-react";
+import { ChevronLeft, Calendar, PawPrint, Trash, WifiOff } from "lucide-react";
+import { useNetworkStatus } from "@/hooks/use-network-status";
+import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { usePracticeId } from "@/hooks/use-practice-id";
 import { useUser } from "@/context/UserContext";
@@ -34,21 +61,31 @@ const baseFormSchema = z.object({
   specialInstructions: z.string().optional(),
   emergencyContactName: z.string().min(1, "Emergency contact name is required"),
   emergencyContactPhone: z.string().min(10, "Valid phone number is required"),
-  dailyRate: z.string().min(1, "Daily rate is required").regex(/^\d+(\.\d{1,2})?$/, "Invalid price format"),
+  dailyRate: z
+    .string()
+    .min(1, "Daily rate is required")
+    .regex(/^\d+(\.\d{1,2})?$/, "Invalid price format"),
   hasMedications: z.boolean().default(false),
   hasFeedingInstructions: z.boolean().default(false),
   hasSpecialRequirements: z.boolean().default(false),
-  notes: z.string().optional()
+  notes: z.string().optional(),
 });
 
 type FormSchemaType = z.infer<typeof baseFormSchema>;
 
-const formSchema = baseFormSchema.refine((data: FormSchemaType) => {
-  return (data.startDate instanceof Date && data.endDate instanceof Date) && data.startDate < data.endDate;
-}, {
-  message: "End date must be after start date",
-  path: ["endDate"]
-});
+const formSchema = baseFormSchema.refine(
+  (data: FormSchemaType) => {
+    return (
+      data.startDate instanceof Date &&
+      data.endDate instanceof Date &&
+      data.startDate < data.endDate
+    );
+  },
+  {
+    message: "End date must be after start date",
+    path: ["endDate"],
+  }
+);
 
 interface Pet {
   id: number;
@@ -79,12 +116,13 @@ export default function BoardingReservationPage() {
   const practiceId = usePracticeId();
   const { user } = useUser();
   const { toast } = useToast();
+  const { isOnline } = useNetworkStatus();
   const queryClient = useQueryClient();
   const [isEditMode, setIsEditMode] = useState(false);
-  
+
   // Check if editing an existing reservation (from URL params)
-  const reservationId = searchParams.get('id');
-  
+  const reservationId = searchParams.get("id");
+
   // Initialize form
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -97,17 +135,17 @@ export default function BoardingReservationPage() {
       hasFeedingInstructions: false,
       hasSpecialRequirements: false,
       notes: "",
-      dailyRate: "45.00"
-    }
+      dailyRate: "45.00",
+    },
   });
 
   // Update form practice ID when available
   useEffect(() => {
     if (practiceId) {
-      form.setValue('practiceId', practiceId);
+      form.setValue("practiceId", practiceId);
     }
   }, [practiceId, form]);
-  
+
   // Check if editing an existing reservation
   useEffect(() => {
     if (reservationId) {
@@ -122,29 +160,35 @@ export default function BoardingReservationPage() {
       const res = await apiRequest("GET", `/api/pets?practiceId=${practiceId}`);
       return await res.json();
     },
-    enabled: !!practiceId
+    enabled: !!practiceId,
   });
 
   // Fetch available kennels
   const { data: kennels, isLoading: kennelsLoading } = useQuery({
     queryKey: ["/api/boarding/kennels", practiceId],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/boarding/kennels?practiceId=${practiceId}&available=true`);
+      const res = await apiRequest(
+        "GET",
+        `/api/boarding/kennels?practiceId=${practiceId}&available=true`
+      );
       return await res.json();
     },
-    enabled: !!practiceId
+    enabled: !!practiceId,
   });
-  
+
   // Fetch specific boarding stay if in edit mode
   const { data: boardingStay, isLoading: boardingStayLoading } = useQuery({
     queryKey: ["/api/boarding/stays", reservationId],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/boarding/stays/${reservationId}`);
+      const res = await apiRequest(
+        "GET",
+        `/api/boarding/stays/${reservationId}`
+      );
       return await res.json();
     },
-    enabled: isEditMode && !!reservationId
+    enabled: isEditMode && !!reservationId,
   });
-  
+
   // Update form with existing data when editing
   useEffect(() => {
     if (isEditMode && boardingStay) {
@@ -161,7 +205,7 @@ export default function BoardingReservationPage() {
         hasMedications: boardingStay.hasMedications || false,
         hasFeedingInstructions: boardingStay.hasFeedingInstructions || false,
         hasSpecialRequirements: boardingStay.hasSpecialRequirements || false,
-        notes: boardingStay.notes || ""
+        notes: boardingStay.notes || "",
       });
     }
   }, [isEditMode, boardingStay, form]);
@@ -177,49 +221,53 @@ export default function BoardingReservationPage() {
         startDate: data.startDate.toISOString(),
         endDate: data.endDate.toISOString(),
         status: "scheduled",
-        createdById: user?.id
+        createdById: user?.id,
       };
-      
-      console.log('Creating boarding stay with payload:', payload);
-      
+
+      console.log("Creating boarding stay with payload:", payload);
+
       const res = await apiRequest("POST", "/api/boarding/stays", payload);
       return await res.json();
     },
     onSuccess: (data) => {
-      console.log('Boarding stay created successfully:', data);
+      console.log("Boarding stay created successfully:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/boarding/stays"] });
       toast({
         title: "Success",
-        description: "Boarding reservation created successfully"
+        description: "Boarding reservation created successfully",
       });
       router.push(`/admin/boarding/boarding-stay/${data.id}`);
     },
     onError: (error: Error) => {
-      console.error('Error creating boarding stay:', error);
+      console.error("Error creating boarding stay:", error);
       toast({
         title: "Error",
         description: `Failed to create boarding reservation: ${error.message}`,
-        variant: "destructive"
+        variant: "destructive",
       });
-    }
+    },
   });
-  
+
   // Update boarding stay mutation
   const updateMutation = useMutation({
     mutationFn: async (data: z.infer<typeof formSchema>) => {
       // Server expects PUT for updating a boarding stay
-      const res = await apiRequest("PUT", `/api/boarding/stays/${reservationId}`, {
-        ...data,
-        petId: data.petId,
-        kennelId: data.kennelId
-      });
+      const res = await apiRequest(
+        "PUT",
+        `/api/boarding/stays/${reservationId}`,
+        {
+          ...data,
+          petId: data.petId,
+          kennelId: data.kennelId,
+        }
+      );
       return await res.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/boarding/stays"] });
       toast({
         title: "Success",
-        description: "Boarding reservation updated successfully"
+        description: "Boarding reservation updated successfully",
       });
       router.push(`/admin/boarding/boarding-stay/${data.id}`);
     },
@@ -227,22 +275,25 @@ export default function BoardingReservationPage() {
       toast({
         title: "Error",
         description: `Failed to update boarding reservation: ${error.message}`,
-        variant: "destructive"
+        variant: "destructive",
       });
-    }
+    },
   });
-  
+
   // Delete boarding stay mutation
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("DELETE", `/api/boarding/stays/${reservationId}`);
+      const res = await apiRequest(
+        "DELETE",
+        `/api/boarding/stays/${reservationId}`
+      );
       return res.ok;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/boarding/stays"] });
       toast({
         title: "Success",
-        description: "Boarding reservation deleted successfully"
+        description: "Boarding reservation deleted successfully",
       });
       router.push("/admin/boarding");
     },
@@ -250,27 +301,27 @@ export default function BoardingReservationPage() {
       toast({
         title: "Error",
         description: `Failed to delete boarding reservation: ${error.message}`,
-        variant: "destructive"
+        variant: "destructive",
       });
-    }
+    },
   });
 
   // Use API data directly - no mock data needed
   const displayPets = pets || [];
   const displayKennels = kennels || [];
-  
+
   // Submit form handler
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
-    console.log('Form submitted with data:', data);
-    console.log('Form validation errors:', form.formState.errors);
-    console.log('Is form valid:', form.formState.isValid);
-    console.log('User ID for createdById:', user?.id);
-    
+    console.log("Form submitted with data:", data);
+    console.log("Form validation errors:", form.formState.errors);
+    console.log("Is form valid:", form.formState.isValid);
+    console.log("User ID for createdById:", user?.id);
+
     if (!user?.id) {
       toast({
         title: "Error",
         description: "User not authenticated. Please log in again.",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -281,32 +332,42 @@ export default function BoardingReservationPage() {
       toast({
         title: "Validation Error",
         description: "Please fix the errors below before submitting.",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
-    
+
     if (isEditMode) {
       updateMutation.mutate(data);
     } else {
       createMutation.mutate(data);
     }
   };
-  
+
   // Delete confirmation handler
   const handleDelete = () => {
     if (confirm("Are you sure you want to delete this boarding reservation?")) {
       deleteMutation.mutate();
     }
   };
-  
+
   // Loading state
-  const isLoading = petsLoading || kennelsLoading || (isEditMode && boardingStayLoading);
-  const isMutating = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
-  
+  const isLoading =
+    petsLoading || kennelsLoading || (isEditMode && boardingStayLoading);
+  const isMutating =
+    createMutation.isPending ||
+    updateMutation.isPending ||
+    deleteMutation.isPending;
+
   // Check if form can be submitted (all required data is available)
-  const canSubmit = !isLoading && !isMutating && practiceId && user?.id && displayPets.length > 0 && displayKennels.length > 0;
-  
+  const canSubmit =
+    !isLoading &&
+    !isMutating &&
+    practiceId &&
+    user?.id &&
+    displayPets.length > 0 &&
+    displayKennels.length > 0;
+
   if (isLoading) {
     return (
       <div className="container mx-auto py-6 flex justify-center items-center h-64">
@@ -316,14 +377,14 @@ export default function BoardingReservationPage() {
   }
 
   // Debug information
-  console.log('Form submission readiness check:', {
+  console.log("Form submission readiness check:", {
     isLoading,
     isMutating,
     practiceId,
     userId: user?.id,
     petsCount: displayPets.length,
     kennelsCount: displayKennels.length,
-    canSubmit
+    canSubmit,
   });
 
   return (
@@ -336,15 +397,25 @@ export default function BoardingReservationPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            {isEditMode ? "Edit Boarding Reservation" : "New Boarding Reservation"}
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            {isEditMode
+              ? "Edit Boarding Reservation"
+              : "New Boarding Reservation"}
+            {!isOnline && (
+              <Badge variant="secondary" className="gap-1.5">
+                <WifiOff className="h-3 w-3" />
+                Offline Mode
+              </Badge>
+            )}
           </h1>
           <p className="text-muted-foreground">
-            {isEditMode ? "Update the details of an existing reservation" : "Book a new boarding stay for a pet"}
+            {isEditMode
+              ? "Update the details of an existing reservation"
+              : "Book a new boarding stay for a pet"}
           </p>
         </div>
       </div>
-      
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <Card>
@@ -353,7 +424,9 @@ export default function BoardingReservationPage() {
                 <PawPrint className="h-5 w-5 inline-block mr-2" />
                 Pet & Stay Information
               </CardTitle>
-              <CardDescription>Basic information about the pet and their stay</CardDescription>
+              <CardDescription>
+                Basic information about the pet and their stay
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -363,13 +436,19 @@ export default function BoardingReservationPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Pet</FormLabel>
-                      <Select 
-                        value={field.value} 
+                      <Select
+                        value={field.value}
                         onValueChange={field.onChange}
                         disabled={isMutating}
                       >
                         <FormControl>
-                          <SelectTrigger className={form.formState.errors.petId ? "border-red-500" : ""}>
+                          <SelectTrigger
+                            className={
+                              form.formState.errors.petId
+                                ? "border-red-500"
+                                : ""
+                            }
+                          >
                             <SelectValue placeholder="Select a pet" />
                           </SelectTrigger>
                         </FormControl>
@@ -385,7 +464,9 @@ export default function BoardingReservationPage() {
                           ) : (
                             displayPets.map((pet: Pet) => (
                               <SelectItem key={pet.id} value={String(pet.id)}>
-                                {pet.name} ({pet.ownerName || pet.owner?.name}) - {pet.species}{pet.breed ? `, ${pet.breed}` : ''}
+                                {pet.name} ({pet.ownerName || pet.owner?.name})
+                                - {pet.species}
+                                {pet.breed ? `, ${pet.breed}` : ""}
                               </SelectItem>
                             ))
                           )}
@@ -398,20 +479,26 @@ export default function BoardingReservationPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="kennelId"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Kennel</FormLabel>
-                      <Select 
-                        value={field.value} 
+                      <Select
+                        value={field.value}
                         onValueChange={field.onChange}
                         disabled={isMutating}
                       >
                         <FormControl>
-                          <SelectTrigger className={form.formState.errors.kennelId ? "border-red-500" : ""}>
+                          <SelectTrigger
+                            className={
+                              form.formState.errors.kennelId
+                                ? "border-red-500"
+                                : ""
+                            }
+                          >
                             <SelectValue placeholder="Select a kennel" />
                           </SelectTrigger>
                         </FormControl>
@@ -426,7 +513,10 @@ export default function BoardingReservationPage() {
                             </SelectItem>
                           ) : (
                             displayKennels.map((kennel: Kennel) => (
-                              <SelectItem key={kennel.id} value={String(kennel.id)}>
+                              <SelectItem
+                                key={kennel.id}
+                                value={String(kennel.id)}
+                              >
                                 {kennel.name} - {kennel.type} ({kennel.size})
                               </SelectItem>
                             ))
@@ -441,7 +531,7 @@ export default function BoardingReservationPage() {
                   )}
                 />
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -454,11 +544,19 @@ export default function BoardingReservationPage() {
                           <FormControl>
                             <Button
                               variant="outline"
-                              className={`${!field.value ? "text-muted-foreground" : ""} ${form.formState.errors.startDate ? "border-red-500" : ""}`}
+                              className={`${
+                                !field.value ? "text-muted-foreground" : ""
+                              } ${
+                                form.formState.errors.startDate
+                                  ? "border-red-500"
+                                  : ""
+                              }`}
                               disabled={isMutating}
                             >
                               <Calendar className="mr-2 h-4 w-4" />
-                              {field.value ? format(field.value, "PP") : "Select date"}
+                              {field.value
+                                ? format(field.value, "PP")
+                                : "Select date"}
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
@@ -481,7 +579,7 @@ export default function BoardingReservationPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="endDate"
@@ -493,11 +591,19 @@ export default function BoardingReservationPage() {
                           <FormControl>
                             <Button
                               variant="outline"
-                              className={`${!field.value ? "text-muted-foreground" : ""} ${form.formState.errors.endDate ? "border-red-500" : ""}`}
+                              className={`${
+                                !field.value ? "text-muted-foreground" : ""
+                              } ${
+                                form.formState.errors.endDate
+                                  ? "border-red-500"
+                                  : ""
+                              }`}
                               disabled={isMutating}
                             >
                               <Calendar className="mr-2 h-4 w-4" />
-                              {field.value ? format(field.value, "PP") : "Select date"}
+                              {field.value
+                                ? format(field.value, "PP")
+                                : "Select date"}
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
@@ -521,7 +627,7 @@ export default function BoardingReservationPage() {
                   )}
                 />
               </div>
-              
+
               <div className="grid grid-cols-1 gap-4">
                 <FormField
                   control={form.control}
@@ -530,11 +636,15 @@ export default function BoardingReservationPage() {
                     <FormItem>
                       <FormLabel>Daily Rate ($)</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="0.00" 
-                          {...field} 
+                        <Input
+                          placeholder="0.00"
+                          {...field}
                           disabled={isMutating}
-                          className={form.formState.errors.dailyRate ? "border-red-500" : ""}
+                          className={
+                            form.formState.errors.dailyRate
+                              ? "border-red-500"
+                              : ""
+                          }
                         />
                       </FormControl>
                       <FormDescription>
@@ -547,11 +657,13 @@ export default function BoardingReservationPage() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">Emergency Contact</CardTitle>
-              <CardDescription>Contact information in case of emergency</CardDescription>
+              <CardDescription>
+                Contact information in case of emergency
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -562,18 +674,22 @@ export default function BoardingReservationPage() {
                     <FormItem>
                       <FormLabel>Emergency Contact Name</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Contact name" 
-                          {...field} 
+                        <Input
+                          placeholder="Contact name"
+                          {...field}
                           disabled={isMutating}
-                          className={form.formState.errors.emergencyContactName ? "border-red-500" : ""}
+                          className={
+                            form.formState.errors.emergencyContactName
+                              ? "border-red-500"
+                              : ""
+                          }
                         />
                       </FormControl>
                       <FormMessage className="text-red-600 text-sm mt-1" />
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="emergencyContactPhone"
@@ -581,11 +697,15 @@ export default function BoardingReservationPage() {
                     <FormItem>
                       <FormLabel>Emergency Contact Phone</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Contact phone number" 
-                          {...field} 
+                        <Input
+                          placeholder="Contact phone number"
+                          {...field}
                           disabled={isMutating}
-                          className={form.formState.errors.emergencyContactPhone ? "border-red-500" : ""}
+                          className={
+                            form.formState.errors.emergencyContactPhone
+                              ? "border-red-500"
+                              : ""
+                          }
                         />
                       </FormControl>
                       <FormMessage className="text-red-600 text-sm mt-1" />
@@ -595,11 +715,13 @@ export default function BoardingReservationPage() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">Additional Information</CardTitle>
-              <CardDescription>Special instructions and requirements</CardDescription>
+              <CardDescription>
+                Special instructions and requirements
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <FormField
@@ -609,11 +731,15 @@ export default function BoardingReservationPage() {
                   <FormItem>
                     <FormLabel>Special Instructions</FormLabel>
                     <FormControl>
-                      <Textarea 
-                        placeholder="Enter any special instructions for this boarding stay" 
-                        {...field} 
+                      <Textarea
+                        placeholder="Enter any special instructions for this boarding stay"
+                        {...field}
                         disabled={isMutating}
-                        className={form.formState.errors.specialInstructions ? "border-red-500" : ""}
+                        className={
+                          form.formState.errors.specialInstructions
+                            ? "border-red-500"
+                            : ""
+                        }
                       />
                     </FormControl>
                     <FormDescription>
@@ -623,7 +749,7 @@ export default function BoardingReservationPage() {
                   </FormItem>
                 )}
               />
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField
                   control={form.control}
@@ -646,7 +772,7 @@ export default function BoardingReservationPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="hasFeedingInstructions"
@@ -668,7 +794,7 @@ export default function BoardingReservationPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="hasSpecialRequirements"
@@ -676,9 +802,7 @@ export default function BoardingReservationPage() {
                     <FormItem className="flex flex-row items-center justify-between p-3 border rounded-md">
                       <div className="space-y-0.5">
                         <FormLabel>Special Requirements</FormLabel>
-                        <FormDescription>
-                          Other special needs
-                        </FormDescription>
+                        <FormDescription>Other special needs</FormDescription>
                       </div>
                       <FormControl>
                         <Switch
@@ -691,7 +815,7 @@ export default function BoardingReservationPage() {
                   )}
                 />
               </div>
-              
+
               <FormField
                 control={form.control}
                 name="notes"
@@ -699,11 +823,13 @@ export default function BoardingReservationPage() {
                   <FormItem>
                     <FormLabel>Additional Notes</FormLabel>
                     <FormControl>
-                      <Textarea 
-                        placeholder="Enter any additional notes" 
-                        {...field} 
+                      <Textarea
+                        placeholder="Enter any additional notes"
+                        {...field}
                         disabled={isMutating}
-                        className={form.formState.errors.notes ? "border-red-500" : ""}
+                        className={
+                          form.formState.errors.notes ? "border-red-500" : ""
+                        }
                       />
                     </FormControl>
                     <FormDescription>
@@ -727,8 +853,12 @@ export default function BoardingReservationPage() {
                     Delete Reservation
                   </Button>
                   <div className="flex gap-2">
-                    <Link href={`/admin/boarding/boarding-stay/${reservationId}`}>
-                      <Button variant="outline" disabled={isMutating}>Cancel</Button>
+                    <Link
+                      href={`/admin/boarding/boarding-stay/${reservationId}`}
+                    >
+                      <Button variant="outline" disabled={isMutating}>
+                        Cancel
+                      </Button>
                     </Link>
                     <Button type="submit" disabled={!canSubmit}>
                       {isMutating ? "Saving..." : "Save Changes"}
@@ -738,7 +868,9 @@ export default function BoardingReservationPage() {
               ) : (
                 <>
                   <Link href="/admin/boarding">
-                    <Button variant="outline" disabled={isMutating}>Cancel</Button>
+                    <Button variant="outline" disabled={isMutating}>
+                      Cancel
+                    </Button>
                   </Link>
                   <div className="flex flex-col items-end gap-2">
                     {!canSubmit && (
@@ -757,13 +889,13 @@ export default function BoardingReservationPage() {
               )}
             </CardFooter>
           </Card>
-          
+
           {form.formState.errors.root && (
             <div className="text-red-500 text-sm mb-4 p-3 border border-red-200 rounded-md bg-red-50">
               {form.formState.errors.root.message}
             </div>
           )}
-          
+
           {/* Show validation errors for debugging */}
           {Object.keys(form.formState.errors).length > 0 && (
             <div className="text-red-500 text-sm mb-4 p-3 border border-red-200 rounded-md bg-red-50">
@@ -771,7 +903,7 @@ export default function BoardingReservationPage() {
               <ul className="list-disc list-inside mt-2">
                 {Object.entries(form.formState.errors).map(([field, error]) => (
                   <li key={field}>
-                    {field}: {error?.message || 'Invalid value'}
+                    {field}: {error?.message || "Invalid value"}
                   </li>
                 ))}
               </ul>

@@ -211,8 +211,8 @@ export async function clearPracticeData(
 ): Promise<void> {
   try {
     const stores = [
-      'pets', 'appointments', 'clients', 'soapNotes', 'invoices',
-      'inventory', 'prescriptions', 'labResults', 'medicalRecords', 'vaccinations'
+      'pets', 'appointments', 'clients', 'soapNotes',
+      'prescriptions', 'labResults', 'medicalRecords', 'vaccinations', 'rooms', 'admissions', 'vaccine_types'
     ];
 
     for (const storeName of stores) {
@@ -246,8 +246,8 @@ export async function getPracticeDataStats(
   const stats: Record<string, number> = {};
   
   const stores = [
-    'pets', 'appointments', 'clients', 'soapNotes', 'invoices',
-    'inventory', 'prescriptions', 'labResults', 'medicalRecords', 'vaccinations'
+    'pets', 'appointments', 'clients', 'soapNotes',
+    'prescriptions', 'labResults', 'medicalRecords', 'vaccinations', 'rooms', 'admissions', 'vaccine_types'
   ];
 
   for (const storeName of stores) {

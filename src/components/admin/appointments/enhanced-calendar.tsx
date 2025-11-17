@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DatePicker } from "./date-picker";
 import { Appointment, Pet } from "@/db/schema";
@@ -86,6 +86,12 @@ export function EnhancedCalendar({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { isOnline } = useNetworkStatus();
+
+  // Keep a ref to the current network status to avoid closure issues
+  const isOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
 
   // Offline appointments hook for offline support
   const { createAppointment: createOfflineAppointment } =
@@ -341,7 +347,9 @@ export function EnhancedCalendar({
     onSuccess: (_, variables) => {
       // Track the date we've rescheduled to for refetching and toast messages
       const newDateISOString = variables.data.date;
-      const newDate = new Date(newDateISOString);
+      const newDate = newDateISOString
+        ? new Date(newDateISOString)
+        : new Date();
       const formattedNewDate = newDate.toLocaleDateString();
       const formattedNewTime = newDate.toLocaleTimeString([], {
         hour: "2-digit",
@@ -373,7 +381,9 @@ export function EnhancedCalendar({
         queryKey: ["/api/appointments/by-date", formattedDate, practiceId],
         queryFn: async () => {
           const queryParams = new URLSearchParams();
-          queryParams.append("practiceId", practiceId.toString());
+          if (practiceId) {
+            queryParams.append("practiceId", practiceId.toString());
+          }
 
           const res = await fetch(
             `/api/appointments/by-date/${formattedDate}?${queryParams.toString()}`,
@@ -390,7 +400,9 @@ export function EnhancedCalendar({
         },
       });
       // Fetch the new date's appointments as well
-      const newDateObj = new Date(variables.data.date);
+      const newDateObj = variables.data.date
+        ? new Date(variables.data.date)
+        : new Date();
       const newDateFormatted = newDateObj.toISOString().split("T")[0];
 
       if (newDateFormatted !== formattedDate) {
@@ -401,7 +413,9 @@ export function EnhancedCalendar({
           queryKey: ["/api/appointments/by-date", newDateFormatted, practiceId],
           queryFn: async () => {
             const queryParams = new URLSearchParams();
-            queryParams.append("practiceId", practiceId.toString());
+            if (practiceId) {
+              queryParams.append("practiceId", practiceId.toString());
+            }
 
             const res = await fetch(
               `/api/appointments/by-date/${newDateFormatted}?${queryParams.toString()}`,
@@ -510,6 +524,7 @@ export function EnhancedCalendar({
 
   // Create appointment mutation
   const createAppointmentMutation = useMutation({
+    networkMode: "always", // Execute even when offline is detected
     mutationFn: async (
       data: z.infer<typeof appointmentSchema> & { time: string }
     ) => {
@@ -531,29 +546,44 @@ export function EnhancedCalendar({
           status: appointmentData.status || "scheduled",
           // Ensure the type field is a simple string instead of a complex object
           type:
-            typeof appointmentData.type === "object"
+            typeof appointmentData.type === "object" &&
+            appointmentData.type !== null
               ? (appointmentData.type as any).value ||
-                appointmentData.type.toString()
+                String(appointmentData.type)
               : appointmentData.type,
         };
 
         console.log("Sending appointment data:", finalAppointmentData);
 
+        // Check current network status using ref to avoid stale closure
+        const currentNetworkStatus = isOnlineRef.current && navigator.onLine;
+        console.log(
+          "[Calendar] Network status check - isOnlineRef.current:",
+          isOnlineRef.current,
+          "navigator.onLine:",
+          navigator.onLine
+        );
+
         // When offline, use offline storage instead of API
-        if (!isOnline) {
+        if (!currentNetworkStatus) {
           console.log("[Calendar] Offline mode - saving to IndexedDB");
           const offlineAppointmentData = {
             title: finalAppointmentData.title,
             description: finalAppointmentData.notes || null,
             date: dateTime.toISOString(), // Full ISO string for date
-            durationMinutes: finalAppointmentData.duration?.toString() || "30",
+            durationMinutes: finalAppointmentData.duration || 30,
             status: finalAppointmentData.status || ("pending" as const),
-            petId: finalAppointmentData.petId?.toString() || null,
-            clientId: finalAppointmentData.petId?.toString() || null, // TODO: Get actual client ID from pet
+            petId: finalAppointmentData.petId
+              ? Number(finalAppointmentData.petId)
+              : null,
+            clientId: finalAppointmentData.petId
+              ? Number(finalAppointmentData.petId)
+              : null, // TODO: Get actual client ID from pet
             staffId: null, // Will be set when synced to server
-            practitionerId:
-              finalAppointmentData.practitionerId?.toString() || null,
-            practiceId: practiceId?.toString(),
+            practitionerId: finalAppointmentData.practitionerId
+              ? Number(finalAppointmentData.practitionerId)
+              : null,
+            practiceId: practiceId ? Number(practiceId) : undefined,
             type: finalAppointmentData.type,
             source: "internal" as const,
             notes: finalAppointmentData.notes || null,
@@ -567,6 +597,7 @@ export function EnhancedCalendar({
         }
 
         // Online mode - use API
+        console.log("[Calendar] Online mode - calling API");
         try {
           const response = await apiRequest(
             "POST",
@@ -667,7 +698,7 @@ export function EnhancedCalendar({
     const formData = {
       ...data,
       practitionerId: data.practitionerId || userId,
-      practiceId: practiceId,
+      practiceId: practiceId || "",
     };
 
     // Detailed logging for troubleshooting
@@ -1155,7 +1186,7 @@ export function EnhancedCalendar({
 
                     // Create a simpler update payload with just the necessary fields
                     const updateData = {
-                      date: dateTime.toISOString(),
+                      date: new Date(dateTime.toISOString()),
                       // We'll let the server set updatedAt automatically
                     };
 
@@ -1164,7 +1195,7 @@ export function EnhancedCalendar({
                     try {
                       rescheduleAppointmentMutation.mutate({
                         id: rescheduleAppointment.id,
-                        data: updateData,
+                        data: updateData as any,
                       });
                     } catch (error) {
                       console.error("Failed to reschedule:", error);
@@ -1426,7 +1457,7 @@ function AppointmentCard({
   onReschedule,
 }: AppointmentCardProps) {
   // Find the pet for this appointment
-  const pet = pets.find((p) => p.id === appointment.petId);
+  const pet = pets.find((p) => p.id === Number(appointment.petId));
 
   // Format time
   const appointmentTime = new Date(appointment.date);
@@ -1449,7 +1480,8 @@ function AppointmentCard({
   };
 
   // Only show action buttons if the appointment is not cancelled or completed
-  const canModify = appointment.status === "scheduled";
+  const canModify =
+    appointment.status === "pending" || appointment.status === "approved";
 
   return (
     <div
@@ -1537,7 +1569,8 @@ function AppointmentCard({
           {/* Action buttons */}
           <div className="mt-2 flex gap-2">
             {appointment.type === "virtual" &&
-              appointment.status === "scheduled" && (
+              (appointment.status === "pending" ||
+                appointment.status === "approved") && (
                 <Button size="sm" variant="outline">
                   <Video className="h-3 w-3 mr-1" />
                   Join Call
@@ -1618,7 +1651,13 @@ function AppointmentCard({
             <AlertDialogCancel>Keep Appointment</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700 text-white"
-              onClick={() => onDelete(appointment.id)}
+              onClick={() =>
+                onDelete?.(
+                  typeof appointment.id === "string"
+                    ? parseInt(appointment.id)
+                    : appointment.id || 0
+                )
+              }
             >
               Cancel Appointment
             </AlertDialogAction>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,7 +8,14 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { format } from "date-fns";
-import { ChevronLeft, Calendar, PawPrint, Plus, Trash } from "lucide-react";
+import {
+  ChevronLeft,
+  Calendar,
+  PawPrint,
+  Plus,
+  Trash,
+  WifiOff,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -46,6 +53,9 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { usePracticeId } from "@/hooks/use-practice-id";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useNetworkStatus } from "@/hooks/use-network-status";
+import { Badge } from "@/components/ui/badge";
+import { useOfflineBoarding } from "@/hooks/offline/boarding/use-offline-boarding";
 import { Separator } from "@/components/ui/separator";
 
 // Form schema
@@ -104,6 +114,13 @@ export default function BoardingReservationPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isEditMode, setIsEditMode] = useState(false);
+  const { isOnline } = useNetworkStatus();
+  const isOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
+
+  const offlineBoarding = useOfflineBoarding();
 
   // Helper: safely convert various values to Date or null
   const toDate = (v: any): Date | null => {
@@ -210,7 +227,37 @@ export default function BoardingReservationPage() {
 
   // Create boarding stay mutation
   const createMutation = useMutation({
+    networkMode: "always",
     mutationFn: async (data: z.infer<typeof formSchema>) => {
+      const currentNetworkStatus =
+        isOnlineRef.current &&
+        (typeof navigator !== "undefined" ? navigator.onLine : true);
+      if (!currentNetworkStatus) {
+        // Use offline path
+        const practiceIdNum = Number(data.practiceId);
+        const petIdNum = parseInt(String(data.petId));
+        const kennelIdNum = parseInt(String(data.kennelId));
+        const startIso = toDate(data.startDate)?.toISOString() ?? null;
+        const endIso = toDate(data.endDate)?.toISOString() ?? null;
+
+        const payload: any = {
+          practiceId: practiceIdNum,
+          petId: petIdNum,
+          kennelId: kennelIdNum,
+          checkInDate: startIso,
+          plannedCheckOutDate: endIso,
+          specialInstructions: data.specialInstructions,
+          emergencyContactName: data.emergencyContactName,
+          emergencyContactPhone: data.emergencyContactPhone,
+          dailyRate: data.dailyRate,
+          hasMedications: data.hasMedications,
+          hasFeedingInstructions: data.hasFeedingInstructions,
+          hasSpecialRequirements: data.hasSpecialRequirements,
+          reservationNotes: data.notes,
+        };
+
+        return await offlineBoarding.createStay(payload as any);
+      }
       // Coerce and validate values to the API-expected types
       const practiceIdNum = Number(data.practiceId);
       const petIdNum = parseInt(String(data.petId));
@@ -276,7 +323,37 @@ export default function BoardingReservationPage() {
 
   // Update boarding stay mutation
   const updateMutation = useMutation({
+    networkMode: "always",
     mutationFn: async (data: z.infer<typeof formSchema>) => {
+      const currentNetworkStatus =
+        isOnlineRef.current &&
+        (typeof navigator !== "undefined" ? navigator.onLine : true);
+      if (!currentNetworkStatus) {
+        const practiceIdNum = Number(data.practiceId);
+        const petIdNum = parseInt(String(data.petId));
+        const kennelIdNum = parseInt(String(data.kennelId));
+        const startIso = toDate(data.startDate)?.toISOString() ?? null;
+        const endIso = toDate(data.endDate)?.toISOString() ?? null;
+
+        const payload: any = {
+          practiceId: practiceIdNum,
+          petId: petIdNum,
+          kennelId: kennelIdNum,
+          checkInDate: startIso,
+          plannedCheckOutDate: endIso,
+          specialInstructions: data.specialInstructions,
+          emergencyContactName: data.emergencyContactName,
+          emergencyContactPhone: data.emergencyContactPhone,
+          dailyRate: data.dailyRate,
+          hasMedications: data.hasMedications,
+          hasFeedingInstructions: data.hasFeedingInstructions,
+          hasSpecialRequirements: data.hasSpecialRequirements,
+          reservationNotes: data.notes,
+        };
+
+        const stayId = String(params?.id || "");
+        return await offlineBoarding.updateStay(stayId, payload as any);
+      }
       const practiceIdNum = Number(data.practiceId);
       const petIdNum = parseInt(String(data.petId));
       const kennelIdNum = parseInt(String(data.kennelId));
@@ -346,8 +423,17 @@ export default function BoardingReservationPage() {
 
   // Delete boarding stay mutation
   const deleteMutation = useMutation({
+    networkMode: "always",
     mutationFn: async () => {
       const stayId = String(params?.id || "");
+      const currentNetworkStatus =
+        isOnlineRef.current &&
+        (typeof navigator !== "undefined" ? navigator.onLine : true);
+      if (!currentNetworkStatus) {
+        await offlineBoarding.deleteStay(stayId);
+        return true;
+      }
+
       const res = await apiRequest("DELETE", `/api/boarding/stays/${stayId}`);
       if (!res.ok) {
         let errText = "Failed to delete boarding stay";
@@ -535,10 +621,16 @@ export default function BoardingReservationPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             {isEditMode
               ? "Edit Boarding Reservation"
               : "New Boarding Reservation"}
+            {!isOnline && (
+              <Badge variant="secondary" className="gap-1.5">
+                <WifiOff className="h-3 w-3" />
+                Offline Mode
+              </Badge>
+            )}
           </h1>
           <p className="text-muted-foreground">
             {isEditMode

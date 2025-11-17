@@ -8,7 +8,7 @@
  */
 
 export const DB_NAME_PREFIX = 'SmartDMV_Tenant';
-export const DB_VERSION = 5;
+export const DB_VERSION = 8; // Increment for adding tenant-isolated kennel/boarding stores
 
 export function getTenantDatabaseName(tenantId: string): string {
   if (!tenantId) {
@@ -33,13 +33,16 @@ export const STORES = {
   APPOINTMENTS: 'appointments',
   CLIENTS: 'clients',
   SOAP_NOTES: 'soapNotes',
-  INVOICES: 'invoices',
-  INVENTORY: 'inventory',
   PRESCRIPTIONS: 'prescriptions',
   LAB_RESULTS: 'labResults',
   MEDICAL_RECORDS: 'medicalRecords',
   VACCINATIONS: 'vaccinations',
+  VACCINE_TYPES: 'vaccine_types',
   PRACTITIONERS: 'practitioners',
+  ROOMS: 'rooms',
+  ADMISSIONS: 'admissions',
+  KENNELS: 'kennels',
+  BOARDING_STAYS: 'boarding_stays',
   
   // System stores (global, not tenant-prefixed)
   AUTH_TOKENS: 'authTokens',
@@ -65,13 +68,16 @@ export const TENANT_ISOLATED_STORES = [
   STORES.APPOINTMENTS,
   STORES.CLIENTS,
   STORES.SOAP_NOTES,
-  STORES.INVOICES,
-  STORES.INVENTORY,
   STORES.PRESCRIPTIONS,
   STORES.LAB_RESULTS,
   STORES.MEDICAL_RECORDS,
   STORES.VACCINATIONS,
+  STORES.VACCINE_TYPES,
   STORES.PRACTITIONERS,
+  STORES.ROOMS,
+  STORES.ADMISSIONS,
+  STORES.KENNELS,
+  STORES.BOARDING_STAYS,
   STORES.CONFLICTS, // Practice-scoped conflict storage
 ] as const;
 
