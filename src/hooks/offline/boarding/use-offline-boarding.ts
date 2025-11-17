@@ -40,6 +40,7 @@ export interface BoardingStay {
   // Display helpers
   petName?: string;
   kennelName?: string;
+  ownerName?: string;
   createdByName?: string;
 
   metadata?: {

@@ -14,6 +14,9 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useNetworkStatus } from "@/hooks/use-network-status";
+import { useOfflineStorage } from "@/hooks/offline/use-offline-storage";
+import { useOfflineBoarding } from "@/hooks/offline/boarding/use-offline-boarding";
+import { useOfflineKennels } from "@/hooks/offline/boarding/use-offline-kennels";
 import {
   Card,
   CardContent,
@@ -44,6 +47,19 @@ export default function BoardingPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("current");
+
+  // Offline hooks
+  const { isOnline } = useNetworkStatus();
+  const {
+    stays: offlineStays,
+    isLoading: offlineStaysLoading,
+    error: offlineStaysError,
+  } = useOfflineBoarding();
+  const {
+    kennels: offlineKennels,
+    isLoading: offlineKennelsLoading,
+    error: offlineKennelsError,
+  } = useOfflineKennels();
 
   // Fetch current boarding stays
   const { data: currentStays, isLoading: currentLoading } = useQuery({
@@ -84,15 +100,27 @@ export default function BoardingPage() {
     enabled: !!practiceId && activeTab === "kennels",
   });
 
-  // Use API data directly - no mock data needed
-  const displayCurrentStays = currentStays || [];
-  const displayScheduledStays = scheduledStays || [];
-  const displayKennels = kennels || [];
+  // Use API data when online, offline data when offline
+  const displayCurrentStays = isOnline
+    ? currentStays || []
+    : offlineStays.filter((stay) => stay.status === "checked_in");
+  const displayScheduledStays = isOnline
+    ? scheduledStays || []
+    : offlineStays.filter((stay) => stay.status === "scheduled");
+  const displayKennels = isOnline ? kennels || [] : offlineKennels;
+
+  // Combined loading states (online + offline)
+  const currentStaysLoading = isOnline ? currentLoading : offlineStaysLoading;
+  const scheduledStaysLoading = isOnline
+    ? scheduledLoading
+    : offlineStaysLoading;
+  const combinedKennelsLoading = isOnline
+    ? kennelsLoading
+    : offlineKennelsLoading;
 
   const queryClient = useQueryClient();
   const { user } = useUser();
   const { toast } = useToast();
-  const { isOnline } = useNetworkStatus();
   const [checkInLoadingId, setCheckInLoadingId] = useState<number | null>(null);
 
   // Filter function for search
@@ -280,7 +308,7 @@ export default function BoardingPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {currentLoading ? (
+              {currentStaysLoading ? (
                 <div className="flex justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
@@ -299,11 +327,15 @@ export default function BoardingPage() {
                       <CardHeader className="pb-2">
                         <div className="flex justify-between items-start">
                           <CardTitle className="text-lg">
-                            {stay.petName}
+                            {stay.petName ||
+                              stay.pet?.name ||
+                              `Pet #${stay.petId}`}
                           </CardTitle>
                           {renderStatusBadge(stay.status)}
                         </div>
-                        <CardDescription>{stay.ownerName}</CardDescription>
+                        <CardDescription>
+                          {stay.ownerName || "Unknown Owner"}
+                        </CardDescription>
                       </CardHeader>
                       <CardContent className="pb-2">
                         <div className="grid grid-cols-2 gap-2 text-sm">
@@ -406,7 +438,7 @@ export default function BoardingPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {scheduledLoading ? (
+              {scheduledStaysLoading ? (
                 <div className="flex justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
@@ -425,17 +457,23 @@ export default function BoardingPage() {
                       <CardHeader className="pb-2">
                         <div className="flex justify-between items-start">
                           <CardTitle className="text-lg">
-                            {stay.petName}
+                            {stay.petName ||
+                              stay.pet?.name ||
+                              `Pet #${stay.petId}`}
                           </CardTitle>
                           {renderStatusBadge(stay.status)}
                         </div>
-                        <CardDescription>{stay.ownerName}</CardDescription>
+                        <CardDescription>
+                          {stay.ownerName || "Unknown Owner"}
+                        </CardDescription>
                       </CardHeader>
                       <CardContent className="pb-2">
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div>
                             <p className="text-muted-foreground">Kennel:</p>
-                            <p className="font-medium">{stay.kennelName}</p>
+                            <p className="font-medium">
+                              {stay.kennelName || stay.kennel?.name || "—"}
+                            </p>
                           </div>
                           <div>
                             <p className="text-muted-foreground">Start Date:</p>
@@ -549,7 +587,7 @@ export default function BoardingPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {kennelsLoading ? (
+              {combinedKennelsLoading ? (
                 <div className="flex justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>

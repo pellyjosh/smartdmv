@@ -207,18 +207,55 @@ export async function getEntity<T>(
     }
     
     // Use verified db connection
-    const entity = await new Promise<OfflineEntity<T> | undefined>((resolve, reject) => {
+    const entity = await (async (): Promise<OfflineEntity<T> | undefined> => {
       try {
         const tx = db.transaction(storeName, 'readonly');
         const store = tx.objectStore(storeName);
-        const request = store.get(entityId);
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
+        // Try direct lookup first
+        let result = await new Promise<OfflineEntity<T> | undefined>((resolve, reject) => {
+          try {
+            const request = store.get(entityId);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          } catch (err) {
+            reject(err);
+          }
+        });
+
+        // If not found, try numeric fallback when id is numeric string
+        if (!result && typeof entityId === 'string' && /^\d+$/.test(entityId)) {
+          const numericId = parseInt(entityId, 10);
+          result = await new Promise<OfflineEntity<T> | undefined>((resolve, reject) => {
+            try {
+              const request = store.get(numericId as any);
+              request.onsuccess = () => resolve(request.result);
+              request.onerror = () => reject(request.error);
+            } catch (err) {
+              reject(err);
+            }
+          });
+        }
+
+        // If still not found and entityId is number, try string fallback
+        if (!result && typeof entityId === 'number') {
+          const stringId = String(entityId);
+          result = await new Promise<OfflineEntity<T> | undefined>((resolve, reject) => {
+            try {
+              const request = store.get(stringId as any);
+              request.onsuccess = () => resolve(request.result);
+              request.onerror = () => reject(request.error);
+            } catch (err) {
+              reject(err);
+            }
+          });
+        }
+
+        return result;
       } catch (err) {
-        reject(err);
+        throw err;
       }
-    });
+    })();
 
     if (!entity) {
       return null;
@@ -316,19 +353,56 @@ export async function updateEntity<T extends { id: number | string }>(
       throw new DatabaseError(`Store "${storeName}" not found for update`);
     }
     
-    // Get existing entity using verified connection
-    const existing = await new Promise<OfflineEntity<T> | undefined>((resolve, reject) => {
+    // Get existing entity using verified connection (resilient id lookup)
+    const existing = await (async (): Promise<OfflineEntity<T> | undefined> => {
       try {
         const tx = db.transaction(storeName, 'readonly');
         const store = tx.objectStore(storeName);
-        const request = store.get(entityId);
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
+        // Direct lookup
+        let result = await new Promise<OfflineEntity<T> | undefined>((resolve, reject) => {
+          try {
+            const request = store.get(entityId);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          } catch (err) {
+            reject(err);
+          }
+        });
+
+        // Numeric fallback for string ids
+        if (!result && typeof entityId === 'string' && /^\d+$/.test(entityId)) {
+          const numericId = parseInt(entityId, 10);
+          result = await new Promise<OfflineEntity<T> | undefined>((resolve, reject) => {
+            try {
+              const request = store.get(numericId as any);
+              request.onsuccess = () => resolve(request.result);
+              request.onerror = () => reject(request.error);
+            } catch (err) {
+              reject(err);
+            }
+          });
+        }
+
+        // String fallback for numeric ids
+        if (!result && typeof entityId === 'number') {
+          const stringId = String(entityId);
+          result = await new Promise<OfflineEntity<T> | undefined>((resolve, reject) => {
+            try {
+              const request = store.get(stringId as any);
+              request.onsuccess = () => resolve(request.result);
+              request.onerror = () => reject(request.error);
+            } catch (err) {
+              reject(err);
+            }
+          });
+        }
+
+        return result;
       } catch (err) {
-        reject(err);
+        throw err;
       }
-    });
+    })();
 
     if (!existing) {
       throw new EntityNotFoundError(entityType, entityId);

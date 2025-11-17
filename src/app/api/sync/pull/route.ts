@@ -413,6 +413,7 @@ export async function GET(req: NextRequest) {
                 ...stay,
                 petName: stay.pet?.name || 'N/A',
                 kennelName: stay.kennel?.name || 'N/A',
+                ownerName: stay.pet?.owner?.name || stay.pet?.owner?.email || 'N/A',
                 createdByName: stay.createdBy?.name || stay.createdBy?.email || 'N/A',
                 tenantId: tenantContext.tenantId,
                 practiceId: practiceId,

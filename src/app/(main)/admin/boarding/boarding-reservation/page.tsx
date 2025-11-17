@@ -8,6 +8,8 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronLeft, Calendar, PawPrint, Trash, WifiOff } from "lucide-react";
 import { useNetworkStatus } from "@/hooks/use-network-status";
+import { useOfflineStorage } from "@/hooks/offline/use-offline-storage";
+import { useOfflineKennels } from "@/hooks/offline/boarding/use-offline-kennels";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 
@@ -120,6 +122,10 @@ export default function BoardingReservationPage() {
   const queryClient = useQueryClient();
   const [isEditMode, setIsEditMode] = useState(false);
 
+  // Offline hooks
+  const { kennels: offlineKennels, isLoading: offlineKennelsLoading } =
+    useOfflineKennels();
+
   // Check if editing an existing reservation (from URL params)
   const reservationId = searchParams.get("id");
 
@@ -176,7 +182,15 @@ export default function BoardingReservationPage() {
     enabled: !!practiceId,
   });
 
-  // Fetch specific boarding stay if in edit mode
+  // Use API data when online, offline data when offline
+  const displayKennels = isOnline
+    ? kennels || []
+    : offlineKennels.filter((k) => k.isActive);
+
+  // Combined loading states
+  const combinedKennelsLoading = isOnline
+    ? kennelsLoading
+    : offlineKennelsLoading;
   const { data: boardingStay, isLoading: boardingStayLoading } = useQuery({
     queryKey: ["/api/boarding/stays", reservationId],
     queryFn: async () => {
@@ -308,7 +322,7 @@ export default function BoardingReservationPage() {
 
   // Use API data directly - no mock data needed
   const displayPets = pets || [];
-  const displayKennels = kennels || [];
+  // displayKennels is already defined above with offline support
 
   // Submit form handler
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
@@ -353,7 +367,9 @@ export default function BoardingReservationPage() {
 
   // Loading state
   const isLoading =
-    petsLoading || kennelsLoading || (isEditMode && boardingStayLoading);
+    petsLoading ||
+    combinedKennelsLoading ||
+    (isEditMode && boardingStayLoading);
   const isMutating =
     createMutation.isPending ||
     updateMutation.isPending ||
@@ -503,7 +519,7 @@ export default function BoardingReservationPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {kennelsLoading ? (
+                          {combinedKennelsLoading ? (
                             <SelectItem value="loading" disabled>
                               Loading kennels...
                             </SelectItem>
