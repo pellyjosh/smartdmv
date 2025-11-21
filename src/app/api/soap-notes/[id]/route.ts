@@ -60,10 +60,77 @@ const soapNotePartialSchema = z.object({
       return val;
     })
     .optional(),
+  // Main SOAP text fields
   subjective: z.string().optional(),
   objective: z.string().optional(),
   assessment: z.string().optional(),
   plan: z.string().optional(),
+
+  // Subjective tab fields
+  chiefComplaint: z.array(z.string()).optional(),
+  patientHistory: z.string().optional(),
+  symptoms: z.string().optional(),
+  duration: z.string().optional(),
+
+  // Objective tab fields - Vital signs
+  temperature: z.string().optional(),
+  heartRate: z.string().optional(),
+  respiratoryRate: z.string().optional(),
+  weight: z.string().optional(),
+  bloodPressure: z.string().optional(),
+  oxygenSaturation: z.string().optional(),
+
+  // Objective tab fields - General appearance
+  generalAppearance: z.string().optional(),
+  hydration: z.string().optional(),
+
+  // Objective tab fields - Cardiovascular
+  heartSounds: z.string().optional(),
+  cardiovascularNotes: z.string().optional(),
+
+  // Objective tab fields - Respiratory
+  lungSounds: z.string().optional(),
+  respiratoryEffort: z.string().optional(),
+  respiratoryNotes: z.string().optional(),
+
+  // Objective tab fields - Gastrointestinal
+  abdomenPalpation: z.string().optional(),
+  bowelSounds: z.string().optional(),
+  gastrointestinalNotes: z.string().optional(),
+
+  // Objective tab fields - Musculoskeletal
+  gait: z.string().optional(),
+  jointStatus: z.string().optional(),
+  musculoskeletalNotes: z.string().optional(),
+
+  // Objective tab fields - Neurological
+  mentalStatus: z.string().optional(),
+  reflexes: z.string().optional(),
+  neurologicalNotes: z.string().optional(),
+
+  // Objective tab fields - Integumentary/Skin
+  skinCondition: z.string().optional(),
+  coatCondition: z.string().optional(),
+  skinNotes: z.string().optional(),
+
+  // Assessment tab fields
+  primaryDiagnosis: z.array(z.string()).optional(),
+  differentialDiagnoses: z.array(z.string()).optional(),
+  progressStatus: z.string().optional(),
+  confirmationStatus: z.string().optional(),
+  progressNotes: z.string().optional(),
+
+  // Plan tab fields
+  treatment: z.string().optional(),
+  medications: z.array(z.any()).optional(),
+  procedures: z.array(z.string()).optional(),
+  procedureNotes: z.string().optional(),
+  diagnostics: z.array(z.string()).optional(),
+  clientEducation: z.string().optional(),
+  followUpTimeframe: z.string().optional(),
+  followUpReason: z.string().optional(),
+
+  // Flags
   locked: z.boolean().optional(),
   hasPrescriptions: z.boolean().optional(),
   hasAttachments: z.boolean().optional(),

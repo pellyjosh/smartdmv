@@ -86,125 +86,131 @@ export function SoapPrescriptionDisplay({ soapNoteId }: SoapPrescriptionDisplayP
   }
 
   return (
-    <div className="space-y-4">
-      {prescriptions.map((prescription: any) => {
-        const medicationItem = getInventoryItem(prescription.inventoryItemId);
-        
-        return (
-          <Card key={prescription.id} className="border border-slate-200 hover:shadow-md transition-shadow">
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Pill className="h-6 w-6 text-blue-600" />
-                  <div>
-                    <CardTitle className="text-lg">
-                      {medicationItem?.name || `Medication #${prescription.inventoryItemId}`}
-                    </CardTitle>
-                    <CardDescription className="text-base mt-1">
-                      {prescription.dosage}, {prescription.route}, {prescription.frequency}
-                    </CardDescription>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={prescription.status === "active" ? "default" : "secondary"}>
-                    {prescription.status}
-                  </Badge>
-                  {prescription.createdAt && (
-                    <span className="text-sm text-muted-foreground">
-                      {format(new Date(prescription.createdAt), 'MMM d, yyyy')}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="space-y-4">
-                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Dosage Information</h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <ScrollText className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground min-w-[80px]">Dosage:</span>
-                      <span className="font-medium">{prescription.dosage}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <AlarmClock className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground min-w-[80px]">Frequency:</span>
-                      <span className="font-medium">{prescription.frequency}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground min-w-[80px]">Duration:</span>
-                      <span className="font-medium">{prescription.duration}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground min-w-[80px]">Route:</span>
-                      <span className="font-medium">{prescription.route}</span>
-                    </div>
-                  </div>
-                </div>
+    <div className="max-h-[400px] overflow-auto scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600">
+      <div className="space-y-4 min-w-[600px]">
+        <div className="overflow-x-auto scrollbar-thin">
+          <div className="space-y-4">
+            {prescriptions.map((prescription: any) => {
+              const medicationItem = getInventoryItem(prescription.inventoryItemId);
 
-                <div className="space-y-4">
-                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Quantity & Refills</h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <RotateCcw className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground min-w-[80px]">Quantity:</span>
-                      <span className="font-medium">
-                        {prescription.quantityPrescribed}
-                        {prescription.quantityDispensed && (
-                          <span className="text-xs ml-2 text-muted-foreground">
-                            ({prescription.quantityDispensed} dispensed)
+              return (
+                <Card key={prescription.id} className="border border-slate-200 hover:shadow-md transition-shadow">
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Pill className="h-6 w-6 text-blue-600" />
+                        <div>
+                          <CardTitle className="text-lg">
+                            {medicationItem?.name || `Medication #${prescription.inventoryItemId}`}
+                          </CardTitle>
+                          <CardDescription className="text-base mt-1">
+                            {prescription.dosage}, {prescription.route}, {prescription.frequency}
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant={prescription.status === "active" ? "default" : "secondary"}>
+                          {prescription.status}
+                        </Badge>
+                        {prescription.createdAt && (
+                          <span className="text-sm text-muted-foreground">
+                            {format(new Date(prescription.createdAt), 'MMM d, yyyy')}
                           </span>
                         )}
-                      </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <RefreshCw className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground min-w-[80px]">Refills:</span>
-                      <span className="font-medium">{prescription.refills || 0}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Package2 className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground min-w-[80px]">Stock:</span>
-                      <span className="font-medium">
-                        {medicationItem?.quantity !== undefined ? (
-                          <span className={medicationItem.quantity > 0 ? "text-green-600" : "text-red-600"}>
-                            {medicationItem.quantity} {medicationItem.unit || 'units'}
-                          </span>
-                        ) : (
-                          "Unknown"
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Dosage Info</h4>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <ScrollText className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground min-w-[50px]">Dosage:</span>
+                            <span className="font-medium text-sm">{prescription.dosage}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <AlarmClock className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground min-w-[50px]">Freq:</span>
+                            <span className="font-medium text-sm">{prescription.frequency}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground min-w-[50px]">Dur:</span>
+                            <span className="font-medium text-sm">{prescription.duration}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground min-w-[50px]">Route:</span>
+                            <span className="font-medium text-sm">{prescription.route}</span>
+                          </div>
+                        </div>
+                      </div>
 
-                <div className="space-y-4">
-                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Prescriber Info</h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground min-w-[80px]">Prescribed by:</span>
-                      <span className="font-medium">Dr. {prescription.prescribedBy}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">QTY & Refills</h4>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <RotateCcw className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground min-w-[30px]">QTY:</span>
+                            <span className="font-medium text-sm">
+                              {prescription.quantityPrescribed}
+                              {prescription.quantityDispensed && (
+                                <span className="text-xs ml-1 text-muted-foreground">
+                                  ({prescription.quantityDispensed} disp)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <RefreshCw className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground min-w-[30px]">Ref:</span>
+                            <span className="font-medium text-sm">{prescription.refills || 0}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Package2 className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground min-w-[30px]">Stock:</span>
+                            <span className="font-medium text-sm">
+                              {medicationItem?.quantity !== undefined ? (
+                                <span className={medicationItem.quantity > 0 ? "text-green-600" : "text-red-600"}>
+                                  {medicationItem.quantity} {medicationItem.unit || 'units'}
+                                </span>
+                              ) : (
+                                "Unknown"
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
 
-              {prescription.instructions && (
-                <div className="mt-6">
-                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Instructions</h4>
-                  <div className="text-sm bg-slate-50 dark:bg-slate-800 p-4 rounded-md border">
-                    {prescription.instructions}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        );
-      })}
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Prescriber</h4>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <User className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground min-w-[50px]">Presc:</span>
+                            <span className="font-medium text-sm">Dr. {prescription.prescribedBy}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {prescription.instructions && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">Instructions</h4>
+                        <div className="text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded-md border max-h-[100px] overflow-y-auto scrollbar-thin">
+                          {prescription.instructions}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       tenant: {
-        id: tenantContext.tenantId, // Database ID
+        id: tenantContext.tenantId,
         subdomain: tenantContext.subdomain,
         dbName: tenantContext.dbName,
       }

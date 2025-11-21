@@ -54,6 +54,7 @@ const soapNoteSchema = z.object({
       }
       return val;
     }),
+  // Main SOAP text fields
   subjective: z.string({
     required_error: "Subjective field is required"
   }).min(1, "Subjective field cannot be empty"),
@@ -66,18 +67,79 @@ const soapNoteSchema = z.object({
   plan: z.string({
     required_error: "Plan field is required"
   }).min(1, "Plan field cannot be empty"),
+
+  // Subjective tab fields
+  chiefComplaint: z.array(z.string()).optional().default([]),
+  patientHistory: z.string().optional(),
+  symptoms: z.string().optional(),
+  duration: z.string().optional(),
+
+  // Objective tab fields - Vital signs
+  temperature: z.string().optional(),
+  heartRate: z.string().optional(),
+  respiratoryRate: z.string().optional(),
+  weight: z.string().optional(),
+  bloodPressure: z.string().optional(),
+  oxygenSaturation: z.string().optional(),
+
+  // Objective tab fields - General appearance
+  generalAppearance: z.string().optional(),
+  hydration: z.string().optional(),
+
+  // Objective tab fields - Cardiovascular
+  heartSounds: z.string().optional(),
+  cardiovascularNotes: z.string().optional(),
+
+  // Objective tab fields - Respiratory
+  lungSounds: z.string().optional(),
+  respiratoryEffort: z.string().optional(),
+  respiratoryNotes: z.string().optional(),
+
+  // Objective tab fields - Gastrointestinal
+  abdomenPalpation: z.string().optional(),
+  bowelSounds: z.string().optional(),
+  gastrointestinalNotes: z.string().optional(),
+
+  // Objective tab fields - Musculoskeletal
+  gait: z.string().optional(),
+  jointStatus: z.string().optional(),
+  musculoskeletalNotes: z.string().optional(),
+
+  // Objective tab fields - Neurological
+  mentalStatus: z.string().optional(),
+  reflexes: z.string().optional(),
+  neurologicalNotes: z.string().optional(),
+
+  // Objective tab fields - Integumentary/Skin
+  skinCondition: z.string().optional(),
+  coatCondition: z.string().optional(),
+  skinNotes: z.string().optional(),
+
+  // Assessment tab fields
+  primaryDiagnosis: z.array(z.string()).optional().default([]),
+  differentialDiagnoses: z.array(z.string()).optional().default([]),
+  progressStatus: z.string().optional(),
+  confirmationStatus: z.string().optional(),
+  progressNotes: z.string().optional(),
+
+  // Plan tab fields
+  treatment: z.string().optional(),
+  medications: z.array(z.any()).optional(),
+  procedures: z.array(z.string()).optional().default([]),
+  procedureNotes: z.string().optional(),
+  diagnostics: z.array(z.string()).optional().default([]),
+  clientEducation: z.string().optional(),
+  followUpTimeframe: z.string().optional(),
+  followUpReason: z.string().optional(),
+
+  // Flags
+  hasPrescriptions: z.boolean().optional(),
+  hasAttachments: z.boolean().optional(),
+  hasTreatments: z.boolean().optional(),
 });
 
 // Schema for partial updates (PATCH)
-const soapNotePartialSchema = soapNoteSchema.partial({
-  appointmentId: true,
-  petId: true,
-  subjective: true,
-  objective: true,
-  assessment: true,
-  plan: true,
-  practitionerId: true
-});
+const soapNotePartialSchema = soapNoteSchema.partial();
 
 // GET /api/soap-notes - Fetch all SOAP notes with filtering options
 import { eq, desc, and, or, like, gte } from "drizzle-orm";
@@ -225,10 +287,81 @@ export async function POST(request: Request) {
       appointmentId: validatedData.appointmentId || null,
       petId: validatedData.petId,
       practitionerId: validatedData.practitionerId,
+
+      // Main SOAP text fields
       subjective: validatedData.subjective,
       objective: validatedData.objective,
       assessment: validatedData.assessment,
       plan: validatedData.plan,
+
+      // Subjective tab fields
+      chiefComplaint: validatedData.chiefComplaint,
+      patientHistory: validatedData.patientHistory,
+      symptoms: validatedData.symptoms,
+      duration: validatedData.duration,
+
+      // Objective tab fields - Vital signs
+      temperature: validatedData.temperature,
+      heartRate: validatedData.heartRate,
+      respiratoryRate: validatedData.respiratoryRate,
+      weight: validatedData.weight,
+      bloodPressure: validatedData.bloodPressure,
+      oxygenSaturation: validatedData.oxygenSaturation,
+
+      // Objective tab fields - General appearance
+      generalAppearance: validatedData.generalAppearance,
+      hydration: validatedData.hydration,
+
+      // Objective tab fields - Cardiovascular
+      heartSounds: validatedData.heartSounds,
+      cardiovascularNotes: validatedData.cardiovascularNotes,
+
+      // Objective tab fields - Respiratory
+      lungSounds: validatedData.lungSounds,
+      respiratoryEffort: validatedData.respiratoryEffort,
+      respiratoryNotes: validatedData.respiratoryNotes,
+
+      // Objective tab fields - Gastrointestinal
+      abdomenPalpation: validatedData.abdomenPalpation,
+      bowelSounds: validatedData.bowelSounds,
+      gastrointestinalNotes: validatedData.gastrointestinalNotes,
+
+      // Objective tab fields - Musculoskeletal
+      gait: validatedData.gait,
+      jointStatus: validatedData.jointStatus,
+      musculoskeletalNotes: validatedData.musculoskeletalNotes,
+
+      // Objective tab fields - Neurological
+      mentalStatus: validatedData.mentalStatus,
+      reflexes: validatedData.reflexes,
+      neurologicalNotes: validatedData.neurologicalNotes,
+
+      // Objective tab fields - Integumentary/Skin
+      skinCondition: validatedData.skinCondition,
+      coatCondition: validatedData.coatCondition,
+      skinNotes: validatedData.skinNotes,
+
+      // Assessment tab fields
+      primaryDiagnosis: validatedData.primaryDiagnosis,
+      differentialDiagnoses: validatedData.differentialDiagnoses,
+      progressStatus: validatedData.progressStatus,
+      confirmationStatus: validatedData.confirmationStatus,
+      progressNotes: validatedData.progressNotes,
+
+      // Plan tab fields
+      treatment: validatedData.treatment,
+      medications: validatedData.medications,
+      procedures: validatedData.procedures,
+      procedureNotes: validatedData.procedureNotes,
+      diagnostics: validatedData.diagnostics,
+      clientEducation: validatedData.clientEducation,
+      followUpTimeframe: validatedData.followUpTimeframe,
+      followUpReason: validatedData.followUpReason,
+
+      // Flags
+      hasPrescriptions: validatedData.hasPrescriptions,
+      hasAttachments: validatedData.hasAttachments,
+      hasTreatments: validatedData.hasTreatments,
     }).returning();
     
     // Log audit for SOAP note creation
