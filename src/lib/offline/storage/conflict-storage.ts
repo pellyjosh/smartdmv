@@ -17,6 +17,19 @@ async function getConflictsStoreName(): Promise<string | null> {
   if (!context) {
     return null;
   }
+  try {
+    const current = indexedDBManager.getCurrentTenant();
+    const practiceIdString = context.practiceId.toString();
+    if (current.tenantId !== context.tenantId || current.practiceId !== practiceIdString) {
+      indexedDBManager.setCurrentTenant(context.tenantId, practiceIdString);
+      try {
+        await indexedDBManager.initialize(context.tenantId);
+      } catch {}
+      try {
+        await indexedDBManager.registerPractice(practiceIdString, context.tenantId);
+      } catch {}
+    }
+  } catch {}
   return getPracticeStoreName(context.practiceId.toString(), STORES.CONFLICTS);
 }
 

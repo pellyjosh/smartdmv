@@ -37,7 +37,23 @@ export async function getCachedTenantData(identifier: string): Promise<CachedTen
     console.log('[TenantStorage] Looking for cached tenant:', subdomain);
 
     // Try to get from cache store
-    const allCached = await indexedDBManager.getAll(CACHE_STORE);
+    const ctx = indexedDBManager.getCurrentTenant();
+    if (!ctx.tenantId) {
+      try {
+        indexedDBManager.setCurrentTenant(subdomain);
+        await indexedDBManager.initialize(subdomain);
+      } catch (e) {
+        console.warn('[TenantStorage] Failed to initialize tenant context for cache lookup:', e);
+      }
+    }
+
+    let allCached: any[] = [];
+    try {
+      allCached = await indexedDBManager.getAll(CACHE_STORE);
+    } catch (e) {
+      console.warn('[TenantStorage] Cache store not available:', e);
+      return null;
+    }
     
     // Look for tenant data in cache
     const tenantCacheKey = `tenant_${subdomain}`;

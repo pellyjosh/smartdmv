@@ -93,24 +93,25 @@ export function AppHeader({}: AppHeaderProps) {
 
   // Load practices from cache immediately if offline
   useEffect(() => {
-    if (isOfflineMode && typeof window !== "undefined") {
-      const cached = localStorage.getItem("practices_cache");
-      if (cached) {
-        try {
-          const cacheData = JSON.parse(cached);
-          const practicesData = Array.isArray(cacheData)
-            ? cacheData
-            : cacheData.data;
-          console.log(
-            "[AppHeader] 🔄 Loaded practices from cache (offline mode):",
-            practicesData
-          );
-          setPractices(practicesData);
-        } catch (error) {
-          console.error("[AppHeader] Error parsing cached practices:", error);
+    const load = async () => {
+      if (isOfflineMode && typeof window !== "undefined") {
+        const cached = localStorage.getItem("practices_cache");
+        if (cached) {
+          try {
+            const cacheData = JSON.parse(await decryptStringDS(cached));
+            const practicesData = Array.isArray(cacheData) ? cacheData : cacheData.data;
+            console.log(
+              "[AppHeader] 🔄 Loaded practices from cache (offline mode):",
+              practicesData
+            );
+            setPractices(practicesData);
+          } catch (error) {
+            console.error("[AppHeader] Error parsing cached practices:", error);
+          }
         }
       }
-    }
+    };
+    load();
   }, [isOfflineMode]);
 
   const handleLogout = () => {
@@ -196,7 +197,8 @@ export function AppHeader({}: AppHeaderProps) {
   const getPracticeName = (practiceId: string | number): string => {
     console.log("[AppHeader] getPracticeName called with:", practiceId);
     console.log("[AppHeader] Available practices:", practices);
-    const practice = practices.find(
+    const list = Array.isArray(practices) ? practices : [];
+    const practice = list.find(
       (p) => p.id.toString() === practiceId.toString()
     );
     console.log("[AppHeader] Found practice:", practice);

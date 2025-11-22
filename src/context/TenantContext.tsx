@@ -12,6 +12,7 @@ import React, {
 import { useQuery } from "@tanstack/react-query";
 import { getCachedTenantData } from "@/lib/offline/storage/tenant-storage";
 import { getTenantIdForCache } from "@/lib/auth-cache";
+import { indexedDBManager } from "@/lib/offline/db";
 
 // --- Types ---
 interface TenantInfo {
@@ -278,6 +279,17 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
       return null;
     }
   }, [hostname]);
+
+  useEffect(() => {
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+    if (!tenantIdentifier || !isOffline) return;
+    const { tenantId } = indexedDBManager.getCurrentTenant();
+    if (tenantId) return;
+    try {
+      indexedDBManager.setCurrentTenant(tenantIdentifier);
+      indexedDBManager.initialize(tenantIdentifier);
+    } catch {}
+  }, [tenantIdentifier]);
 
   // Use React Query with caching for optimal performance
   const {
