@@ -11,6 +11,7 @@ import React, {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCachedTenantData } from "@/lib/offline/storage/tenant-storage";
+import { getTenantIdForCache } from "@/lib/auth-cache";
 
 // --- Types ---
 interface TenantInfo {
@@ -268,7 +269,14 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
   }, []);
 
   const tenantIdentifier = useMemo(() => {
-    return extractTenantFromDomain(hostname);
+    const extracted = extractTenantFromDomain(hostname);
+    if (extracted) return extracted;
+    try {
+      const fallback = getTenantIdForCache();
+      return fallback || null;
+    } catch {
+      return null;
+    }
   }, [hostname]);
 
   // Use React Query with caching for optimal performance
@@ -285,6 +293,13 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
     staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     retry: (failureCount, error: any) => {
+      // Check if we're offline - don't retry if offline, just use cache
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+      if (isOffline) {
+        console.log("[TENANT] 🔌 Offline mode detected, skipping retry for tenant resolution");
+        return false;
+      }
+
       // Don't retry for 404 (tenant not found) or 403 (tenant inactive)
       if (
         error?.message?.includes("not found") ||

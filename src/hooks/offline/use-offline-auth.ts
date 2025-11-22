@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { indexedDBManager } from '@/lib/offline/db';
 import { STORES } from '@/lib/offline/db/schema';
 import { clearOfflineTenantContext } from '@/lib/offline/core/tenant-context';
+import { decryptStringDS } from '@/lib/offline/utils/encryption';
 import type { OfflineSession, TokenValidation } from '@/lib/offline/types/auth.types';
 
 export interface UseOfflineAuthReturn {
@@ -29,10 +30,11 @@ export function useOfflineAuth(): UseOfflineAuthReturn {
       
       // First: check for a cached offline_session in localStorage (fast path)
       if (typeof window !== 'undefined') {
-        const sessionStr = localStorage.getItem('offline_session');
+        const sessionStr = localStorage.getItem('offline_session_enc');
         if (sessionStr) {
           try {
-            const stored = JSON.parse(sessionStr);
+            const decrypted = await decryptStringDS(sessionStr);
+            const stored = JSON.parse(decrypted);
             console.log('[useOfflineAuth] ⚡ Found offline_session in localStorage:', {
               hasRole: !!stored.role,
               role: stored.role,
@@ -73,10 +75,10 @@ export function useOfflineAuth(): UseOfflineAuthReturn {
               console.warn('[useOfflineAuth] ⚠️ localStorage has invalid role, falling back to IndexedDB:', stored.role);
             }
           } catch (err) {
-            console.warn('[useOfflineAuth] Failed to parse offline_session, falling back to DB read', err);
+            console.warn('[useOfflineAuth] Failed to parse offline_session_enc, falling back to DB read', err);
           }
         } else {
-          console.log('[useOfflineAuth] No offline_session in localStorage, trying IndexedDB');
+          console.log('[useOfflineAuth] No offline_session_enc in localStorage, trying IndexedDB');
         }
       }
 

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNetworkStatus } from "@/hooks/use-network-status";
+import { encryptStringDS, decryptStringDS } from '@/lib/offline/utils/encryption';
 import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -204,7 +205,7 @@ export default function PermissionCategoriesTab({
         );
         const cached = localStorage.getItem(`roles_cache_${practiceId}`);
         if (cached) {
-          const cacheData = JSON.parse(cached);
+          const cacheData = JSON.parse(await decryptStringDS(cached));
           return Array.isArray(cacheData) ? cacheData : cacheData.data;
         }
         return [];
@@ -217,7 +218,7 @@ export default function PermissionCategoriesTab({
           const cached = localStorage.getItem(`roles_cache_${practiceId}`);
           if (cached) {
             console.log("[PermissionCategories] Using cached roles data");
-            const cacheData = JSON.parse(cached);
+            const cacheData = JSON.parse(await decryptStringDS(cached));
             return Array.isArray(cacheData) ? cacheData : cacheData.data;
           }
           throw new Error("Failed to fetch roles");
@@ -229,10 +230,8 @@ export default function PermissionCategoriesTab({
             timestamp: Date.now(),
             cachedAt: new Date().toISOString(),
           };
-          localStorage.setItem(
-            `roles_cache_${practiceId}`,
-            JSON.stringify(cacheData)
-          );
+          const payload = await encryptStringDS(JSON.stringify(cacheData));
+          localStorage.setItem(`roles_cache_${practiceId}`, payload);
         }
         return data;
       } catch (error) {
@@ -241,7 +240,7 @@ export default function PermissionCategoriesTab({
           console.log(
             "[PermissionCategories] Network error, using cached roles"
           );
-          const cacheData = JSON.parse(cached);
+          const cacheData = JSON.parse(await decryptStringDS(cached));
           return Array.isArray(cacheData) ? cacheData : cacheData.data;
         }
         return [];

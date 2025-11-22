@@ -24,14 +24,19 @@ export async function GET(request: NextRequest) {
     UserRoleEnum.OFFICE_MANAGER,
   ];
 
-  const rows = await tenantDb.select().from(users)
+  const rows = await tenantDb.select({
+    id: users.id,
+    name: users.name,
+    username: users.username,
+    role: users.role,
+  }).from(users)
     .where(and(eq(users.practiceId, Number(ctx.practiceId)), inArray(users.role as any, staffRoles as any)));
 
-  return NextResponse.json(rows.map(u => {
+  return NextResponse.json(rows.map((u: { id: number; name: string | null; username: string; role: string }) => {
     const nameStr = (u.name ?? '') as unknown as string;
     const parts = typeof nameStr === 'string' ? nameStr.split(' ') : [];
-    const first = (u as any).firstName || (parts[0] || (u.username as unknown as string));
-    const last = (u as any).lastName || (parts.slice(1).join(' ') || '');
+    const first = (parts[0] || (u.username as unknown as string));
+    const last = (parts.slice(1).join(' ') || '');
     return {
       id: u.id,
       firstName: first,

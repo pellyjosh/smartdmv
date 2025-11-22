@@ -24,7 +24,25 @@ export async function GET(request: NextRequest) {
 
   try {
     if (Number.isFinite(userId)) {
-      const userData = await tenantDb.select().from(users).where(eq(users.id, userId)).limit(1);
+      const userData = await tenantDb.select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        username: users.username,
+        role: users.role,
+        practiceId: users.practiceId,
+        phone: users.phone,
+        address: users.address,
+        city: users.city,
+        state: users.state,
+        zipCode: users.zipCode,
+        country: users.country,
+        emergencyContactName: users.emergencyContactName,
+        emergencyContactPhone: users.emergencyContactPhone,
+        emergencyContactRelationship: users.emergencyContactRelationship,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      }).from(users).where(eq(users.id, userId)).limit(1);
       if (userData.length === 0) {
         console.log('User not found for ID:', idStr);
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -97,7 +115,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    return NextResponse.json(updatedUser, { status: 200 });
+    const { password: _pw, ...safeUser } = updatedUser as any;
+    return NextResponse.json(safeUser, { status: 200 });
   } catch (error) {
     console.error('Error updating user:', error);
     if (error instanceof z.ZodError) {

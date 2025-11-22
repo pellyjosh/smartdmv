@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNetworkStatus } from './use-network-status';
+import { encryptStringDS, decryptStringDS } from '@/lib/offline/utils/encryption';
 
 // Hook to fetch roles and provide role checking utilities
 export function useRoles(practiceId: number) {
@@ -13,7 +14,7 @@ export function useRoles(practiceId: number) {
         console.log('[useRoles] 🔌 Offline mode detected, loading from cache');
         const cached = localStorage.getItem(`roles_cache_${practiceId}`);
         if (cached) {
-          const cacheData = JSON.parse(cached);
+          const cacheData = JSON.parse(await decryptStringDS(cached));
           return Array.isArray(cacheData) ? cacheData : cacheData.data;
         }
         console.warn('[useRoles] No cache found for offline mode');
@@ -28,7 +29,7 @@ export function useRoles(practiceId: number) {
           const cached = localStorage.getItem(`roles_cache_${practiceId}`);
           if (cached) {
             console.log('[useRoles] API failed, using cached roles data');
-            const cacheData = JSON.parse(cached);
+            const cacheData = JSON.parse(await decryptStringDS(cached));
             return Array.isArray(cacheData) ? cacheData : cacheData.data;
           }
           throw new Error('Failed to fetch roles');
@@ -42,7 +43,8 @@ export function useRoles(practiceId: number) {
             timestamp: Date.now(),
             cachedAt: new Date().toISOString(),
           };
-          localStorage.setItem(`roles_cache_${practiceId}`, JSON.stringify(cacheData));
+          const payload = await encryptStringDS(JSON.stringify(cacheData));
+          localStorage.setItem(`roles_cache_${practiceId}`, payload);
           console.log('[useRoles] ✅ Updated roles cache with fresh data');
         }
         
@@ -52,7 +54,7 @@ export function useRoles(practiceId: number) {
         const cached = localStorage.getItem(`roles_cache_${practiceId}`);
         if (cached) {
           console.log('[useRoles] Network error, using cached roles data');
-          const cacheData = JSON.parse(cached);
+          const cacheData = JSON.parse(await decryptStringDS(cached));
           return Array.isArray(cacheData) ? cacheData : cacheData.data;
         }
         console.error('[useRoles] Failed to fetch roles:', error);

@@ -98,8 +98,8 @@ export async function GET(req: NextRequest) {
         ),
         with: {
           pet: true,
-          client: true,
-          practitioner: true,
+          client: { columns: { id: true, name: true, email: true, role: true } },
+          practitioner: { columns: { id: true, name: true, email: true, role: true } },
         },
         limit: 500, // Limit for pending appointments
       });
@@ -164,7 +164,22 @@ export async function GET(req: NextRequest) {
           eq(users.practiceId, practiceId),
           eq(users.role, 'CLIENT')
         ),
-        // No deletedAt filter - include all users
+        columns: {
+          id: true,
+          name: true,
+          email: true,
+          username: true,
+          role: true,
+          practiceId: true,
+          phone: true,
+          address: true,
+          city: true,
+          state: true,
+          zipCode: true,
+          country: true,
+          createdAt: true,
+          updatedAt: true,
+        },
         limit: 500,
       });
 
@@ -195,7 +210,22 @@ export async function GET(req: NextRequest) {
           eq(users.practiceId, practiceId),
           ne(users.role, 'CLIENT')
         ),
-        // No deletedAt filter - include all users
+        columns: {
+          id: true,
+          name: true,
+          email: true,
+          username: true,
+          role: true,
+          practiceId: true,
+          phone: true,
+          address: true,
+          city: true,
+          state: true,
+          zipCode: true,
+          country: true,
+          createdAt: true,
+          updatedAt: true,
+        },
         limit: 500,
       });
 
@@ -318,6 +348,55 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Pull SOAP notes
+    // Pull ALL SOAP notes for pets in this practice
+    if (entityTypes.includes('soapNotes')) {
+      // First get all pets for this practice
+      const practicePets = await db.query.pets.findMany({
+        where: eq(pets.practiceId, practiceId),
+        select: { id: true },
+      });
+
+      const petIds = practicePets.map((pet: { id: number }) => pet.id);
+
+      // Then get SOAP notes for those pets
+      const changedSoapNotes = await db.query.soapNotes.findMany({
+        where: petIds.length > 0 ? or(...petIds.map((id: number) => eq(soapNotes.petId, id))) : undefined,
+        with: {
+          appointment: true,
+          practitioner: { columns: { id: true, name: true, email: true, role: true } },
+          pet: true,
+          updatedBy: { columns: { id: true, name: true, email: true, role: true } },
+        },
+        limit: 500,
+      });
+
+      console.log(`[SyncPull] Found ${changedSoapNotes.length} SOAP notes for ${petIds.length} practice pets`);
+
+      for (const soapNote of changedSoapNotes) {
+        // Always treat as CREATE - never send delete operations for existing notes
+        result.changes.push({
+          entityType: 'soapNotes',
+          operation: 'create', // Always create, never delete
+          data: {
+            ...soapNote,
+            // Include related data for offline use
+            appointmentTitle: soapNote.appointment?.title || soapNote.appointment?.type || null,
+            appointmentDate: soapNote.appointment?.date?.toISOString() || null,
+            practitionerName: soapNote.practitioner?.name || soapNote.practitioner?.email || 'N/A',
+            petName: soapNote.pet?.name || 'N/A',
+            petSpecies: soapNote.pet?.species || 'N/A',
+            updatedByName: soapNote.updatedBy?.name || soapNote.updatedBy?.email || null,
+            // Practice-scoped metadata for IndexedDB storage
+            tenantId: tenantContext.tenantId,
+            practiceId: practiceId,
+          },
+          id: soapNote.id,
+          updatedAt: (soapNote.updatedAt || soapNote.createdAt).toISOString(),
+        });
+      }
+    }
+
     // Pull vaccinations
     // Pull ACTIVE vaccinations (completed, scheduled - not cancelled or missed)
     if (entityTypes.includes('vaccinations')) {
@@ -332,7 +411,7 @@ export async function GET(req: NextRequest) {
         with: {
           pet: true,
           vaccineType: true,
-          administeringVet: true,
+          administeringVet: { columns: { id: true, name: true, email: true, role: true } },
         },
         limit: 500,
       });
@@ -395,11 +474,11 @@ export async function GET(req: NextRequest) {
                 eq(boardingStays.status, 'checked_in')
               )
             ),
-            with: {
-              pet: true,
-              kennel: true,
-              createdBy: true,
-            },
+        with: {
+          pet: true,
+          kennel: true,
+          createdBy: { columns: { id: true, name: true, email: true, role: true } },
+        },
             limit: 500,
           });
 

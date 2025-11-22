@@ -38,7 +38,22 @@ export async function GET(request: NextRequest) {
     const auditUserContext = await getUserContextFromRequest(request);
 
     if (Number.isFinite(userId as number)) {
-      const userData = await tenantDb.select().from(users).where(eq(users.id, userId as number)).limit(1);
+      const userData = await tenantDb.select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        username: users.username,
+        role: users.role,
+        practiceId: users.practiceId,
+        phone: users.phone,
+        address: users.address,
+        city: users.city,
+        state: users.state,
+        zipCode: users.zipCode,
+        country: users.country,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      }).from(users).where(eq(users.id, userId as number)).limit(1);
       if (userData.length === 0) {
         console.log('User not found for ID:', userId);
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -75,10 +90,26 @@ export async function GET(request: NextRequest) {
             ? await tenantDb.select(selectObj).from(users).where(eq(users.practiceId, practiceId as number))
             : await tenantDb.select(selectObj).from(users);
         } catch (selectErr) {
-          console.error('Failed to apply select projection, falling back to full select. selectParam:', selectParam, 'selectObj:', selectObj, 'error:', selectErr);
+          console.error('Failed to apply select projection, falling back to base projection. selectParam:', selectParam, 'selectObj:', selectObj, 'error:', selectErr);
+          const baseSelect = {
+            id: users.id,
+            name: users.name,
+            email: users.email,
+            username: users.username,
+            role: users.role,
+            practiceId: users.practiceId,
+            phone: users.phone,
+            address: users.address,
+            city: users.city,
+            state: users.state,
+            zipCode: users.zipCode,
+            country: users.country,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          };
           usersData = Number.isFinite(practiceId as number)
-            ? await tenantDb.select().from(users).where(eq(users.practiceId, practiceId as number))
-            : await tenantDb.select().from(users);
+            ? await tenantDb.select(baseSelect).from(users).where(eq(users.practiceId, practiceId as number))
+            : await tenantDb.select(baseSelect).from(users);
         }
       } else {
         usersData = Number.isFinite(practiceId as number)
@@ -86,9 +117,25 @@ export async function GET(request: NextRequest) {
           : await tenantDb.select().from(users);
       }
     } else {
+      const baseSelect = {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        username: users.username,
+        role: users.role,
+        practiceId: users.practiceId,
+        phone: users.phone,
+        address: users.address,
+        city: users.city,
+        state: users.state,
+        zipCode: users.zipCode,
+        country: users.country,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      };
       usersData = Number.isFinite(practiceId as number)
-        ? await tenantDb.select().from(users).where(eq(users.practiceId, practiceId as number))
-        : await tenantDb.select().from(users);
+        ? await tenantDb.select(baseSelect).from(users).where(eq(users.practiceId, practiceId as number))
+        : await tenantDb.select(baseSelect).from(users);
     }
 
   // (Removed automatic audit logging for listing users to avoid noisy logs on page refresh)

@@ -236,7 +236,7 @@ export async function cacheAuthForOffline(
         userId: typeof user.id === 'string' ? parseInt(user.id, 10) : user.id,
         subdomain,
       });
-      setOfflineTenantContext({
+      await setOfflineTenantContext({
         tenantId, // Database ID (e.g., "20")
         practiceId: typeof practiceId === 'string' ? parseInt(practiceId, 10) : practiceId,
         userId: typeof user.id === 'string' ? parseInt(user.id, 10) : user.id,

@@ -807,7 +807,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "FAQ",
-        href: "#",
+        href: "/admin/faq",
         icon: BadgeHelp,
         roles: [
           "ADMINISTRATOR",
@@ -821,7 +821,7 @@ const menuGroups: MenuGroup[] = [
       },
       {
         title: "Support",
-        href: "#",
+        href: "/admin/support",
         icon: Users,
         roles: [
           "ADMINISTRATOR",
@@ -1199,20 +1199,6 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
       ];
     }
 
-    // Debug: Check what user data we have
-    const localStorageData =
-      typeof window !== "undefined"
-        ? localStorage.getItem("offline_session")
-        : null;
-    let parsedLocalStorage = null;
-    try {
-      parsedLocalStorage = localStorageData
-        ? JSON.parse(localStorageData)
-        : null;
-    } catch (e) {
-      parsedLocalStorage = "parse error";
-    }
-
     console.log("[AppSidebar] User check:", {
       hasUser: !!user,
       role: user?.role,
@@ -1222,9 +1208,6 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
         : "not-array",
       isOffline: isOfflineMode,
       userKeys: user ? Object.keys(user) : "no user",
-      localStorageExists: !!localStorageData,
-      localStorageRole: parsedLocalStorage?.role || "no localStorage",
-      localStorageRoles: parsedLocalStorage?.roles || "no localStorage",
     });
 
     // Check if user has ANY valid role (either legacy or assigned roles array)

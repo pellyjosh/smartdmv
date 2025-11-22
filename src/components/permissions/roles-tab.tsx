@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useRoles } from "@/hooks/use-roles";
 import { useNetworkStatus } from "@/hooks/use-network-status";
+import { encryptStringDS, decryptStringDS } from '@/lib/offline/utils/encryption';
 import {
   Search,
   Plus,
@@ -191,7 +192,7 @@ const RolesTab = ({ practiceId, isSuperAdmin }: RolesTabProps) => {
         console.log("[RolesTab] 🔌 Offline mode detected, loading from cache");
         const cached = localStorage.getItem(`roles_cache_${practiceId}`);
         if (cached) {
-          const cacheData = JSON.parse(cached);
+          const cacheData = JSON.parse(await decryptStringDS(cached));
           return Array.isArray(cacheData) ? cacheData : cacheData.data;
         }
         console.warn("[RolesTab] No cache found for offline mode");
@@ -206,7 +207,7 @@ const RolesTab = ({ practiceId, isSuperAdmin }: RolesTabProps) => {
           const cached = localStorage.getItem(`roles_cache_${practiceId}`);
           if (cached) {
             console.log("[RolesTab] API failed, using cached roles data");
-            const cacheData = JSON.parse(cached);
+            const cacheData = JSON.parse(await decryptStringDS(cached));
             return Array.isArray(cacheData) ? cacheData : cacheData.data;
           }
           throw new Error("Failed to fetch roles");
@@ -220,10 +221,8 @@ const RolesTab = ({ practiceId, isSuperAdmin }: RolesTabProps) => {
             timestamp: Date.now(),
             cachedAt: new Date().toISOString(),
           };
-          localStorage.setItem(
-            `roles_cache_${practiceId}`,
-            JSON.stringify(cacheData)
-          );
+          const payload = await encryptStringDS(JSON.stringify(cacheData));
+          localStorage.setItem(`roles_cache_${practiceId}`, payload);
           console.log("[RolesTab] ✅ Updated roles cache with fresh data");
         }
 
@@ -233,7 +232,7 @@ const RolesTab = ({ practiceId, isSuperAdmin }: RolesTabProps) => {
         const cached = localStorage.getItem(`roles_cache_${practiceId}`);
         if (cached) {
           console.log("[RolesTab] Network error, using cached roles data");
-          const cacheData = JSON.parse(cached);
+          const cacheData = JSON.parse(await decryptStringDS(cached));
           return Array.isArray(cacheData) ? cacheData : cacheData.data;
         }
         console.error("[RolesTab] Failed to fetch roles:", error);

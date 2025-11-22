@@ -17,7 +17,7 @@ import { ThemeSwitcherWidget } from "@/components/ThemeSwitcherWidget";
 
 // Error boundary component for tenant validation
 function TenantErrorBoundary({ children }: { children: React.ReactNode }) {
-  const { error, isLoading, initialTenantChecked } = useTenant();
+  const { error, isLoading, initialTenantChecked, tenant } = useTenant();
 
   // Show loading while checking tenant
   if (isLoading && !initialTenantChecked) {
@@ -31,8 +31,15 @@ function TenantErrorBoundary({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Show error page for invalid tenants
-  if (error && initialTenantChecked) {
+  // Check if we're offline and have cached tenant data - allow app to continue
+  const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+  if (isOffline && tenant && initialTenantChecked) {
+    console.log("[TENANT] 🔌 Offline mode with cached tenant data - allowing app to continue");
+    return <>{children}</>;
+  }
+
+  // Show error page for invalid tenants (only when online or no cached data)
+  if (error && initialTenantChecked && !(isOffline && tenant)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center max-w-md mx-auto px-4">

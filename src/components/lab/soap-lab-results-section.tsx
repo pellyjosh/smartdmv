@@ -2,8 +2,9 @@ import { LabResultsList } from "./lab-results-list";
 import { LabResultsSelector } from "./lab-results-selector";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useEffect } from "react";
 
 interface SoapLabResultsSectionProps {
   petId: number;
@@ -18,22 +19,45 @@ export function SoapLabResultsSection({
   section,
   isEditable = true
 }: SoapLabResultsSectionProps) {
-  // Fetch linked lab results for this section
+  const queryClient = useQueryClient();
+
+  // Clear any stale cached queries on mount to ensure fresh data
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ["/api/soap-notes/lab-results"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/lab/results/pet", petId] });
+  }, [queryClient, petId]);
+
+  // Fetch lab results for this pet and filter for linked results from this SOAP note
   const {
-    data: linkedResults,
+    data: labResults,
     isLoading,
     refetch
   } = useQuery({
-    queryKey: ["/api/soap-notes/lab-results", soapNoteId, section],
+    queryKey: ["/api/lab/results/pet", petId],
     queryFn: async () => {
-      const response = await apiRequest(
-        "GET", 
-        `/api/soap-notes/${soapNoteId}/lab-results?section=${section}`
-      );
-      return await response.json();
+      // Only fetch if we have a pet ID
+      if (!petId) return [];
+
+      try {
+        const response = await apiRequest(
+          "GET",
+          `/api/lab/results/pet/${petId}`
+        );
+        return await response.json();
+      } catch (error) {
+        console.warn("Failed to fetch lab results:", error);
+        return [];
+      }
     },
-    enabled: !!soapNoteId && soapNoteId > 0
+    enabled: !!petId && petId > 0
   });
+
+  // Filter for results linked to this specific SOAP note and section
+  const linkedResults = labResults?.filter((result: any) =>
+    result.soapLinks?.some((link: any) =>
+      link.soapNoteId === soapNoteId && link.displaySection === section
+    )
+  );
 
   const handleResultsAdded = () => {
     refetch();

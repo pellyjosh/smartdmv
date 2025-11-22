@@ -50,6 +50,7 @@ const OFFLINE_SUPPORTED_ROUTES = [
   
   // Medical Records
   '/admin/soap-notes',
+  '/admin/soap-notes/create',
   '/admin/patient-timeline',
   '/admin/whiteboard',
   '/admin/checklists',

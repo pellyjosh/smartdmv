@@ -39,9 +39,11 @@ import {
   Monitor,
   Clock,
   AlertTriangle,
+  Database,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import type { Conflict } from "@/lib/offline/types/sync-engine.types";
+import { pullFreshDataIfNeeded } from "@/lib/sync-service";
 
 export function SyncEnginePanel() {
   const {
@@ -112,19 +114,64 @@ export function SyncEnginePanel() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "success":
-        return "text-green-500";
-      case "error":
-        return "text-red-500";
-      case "syncing":
-      case "preparing":
-        return "text-blue-500";
-      case "partial-success":
-        return "text-yellow-500";
-      default:
-        return "text-gray-500";
+  const handlePullFreshData = async () => {
+    try {
+      console.log("[SyncEnginePanel] Pulling fresh data from server...");
+
+      // Get practice context from cached tenant information
+      const { getOfflineTenantContext } = await import('@/lib/offline/core/tenant-context');
+      const context = await getOfflineTenantContext();
+
+      if (!context) {
+        throw new Error('No tenant context available - user may not be logged in');
+      }
+
+      // Always pull data to populate empty databases
+      const result = await fetch(`/api/sync/pull?practiceId=${context.practiceId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!result.ok) {
+        throw new Error(`API call failed: ${result.status} ${result.statusText}`);
+      }
+
+      const data = await result.json();
+      console.log("[SyncEnginePanel] API Response:", data);
+
+      // If successful, also call the sync service function
+      if (data.success && data.changes && data.changes.length > 0) {
+        await pullFreshDataIfNeeded();
+        toast({
+          title: "Data refreshed",
+          description: `Pulled ${data.changes.length} records from server`,
+        });
+      } else {
+        toast({
+          title: "Data refreshed",
+          description: "Checked server - no new data found",
+        });
+      }
+    } catch (error) {
+      console.error("[SyncEnginePanel] Fresh data pull error:", error);
+
+      // Try calling the sync service function anyway as fallback
+      try {
+        await pullFreshDataIfNeeded();
+        toast({
+          title: "Data refreshed",
+          description: "Fallback sync completed",
+        });
+      } catch (fallbackError) {
+        toast({
+          title: "Refresh failed",
+          description:
+            error instanceof Error ? `${error.message}` : "Failed to refresh data",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -214,11 +261,13 @@ export function SyncEnginePanel() {
               )}
             </Button>
             <Button
-              onClick={refreshConflicts}
+              onClick={handlePullFreshData}
               variant="outline"
-              disabled={isSyncing}
+              disabled={isSyncing || isOffline}
+              title="Pull fresh data from server even if no local changes"
             >
-              <RefreshCw className="h-4 w-4" />
+              <Database className="h-4 w-4" />
+              <span className="hidden sm:inline ml-1">Refresh</span>
             </Button>
           </div>
 

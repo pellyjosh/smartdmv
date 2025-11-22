@@ -16,16 +16,32 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 const nodeEnv = process.env.NODE_ENV || 'development';
-const envFile = nodeEnv === 'production' ? '.env.production' : '.env.local';
-const envPath = path.resolve(process.cwd(), envFile);
+const envFiles = [
+  // Try .env.local first
+  '.env.local',
+  // Fall back to .env
+  '.env',
+  // Then .env.production for production
+  ...(nodeEnv === 'production' ? ['.env.production'] : [])
+];
 
-console.log(`[WS] Loading environment from: ${envFile}`);
-dotenv.config({ path: envPath });
+let loadedEnvFile = null;
+for (const envFile of envFiles) {
+  const envPath = path.resolve(process.cwd(), envFile);
+  try {
+    const result = dotenv.config({ path: envPath });
+    if (result.parsed && result.parsed.OWNER_DATABASE_URL) {
+      loadedEnvFile = envFile;
+      console.log(`[WS] ✅ Successfully loaded environment from: ${envFile}`);
+      break;
+    }
+  } catch (error) {
+    console.log(`[WS] ❌ Failed to load ${envFile}:`, error);
+  }
+}
 
-// Fallback to .env if specific env file doesn't exist
-if (nodeEnv === 'production' && !process.env.DATABASE_URL) {
-  console.log(`[WS] Fallback: Loading from .env`);
-  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+if (!loadedEnvFile) {
+  console.error(`[WS] ❌ No valid environment file found. Tried: ${envFiles.join(', ')}`);
 }
 
 import { WebSocketServer } from './server';

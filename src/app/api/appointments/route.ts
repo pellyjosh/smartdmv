@@ -193,7 +193,7 @@ export async function GET(req: Request) {
         where: and(...conditions),
         with: {
           pet: true,
-          practitioner: true,
+          practitioner: { columns: { id: true, name: true, email: true, role: true } },
           practice: true,
         },
         orderBy: (appointments, { asc }) => [asc(appointments.date)],
@@ -248,7 +248,7 @@ export async function GET(req: Request) {
       where: and(...conditions),
       with: {
         pet: true,
-        practitioner: true,
+        practitioner: { columns: { id: true, name: true, email: true, role: true } },
         practice: true,
       },
       orderBy: (appointments, { desc }) => [desc(appointments.date)],

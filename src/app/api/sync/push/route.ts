@@ -13,6 +13,7 @@ import {
   pets, 
   users,
   soapNotes,
+  soapTemplates,
   vaccinations,
   admissions,
   kennels,
@@ -70,8 +71,8 @@ interface PushResult {
 /**
  * Entity table mapping
  */
-function getEntityTable(entityType: string) {
-  const tables: Record<string, any> = {
+  function getEntityTable(entityType: string) {
+    const tables: Record<string, any> = {
     appointment: appointments,
     appointments: appointments,
     pet: pets,
@@ -80,19 +81,21 @@ function getEntityTable(entityType: string) {
     clients: users,
     user: users,
     users: users,
-    soapNote: soapNotes,
-    soapNotes: soapNotes,
-    vaccination: vaccinations,
-    vaccinations: vaccinations,
-    admission: admissions,
-    admissions: admissions,
-    kennel: kennels,
-    kennels: kennels,
-    boarding_stay: boardingStays,
-    boarding_stays: boardingStays,
-  };
-  return tables[entityType];
-}
+      soapNote: soapNotes,
+      soapNotes: soapNotes,
+      soapTemplate: soapTemplates,
+      soapTemplates: soapTemplates,
+      vaccination: vaccinations,
+      vaccinations: vaccinations,
+      admission: admissions,
+      admissions: admissions,
+      kennel: kennels,
+      kennels: kennels,
+      boarding_stay: boardingStays,
+      boarding_stays: boardingStays,
+    };
+    return tables[entityType];
+  }
 
 /**
  * POST /api/sync/push
@@ -327,6 +330,7 @@ export async function POST(req: NextRequest) {
                                  op.entityType === 'pet' ? 'pets' :
                                  op.entityType === 'client' ? 'users' :
                                  op.entityType === 'soapNote' ? 'soapNotes' :
+                                 op.entityType === 'soapTemplate' ? 'soapTemplates' :
                                  op.entityType;
             
             // Check for existing record

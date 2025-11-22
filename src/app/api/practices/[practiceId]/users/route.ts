@@ -30,7 +30,22 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     // Get all users for this practice - simplified query without complex relationships
     const practiceUsers = await tenantDb.query.users.findMany({
-      where: eq(users.practiceId, parseInt(practiceId, 10))
+      where: eq(users.practiceId, parseInt(practiceId, 10)),
+      columns: {
+        id: true,
+        name: true,
+        username: true,
+        email: true,
+        phone: true,
+        address: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        country: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+      }
     });
 
     // Transform the data to match expected format

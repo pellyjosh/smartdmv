@@ -26,6 +26,7 @@ import {
   Settings,
   UserCog,
 } from "lucide-react";
+import { encryptStringDS, decryptStringDS } from '@/lib/offline/utils/encryption';
 import Link from "next/link";
 import {
   Select,
@@ -145,7 +146,8 @@ export function AppHeader({}: AppHeaderProps) {
               timestamp: Date.now(),
               cachedAt: new Date().toISOString(),
             };
-            localStorage.setItem("practices_cache", JSON.stringify(cacheData));
+            const payload = await encryptStringDS(JSON.stringify(cacheData));
+            localStorage.setItem("practices_cache", payload);
             console.log(
               "[AppHeader] ✅ Updated practices cache with fresh data"
             );
@@ -156,7 +158,7 @@ export function AppHeader({}: AppHeaderProps) {
           const cached = localStorage.getItem("practices_cache");
           if (cached) {
             console.log("[AppHeader] API failed, using cached practices data");
-            const cacheData = JSON.parse(cached);
+            const cacheData = JSON.parse(await decryptStringDS(cached));
             // Handle both old format (direct array) and new format (with metadata)
             setPractices(Array.isArray(cacheData) ? cacheData : cacheData.data);
           }
@@ -167,7 +169,7 @@ export function AppHeader({}: AppHeaderProps) {
         const cached = localStorage.getItem("practices_cache");
         if (cached) {
           console.log("[AppHeader] Network error, using cached practices data");
-          const cacheData = JSON.parse(cached);
+          const cacheData = JSON.parse(await decryptStringDS(cached));
           // Handle both old format (direct array) and new format (with metadata)
           setPractices(Array.isArray(cacheData) ? cacheData : cacheData.data);
         }

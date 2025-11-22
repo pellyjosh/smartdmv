@@ -61,7 +61,7 @@ class StorageManager {
         // Set tenant context for offline operations
         if (practiceId !== undefined && !isNaN(practiceId) && userId) {
           console.log('[StorageManager] 📝 Setting offline tenant context');
-          setOfflineTenantContext({
+          await setOfflineTenantContext({
             tenantId,
             practiceId,
             userId,
@@ -169,7 +169,7 @@ class StorageManager {
 
     // Count entities by type
     const entityCounts: any = {};
-      const entityTypes = ['pets', 'appointments', 'clients', 'practitioners', 'soapNotes', 'rooms', 'admissions', 'vaccinations', 'vaccine_types', 'kennels', 'boarding_stays'];
+      const entityTypes = ['pets', 'appointments', 'clients', 'practitioners', 'soapNotes', 'soapTemplates', 'rooms', 'admissions', 'vaccinations', 'vaccine_types', 'kennels', 'boarding_stays'];
     
     for (const entityType of entityTypes) {
       try {
@@ -233,7 +233,7 @@ class StorageManager {
       throw new Error('No tenant context available');
     }
 
-      const entityTypes = ['pets', 'appointments', 'clients', 'soapNotes', 'rooms', 'admissions', 'vaccinations', 'vaccine_types', 'kennels', 'boarding_stays'];
+      const entityTypes = ['pets', 'appointments', 'clients', 'soapNotes', 'soapTemplates', 'rooms', 'admissions', 'vaccinations', 'vaccine_types', 'kennels', 'boarding_stays'];
     const data: any = {
       tenant: context.tenantId,
       exportedAt: Date.now(),

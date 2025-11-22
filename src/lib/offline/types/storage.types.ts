@@ -9,6 +9,7 @@ export type EntityType =
   | 'appointments'
   | 'clients'
   | 'soapNotes'
+  | 'soapTemplates'
   | 'prescriptions'
   | 'labResults'
   | 'medicalRecords'

@@ -56,6 +56,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { deriveKey, decryptObject } from '@/lib/offline/utils/encryption';
+import { getOfflineTenantContext } from '@/lib/offline/core/tenant-context';
 
 interface StorageRecord {
   store: string;
@@ -66,7 +68,7 @@ interface StorageRecord {
 
 export function StorageManager() {
   const { toast } = useToast();
-  const [selectedStore, setSelectedStore] = useState<string>("all");
+  const [selectedStore, setSelectedStore] = useState<string>(STORES.CLIENTS);
   const [records, setRecords] = useState<StorageRecord[]>([]);
   const [filteredRecords, setFilteredRecords] = useState<StorageRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -79,12 +81,12 @@ export function StorageManager() {
   const [recordToView, setRecordToView] = useState<StorageRecord | null>(null);
 
   const stores = [
-    { value: "all", label: "All Entities" },
     { value: STORES.APPOINTMENTS, label: "appointments" },
     { value: STORES.PETS, label: "pets" },
     { value: STORES.CLIENTS, label: "Clients" },
     { value: STORES.PRACTITIONERS, label: "Practitioners" },
     { value: STORES.SOAP_NOTES, label: "SOAP Notes" },
+    { value: STORES.SOAP_TEMPLATES, label: "SOAP Templates" },
     { value: STORES.ROOMS, label: "Admission Rooms" },
     { value: STORES.ADMISSIONS, label: "Pet Admissions" },
     { value: STORES.VACCINATIONS, label: "Vaccinations" },
@@ -116,6 +118,13 @@ export function StorageManager() {
         return;
       }
 
+      const ctx = await getOfflineTenantContext();
+      if (!ctx) {
+        throw new Error('No offline tenant context');
+      }
+      const key = await deriveKey(ctx.tenantId, ctx.practiceId);
+      const aadPrefix = `${ctx.tenantId}|${ctx.practiceId}|`;
+
       console.log("[StorageManager] Loading with tenantId:", tenantId);
       const db = await indexedDBManager.initialize(tenantId);
 
@@ -135,6 +144,7 @@ export function StorageManager() {
         STORES.CLIENTS, // 'clients'
         STORES.PRACTITIONERS, // 'practitioners'
         STORES.SOAP_NOTES, // 'soapNotes'
+        STORES.SOAP_TEMPLATES, // 'soapTemplates'
         STORES.ROOMS, // 'rooms'
         STORES.ADMISSIONS, // 'admissions'
         STORES.VACCINATIONS, // 'vaccinations'
@@ -163,16 +173,26 @@ export function StorageManager() {
 
       console.log("[StorageManager] 📋 Found entity stores:", entityStores);
 
-      const storesToLoad =
-        selectedStore === "all"
-          ? entityStores
-          : entityStores.filter(
-              (name) =>
-                name.endsWith(`_${selectedStore}`) || name === selectedStore
-            );
+      const storesToLoad = entityStores.filter(
+        (name) => name.endsWith(`_${selectedStore}`) || name === selectedStore
+      );
 
       console.log("[StorageManager] 🎯 Stores to load:", storesToLoad);
 
+      const getEntityType = (name: string) => {
+        const parts = name.split('_');
+        return parts.length >= 2 ? parts.slice(parts.length - 1)[0] : name;
+      };
+      const toTs = (val: any): number | undefined => {
+        if (!val) return undefined;
+        if (typeof val === 'number') return val;
+        const t = new Date(val).getTime();
+        return isNaN(t) ? undefined : t;
+      };
+      const fmtTs = (ts?: number): string | undefined => {
+        if (!ts) return undefined;
+        try { return new Date(ts).toLocaleString(); } catch { return undefined; }
+      };
       for (const storeName of storesToLoad) {
         console.log(`[StorageManager] Loading from store: "${storeName}"`);
 
@@ -199,15 +219,49 @@ export function StorageManager() {
             };
           });
 
-          storeRecords.forEach((data) => {
-            const jsonString = JSON.stringify(data);
+          const entityType = getEntityType(storeName);
+          for (const rec of storeRecords) {
+            const id = rec.id || rec.key || 'unknown';
+            const jsonString = JSON.stringify(rec);
+            let decrypted: any = rec;
+            if (rec && rec.data && rec.data.ct) {
+              const aad = new TextEncoder().encode(`${aadPrefix}${entityType}|${id}`);
+              decrypted = await decryptObject<any>(rec.data, key, aad);
+            } else if (rec && rec.data) {
+              decrypted = rec.data;
+            }
+            const flatten = (obj: any, prefix = ''): Record<string, any> => {
+              const out: Record<string, any> = {};
+              for (const k of Object.keys(obj || {})) {
+                const val = obj[k];
+                const path = prefix ? `${prefix}.${k}` : k;
+                if (val !== null && typeof val === 'object') {
+                  if (Array.isArray(val)) {
+                    out[path] = JSON.stringify(val);
+                  } else {
+                    const nested = flatten(val, path);
+                    Object.assign(out, nested);
+                  }
+                } else {
+                  out[path] = val;
+                }
+              }
+              return out;
+            };
+            const flat = flatten(decrypted);
+            const updatedTs = toTs(decrypted?.updatedAt || decrypted?.updated_at || rec?.metadata?.lastModified);
+            const createdTs = toTs(decrypted?.createdAt || decrypted?.created_at || rec?.metadata?.createdAt);
             allRecords.push({
               store: storeName,
-              id: data.id || data.key || "unknown",
-              data,
+              id,
+              data: flat,
               size: new Blob([jsonString]).size,
+              updatedAtTs: updatedTs as any,
+              createdAtTs: createdTs,
+              updatedAtDisplay: fmtTs(updatedTs),
+              createdAtDisplay: fmtTs(createdTs),
             });
-          });
+          }
         } catch (error) {
           console.error(
             `[StorageManager] Error loading from store "${storeName}":`,
@@ -220,27 +274,10 @@ export function StorageManager() {
         `[StorageManager] 📊 Loaded ${allRecords.length} total records from ${storesToLoad.length} stores`
       );
 
-      // Sort records by updatedAt in descending order (most recent first)
       const sortedRecords = allRecords.sort((a, b) => {
-        const aUpdatedAt =
-          a.data?.updatedAt ||
-          a.data?.updated_at ||
-          a.data?.createdAt ||
-          a.data?.created_at;
-        const bUpdatedAt =
-          b.data?.updatedAt ||
-          b.data?.updated_at ||
-          b.data?.createdAt ||
-          b.data?.created_at;
-
-        if (!aUpdatedAt && !bUpdatedAt) return 0;
-        if (!aUpdatedAt) return 1;
-        if (!bUpdatedAt) return -1;
-
-        const aTime = new Date(aUpdatedAt).getTime();
-        const bTime = new Date(bUpdatedAt).getTime();
-
-        return bTime - aTime; // Descending order (most recent first)
+        const aTs = a.updatedAtTs ?? a.createdAtTs ?? 0;
+        const bTs = b.updatedAtTs ?? b.createdAtTs ?? 0;
+        return bTs - aTs;
       });
 
       setRecords(sortedRecords);
@@ -332,6 +369,7 @@ export function StorageManager() {
         STORES.CLIENTS,
         STORES.PRACTITIONERS,
         STORES.SOAP_NOTES,
+        STORES.SOAP_TEMPLATES,
         STORES.KENNELS,
       ];
 
@@ -460,6 +498,7 @@ export function StorageManager() {
       [STORES.CLIENTS]: "outline",
       [STORES.PRACTITIONERS]: "outline",
       [STORES.SOAP_NOTES]: "secondary",
+      [STORES.SOAP_TEMPLATES]: "outline",
       [STORES.KENNELS]: "secondary",
       [STORES.BOARDING_STAYS]: "default",
     };
@@ -567,14 +606,47 @@ export function StorageManager() {
               <p>No records found</p>
             </div>
           ) : (
-            <ScrollArea className="h-[500px] rounded-md border">
-              <Table>
-                <TableHeader>
+            <div className="h-[500px] rounded-md border overflow-auto">
+              <Table className="min-w-[1200px]">
+                  <TableHeader>
                   <TableRow>
                     <TableHead>ID</TableHead>
                     <TableHead>Store</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Size</TableHead>
+                    <TableHead>Updated</TableHead>
+                    <TableHead>Created</TableHead>
+                    {(() => {
+                      const freq: Record<string, number> = {};
+                      const isDisallowedKey = (k: string) => {
+                        const last = k.split('.').pop()?.toLowerCase() || '';
+                        return (
+                          last === 'practiceid' ||
+                          last === 'tenantid' ||
+                          last === 'isactive' ||
+                          last === 'name' ||
+                          last === 'updatedat' ||
+                          last === 'updated_at' ||
+                          last === 'createdat' ||
+                          last === 'created_at' ||
+                          last === 'lastmodified'
+                        );
+                      };
+                      filteredRecords.forEach((r) => {
+                        Object.keys(r.data || {}).forEach((k) => {
+                          if (!isDisallowedKey(k)) {
+                            freq[k] = (freq[k] || 0) + 1;
+                          }
+                        });
+                      });
+                      const keys = Object.keys(freq)
+                        .filter((k) => k !== 'id')
+                        .sort((a, b) => freq[b] - freq[a])
+                        .slice(0, 4);
+                      return keys.map((k) => (
+                        <TableHead key={`head-${k}`}>{k}</TableHead>
+                      ));
+                    })()}
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -594,6 +666,45 @@ export function StorageManager() {
                       <TableCell className="text-muted-foreground">
                         {formatSize(record.size)}
                       </TableCell>
+                      <TableCell className="text-muted-foreground text-xs">
+                        {(record as any).updatedAtDisplay || ''}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-xs">
+{(record as any).createdAtDisplay || ''}
+                      </TableCell>
+                      {(() => {
+                        const freq: Record<string, number> = {};
+                        const isDisallowedKey = (k: string) => {
+                          const last = k.split('.').pop()?.toLowerCase() || '';
+                          return (
+                            last === 'practiceid' ||
+                            last === 'tenantid' ||
+                            last === 'isactive' ||
+                            last === 'name' ||
+                            last === 'updatedat' ||
+                            last === 'updated_at' ||
+                            last === 'createdat' ||
+                            last === 'created_at' ||
+                            last === 'lastmodified'
+                          );
+                        };
+                        filteredRecords.forEach((r) => {
+                          Object.keys(r.data || {}).forEach((k) => {
+                            if (!isDisallowedKey(k)) {
+                              freq[k] = (freq[k] || 0) + 1;
+                            }
+                          });
+                        });
+                        const keys = Object.keys(freq)
+                          .filter((k) => k !== 'id')
+                          .sort((a, b) => freq[b] - freq[a])
+                          .slice(0, 4);
+                        return keys.map((k) => (
+                          <TableCell key={`cell-${record.id}-${k}`} className="text-xs">
+                            {record.data && record.data[k] !== undefined ? String(record.data[k]) : ''}
+                          </TableCell>
+                        ));
+                      })()}
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Button
@@ -622,7 +733,7 @@ export function StorageManager() {
                   ))}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
           )}
         </div>
       </CardContent>

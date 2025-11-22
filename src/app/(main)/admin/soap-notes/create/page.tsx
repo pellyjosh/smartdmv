@@ -7,6 +7,14 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useUser } from "@/context/UserContext";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  useOfflineSoapNotes,
+  type SoapNote,
+} from "@/hooks/offline/soap-notes/use-offline-soap-notes";
+import { useOfflineSoapTemplates } from "@/hooks/offline/soap-templates/use-offline-soap-templates";
+import { useOfflinePets } from "@/hooks/offline/clients_pets/use-offline-pets";
+import { useOfflineAppointments } from "@/hooks/offline/appointments/use-offline-appointments";
+import { useNetworkStatus } from "@/hooks/use-network-status";
+import {
   UserRole,
   type SOAPNote,
   type SOAPTemplate,
@@ -62,6 +70,7 @@ import {
   BookTemplate,
   CheckCircle,
   NotebookPen,
+  WifiOff,
 } from "lucide-react";
 import {
   MultiSelect,
@@ -273,17 +282,44 @@ const SOAPNoteCreatePage: React.FC = () => {
   const [petSelectorOpen, setPetSelectorOpen] = useState(false);
   const [appointmentSelectorOpen, setAppointmentSelectorOpen] = useState(false);
 
+  // Offline hooks
+  const { isOnline } = useNetworkStatus();
+  const offlineSoapNotes = useOfflineSoapNotes();
+  const offlineSoapTemplates = useOfflineSoapTemplates();
+  const offlinePets = useOfflinePets();
+  const offlineAppointments = useOfflineAppointments();
+
   // Check if we're in edit mode
   const editId = searchParams.get("editId");
   const isEditMode = !!editId;
 
-  // Fetch existing SOAP note if in edit mode
+  // Fetch existing SOAP note if in edit mode (with offline fallback)
   const { data: existingNote, isLoading: isLoadingExistingNote } = useQuery({
     queryKey: ["/api/soap-notes", editId],
     queryFn: async () => {
       if (!editId) return null;
-      const response = await apiRequest("GET", `/api/soap-notes/${editId}`);
-      return response.json();
+      // Prefer IndexedDB data first regardless of network status
+      try {
+        const offlineNote = await offlineSoapNotes.getSoapNote(Number(editId));
+        if (offlineNote) {
+          return offlineNote;
+        }
+      } catch (e) {
+        console.warn(
+          "Offline SOAP note lookup failed, will attempt server fetch:",
+          e
+        );
+      }
+
+      // Fallback to server when not found locally
+      try {
+        const response = await apiRequest("GET", `/api/soap-notes/${editId}`);
+        return response.json();
+      } catch (err) {
+        console.error("Server fetch failed for existing SOAP note:", err);
+        // Final fallback: return null so page can still render
+        return null;
+      }
     },
     enabled: !!editId,
   });
@@ -561,15 +597,37 @@ const SOAPNoteCreatePage: React.FC = () => {
 
   const tabValidationStatus = getTabValidationStatus();
 
-  // Fetch appointments for dropdown (using special SOAP endpoint to bypass client-only restrictions)
+  // Fetch appointments for dropdown (using offline fallback)
   const { data: appointments, isLoading: isLoadingAppointments } = useQuery({
     queryKey: ["/api/soap/appointments"],
     queryFn: async () => {
-      const response = await apiRequest(
-        "GET",
-        "/api/soap/appointments?status=active"
-      );
-      return response.json();
+      if (!isOnline) {
+        // Use offline appointments data
+        const activeAppointments = offlineAppointments.appointments.filter(
+          (appointment) =>
+            appointment.status === "active" || !appointment.status
+        );
+        return activeAppointments;
+      }
+
+      try {
+        const response = await apiRequest(
+          "GET",
+          "/api/soap/appointments?status=active"
+        );
+        return response.json();
+      } catch (error) {
+        console.warn(
+          "Failed to fetch appointments from server, using offline data:",
+          error
+        );
+        // Fallback to offline data on error
+        const activeAppointments = offlineAppointments.appointments.filter(
+          (appointment) =>
+            appointment.status === "active" || !appointment.status
+        );
+        return activeAppointments;
+      }
     },
   });
 
@@ -577,15 +635,33 @@ const SOAPNoteCreatePage: React.FC = () => {
   const { data: pets, isLoading: isLoadingPets } = useQuery({
     queryKey: ["/api/pets", userPracticeId],
     queryFn: async () => {
+      if (!isOnline && offlinePets.pets.length > 0) {
+        // Use offline pets data
+        return offlinePets.pets.filter(
+          (pet) => pet.practiceId === Number(userPracticeId) || !pet.practiceId
+        );
+      }
+
       if (!userPracticeId) {
         throw new Error("Practice ID not available");
       }
 
-      const response = await apiRequest(
-        "GET",
-        `/api/pets?practiceId=${userPracticeId}`
-      );
-      return response.json();
+      try {
+        const response = await apiRequest(
+          "GET",
+          `/api/pets?practiceId=${userPracticeId}`
+        );
+        return response.json();
+      } catch (error) {
+        console.warn(
+          "Failed to fetch pets from server, using offline data:",
+          error
+        );
+        // Fallback to offline data on error
+        return offlinePets.pets.filter(
+          (pet) => pet.practiceId === Number(userPracticeId) || !pet.practiceId
+        );
+      }
     },
     enabled: !!userPracticeId,
   });
@@ -593,7 +669,7 @@ const SOAPNoteCreatePage: React.FC = () => {
   // Watch for selected pet to fetch its appointments
   const selectedPetId = form.watch("petId");
 
-  // Fetch appointments for the selected pet
+  // Fetch appointments for the selected pet (using offline fallback)
   const { data: petAppointments, isLoading: isLoadingPetAppointments } =
     useQuery({
       queryKey: ["/api/soap/appointments", selectedPetId],
@@ -602,31 +678,81 @@ const SOAPNoteCreatePage: React.FC = () => {
           return [];
         }
 
-        console.log("Fetching appointments for petId:", selectedPetId);
-        const response = await apiRequest(
-          "GET",
-          `/api/soap/appointments?status=active&petId=${selectedPetId}`
-        );
-        const appointments = await response.json();
-        console.log("Filtered appointments from server:", appointments);
-        return appointments;
+        if (!isOnline) {
+          // Use offline appointments data filtered by pet ID and active status
+          return offlineAppointments.appointments.filter(
+            (appointment) =>
+              appointment.petId === Number(selectedPetId) &&
+              appointment.status === "active"
+          );
+        }
+
+        try {
+          console.log("Fetching appointments for petId:", selectedPetId);
+          const response = await apiRequest(
+            "GET",
+            `/api/soap/appointments?status=active&petId=${selectedPetId}`
+          );
+          const appointments = await response.json();
+          console.log("Filtered appointments from server:", appointments);
+          return appointments;
+        } catch (error) {
+          console.warn(
+            "Failed to fetch pet appointments from server, using offline data:",
+            error
+          );
+          // Fallback to offline data on error
+          return offlineAppointments.appointments.filter(
+            (appointment) =>
+              appointment.petId === Number(selectedPetId) &&
+              appointment.status === "active"
+          );
+        }
       },
       enabled: !!selectedPetId,
     });
 
-  // Fetch SOAP templates for template selection
+  // Fetch SOAP templates for template selection (using offline fallback)
   const { data: templates, isLoading: isLoadingTemplates } = useQuery({
     queryKey: ["/api/soap-templates", userPracticeId],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (userPracticeId) {
-        params.append("practiceId", userPracticeId);
+      if (!isOnline) {
+        // Use offline templates data filtered by practice ID if available
+        const practiceTemplates = (
+          offlineSoapTemplates.soapTemplates || []
+        ).filter(
+          (template: any) =>
+            template.practiceId === Number(userPracticeId) ||
+            !template.practiceId
+        );
+        return practiceTemplates;
       }
-      const url = `/api/soap-templates${
-        params.toString() ? "?" + params.toString() : ""
-      }`;
-      const response = await apiRequest("GET", url);
-      return response.json();
+
+      try {
+        const params = new URLSearchParams();
+        if (userPracticeId) {
+          params.append("practiceId", userPracticeId);
+        }
+        const url = `/api/soap-templates${
+          params.toString() ? "?" + params.toString() : ""
+        }`;
+        const response = await apiRequest("GET", url);
+        return response.json();
+      } catch (error) {
+        console.warn(
+          "Failed to fetch templates from server, using offline data:",
+          error
+        );
+        // Fallback to offline data on error
+        const practiceTemplates = (
+          offlineSoapTemplates.soapTemplates || []
+        ).filter(
+          (template: any) =>
+            template.practiceId === Number(userPracticeId) ||
+            !template.practiceId
+        );
+        return practiceTemplates;
+      }
     },
   });
 
@@ -858,6 +984,15 @@ const SOAPNoteCreatePage: React.FC = () => {
         plan_template: formValues.plan || "",
       };
 
+      if (!isOnline) {
+        const saved = await offlineSoapTemplates.createTemplate({
+          ...requestData,
+          practiceId: Number(userPracticeId || 0),
+          createdById: Number(user?.id || 0),
+        } as any);
+        return saved;
+      }
+
       const res = await apiRequest("POST", "/api/soap-templates", requestData);
       return await res.json();
     },
@@ -869,6 +1004,7 @@ const SOAPNoteCreatePage: React.FC = () => {
 
       // Refresh the templates list
       queryClient.invalidateQueries({ queryKey: ["/api/soap-templates"] });
+      offlineSoapTemplates.refresh();
 
       // Close the dialog
       setShowSaveAsTemplateDialog(false);
@@ -979,33 +1115,111 @@ const SOAPNoteCreatePage: React.FC = () => {
 
     // Basic validation - files are handled by the FileUpload component
 
-    mutation.mutate(data);
-  };
+    // Offline: create or update in IndexedDB and queue sync
+    if (!isOnline) {
+      try {
+        const payload: Omit<SoapNote, "id"> = {
+          appointmentId: data.appointmentId ? Number(data.appointmentId) : null,
+          petId: Number(data.petId),
+          practitionerId: Number(data.practitionerId),
+          subjective: String(data.subjective || ""),
+          objective: String(data.objective || ""),
+          assessment: String(data.assessment || ""),
+          plan: String(data.plan || ""),
+          chiefComplaint: Array.isArray(data.chiefComplaint)
+            ? data.chiefComplaint
+            : [],
+          patientHistory: String(data.patientHistory || ""),
+          symptoms: String(data.symptoms || ""),
+          duration: String(data.duration || ""),
+          temperature: String(data.temperature || ""),
+          heartRate: String(data.heartRate || ""),
+          respiratoryRate: String(data.respiratoryRate || ""),
+          weight: String(data.weight || ""),
+          bloodPressure: String(data.bloodPressure || ""),
+          oxygenSaturation: String(data.oxygenSaturation || ""),
+          generalAppearance: String(data.generalAppearance || ""),
+          hydration: String(data.hydration || ""),
+          heartSounds: String(data.heartSounds || ""),
+          cardiovascularNotes: String(data.cardiovascularNotes || ""),
+          lungSounds: String(data.lungSounds || ""),
+          respiratoryEffort: String(data.respiratoryEffort || ""),
+          respiratoryNotes: String(data.respiratoryNotes || ""),
+          abdomenPalpation: String(data.abdomenPalpation || ""),
+          bowelSounds: String(data.bowelSounds || ""),
+          gastrointestinalNotes: String(data.gastrointestinalNotes || ""),
+          gait: String(data.gait || ""),
+          jointStatus: String(data.jointStatus || ""),
+          musculoskeletalNotes: String(data.musculoskeletalNotes || ""),
+          mentalStatus: String(data.mentalStatus || ""),
+          reflexes: String(data.reflexes || ""),
+          neurologicalNotes: String(data.neurologicalNotes || ""),
+          skinCondition: String(data.skinCondition || ""),
+          coatCondition: String(data.coatCondition || ""),
+          skinNotes: String(data.skinNotes || ""),
+          primaryDiagnosis: Array.isArray(data.primaryDiagnosis)
+            ? data.primaryDiagnosis
+            : [],
+          differentialDiagnoses: Array.isArray(data.differentialDiagnoses)
+            ? data.differentialDiagnoses
+            : [],
+          progressStatus: String(data.progressStatus || ""),
+          confirmationStatus: String(data.confirmationStatus || ""),
+          progressNotes: String(data.progressNotes || ""),
+          treatment: String(data.treatment || ""),
+          medications: Array.isArray(data.medications) ? data.medications : [],
+          procedures: Array.isArray(data.procedures) ? data.procedures : [],
+          procedureNotes: String(data.procedureNotes || ""),
+          diagnostics: Array.isArray(data.diagnostics) ? data.diagnostics : [],
+          clientEducation: String(data.clientEducation || ""),
+          followUpTimeframe: String(data.followUpTimeframe || ""),
+          followUpReason: String(data.followUpReason || ""),
+        };
 
-  // Handle saving the SOAP note as a template
-  const handleSaveAsTemplate = () => {
-    console.log("handleSaveAsTemplate called, savedNoteId:", savedNoteId);
-    if (!savedNoteId) {
-      toast({
-        title: "Save Required",
-        description:
-          "Please save the SOAP note first before converting to a template",
-        variant: "destructive",
-      });
+        if (isEditMode && editId) {
+          const updated = await offlineSoapNotes.updateSoapNote(
+            Number(editId),
+            payload
+          );
+          toast({
+            title: "Changes saved offline",
+            description: `SOAP Note #${updated.id} will sync later`,
+          });
+          setSavedNoteId(Number(updated.id));
+          setSoapNoteSaved(true);
+        } else {
+          const created = await offlineSoapNotes.createSoapNote(payload);
+          toast({
+            title: "SOAP Note saved offline",
+            description: "The note will sync when you're back online",
+          });
+          if (created.id) {
+            router.push(`/admin/soap-notes/edit/${created.id}`);
+          }
+        }
+      } catch (error: any) {
+        toast({
+          title: "Failed to save offline",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
       return;
     }
-    setShowSaveAsTemplateDialog(true);
-  };
 
-  // This section was previously implemented above with different API endpoint
-  // so we're keeping the implementation above and removing the duplicate
-
-  const handleFileUpload = (files: UploadedFile[]) => {
-    setUploadedFiles((prev) => [...prev, ...files]);
+    mutation.mutate(data);
   };
 
   const removeFile = (index: number) => {
     setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaveAsTemplate = () => {
+    setShowSaveAsTemplateDialog(true);
+  };
+
+  const handleFileUpload = (files: UploadedFile[]) => {
+    setUploadedFiles((prev) => [...prev, ...files]);
   };
 
   const isLoading =
@@ -1059,8 +1273,14 @@ const SOAPNoteCreatePage: React.FC = () => {
           >
             <ChevronLeft className="h-4 w-4 mr-1" /> Back to SOAP Notes
           </Button>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-2xl font-bold mb-6 flex items-center gap-3">
             {isEditMode ? `Edit SOAP Note #${editId}` : "Create New SOAP Note"}
+            {!isOnline && (
+              <Badge variant="secondary" className="gap-1.5">
+                <WifiOff className="h-3 w-3" />
+                Offline Mode
+              </Badge>
+            )}
           </h1>
         </div>
 
@@ -1172,8 +1392,13 @@ const SOAPNoteCreatePage: React.FC = () => {
                         <FormItem>
                           <FormLabel>Pet</FormLabel>
                           <Popover
-                            open={petSelectorOpen}
-                            onOpenChange={setPetSelectorOpen}
+                            open={
+                              !isOnline && isEditMode ? false : petSelectorOpen
+                            }
+                            onOpenChange={(open) => {
+                              if (!isOnline && isEditMode) return;
+                              setPetSelectorOpen(open);
+                            }}
                           >
                             <PopoverTrigger asChild>
                               <FormControl>
@@ -1183,26 +1408,36 @@ const SOAPNoteCreatePage: React.FC = () => {
                                   className={`w-full justify-between ${
                                     !field.value && "text-muted-foreground"
                                   }`}
-                                  disabled={isLoading}
+                                  disabled={
+                                    isLoading || (!isOnline && isEditMode)
+                                  }
                                 >
-                                  {field.value
-                                    ? pets?.find(
-                                        (pet: {
-                                          id: number;
-                                          name: string;
-                                          species: string;
-                                        }) => pet.id === field.value
-                                      )?.name +
-                                      ` (${
-                                        pets?.find(
-                                          (pet: {
-                                            id: number;
-                                            name: string;
-                                            species: string;
-                                          }) => pet.id === field.value
-                                        )?.species
-                                      })`
-                                    : "Select a pet"}
+                                  {(() => {
+                                    if (!field.value) return "Select a pet";
+                                    const petFromList = pets?.find(
+                                      (pet: {
+                                        id: number;
+                                        name: string;
+                                        species: string;
+                                      }) => pet.id === field.value
+                                    );
+                                    if (petFromList)
+                                      return `${petFromList.name} (${petFromList.species})`;
+                                    if (
+                                      existingNote &&
+                                      existingNote.petId === field.value
+                                    ) {
+                                      const n = existingNote as any;
+                                      const name =
+                                        n.petName || n.pet?.name || "Pet";
+                                      const species =
+                                        n.petSpecies ||
+                                        n.pet?.species ||
+                                        "Unknown";
+                                      return `${name} (${species})`;
+                                    }
+                                    return "Select a pet";
+                                  })()}
                                   <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                               </FormControl>
@@ -1262,8 +1497,15 @@ const SOAPNoteCreatePage: React.FC = () => {
                         <FormItem>
                           <FormLabel>Appointment</FormLabel>
                           <Popover
-                            open={appointmentSelectorOpen}
-                            onOpenChange={setAppointmentSelectorOpen}
+                            open={
+                              !isOnline && isEditMode
+                                ? false
+                                : appointmentSelectorOpen
+                            }
+                            onOpenChange={(open) => {
+                              if (!isOnline && isEditMode) return;
+                              setAppointmentSelectorOpen(open);
+                            }}
                           >
                             <PopoverTrigger asChild>
                               <FormControl>
@@ -1274,7 +1516,11 @@ const SOAPNoteCreatePage: React.FC = () => {
                                     (!field.value || field.value === 0) &&
                                     "text-muted-foreground"
                                   }`}
-                                  disabled={isLoading || !selectedPetId}
+                                  disabled={
+                                    isLoading ||
+                                    !selectedPetId ||
+                                    (!isOnline && isEditMode)
+                                  }
                                 >
                                   {!selectedPetId ? (
                                     "Select a pet first"
@@ -1292,23 +1538,40 @@ const SOAPNoteCreatePage: React.FC = () => {
                                         typeof field.value === "string"
                                           ? parseInt(field.value)
                                           : field.value;
-                                      const appointment = petAppointments.find(
-                                        (appointment: any) =>
-                                          appointment.id === fieldValueNum
+                                      const appt = petAppointments.find(
+                                        (a: any) => a.id === fieldValueNum
                                       );
-                                      if (!appointment)
-                                        return "Select an appointment";
-
-                                      const title =
-                                        appointment.title ||
-                                        appointment.name ||
-                                        appointment.type ||
-                                        `Appointment ${appointment.id}`;
-                                      const dateStr = safeFormatDate(
-                                        appointment.date,
-                                        appointment
-                                      );
-                                      return `${title} (${dateStr})`;
+                                      if (appt) {
+                                        const title =
+                                          appt.title ||
+                                          appt.name ||
+                                          appt.type ||
+                                          `Appointment ${appt.id}`;
+                                        const dateStr = safeFormatDate(
+                                          appt.date,
+                                          appt
+                                        );
+                                        return `${title} (${dateStr})`;
+                                      }
+                                      if (
+                                        existingNote &&
+                                        existingNote.appointmentId ===
+                                          fieldValueNum
+                                      ) {
+                                        const n = existingNote as any;
+                                        const title =
+                                          n.appointmentTitle ||
+                                          n.appointment?.title ||
+                                          n.appointment?.type ||
+                                          `Appointment ${fieldValueNum}`;
+                                        const dateStr = safeFormatDate(
+                                          n.appointmentDate ||
+                                            n.appointment?.date,
+                                          n.appointment
+                                        );
+                                        return `${title} (${dateStr})`;
+                                      }
+                                      return "Select an appointment";
                                     })()
                                   ) : (
                                     "Select an appointment"

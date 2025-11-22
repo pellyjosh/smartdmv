@@ -11,7 +11,7 @@ import type {
   TokenValidation,
   AuthStorageResult,
 } from '../types/auth.types';
-import { obfuscateToken, deobfuscateToken, generateTempId } from '../utils/encryption';
+import { obfuscateToken, deobfuscateToken, generateTempId, encryptStringDS } from '../utils/encryption';
 import { InvalidTokenError, DatabaseError } from '../utils/error-handlers';
 
 /**
@@ -176,7 +176,8 @@ export async function saveSession(session: Omit<OfflineSession, 'id' | 'createdA
         savedAt: Date.now(), // Add timestamp to track when it was saved
       };
       console.log('[saveSession] Saving to localStorage with tenantId:', localStorageData.tenantId, 'subdomain:', localStorageData.subdomain);
-      localStorage.setItem('offline_session', JSON.stringify(localStorageData));
+      const payload = await encryptStringDS(JSON.stringify(localStorageData));
+      localStorage.setItem('offline_session_enc', payload);
       console.log('[saveSession] 💾 Saved to localStorage:', {
         tenantId: localStorageData.tenantId,
         subdomain: localStorageData.subdomain,
@@ -255,7 +256,7 @@ export async function clearAuth(userId?: number, tenantId?: string): Promise<voi
 
     // Clear localStorage
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('offline_session');
+      localStorage.removeItem('offline_session_enc');
     }
   } catch (error) {
     throw new DatabaseError('Failed to clear auth data', error as Error);

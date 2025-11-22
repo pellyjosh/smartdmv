@@ -146,12 +146,16 @@ export function StorageUsage() {
           <div className="space-y-2">
             <h4 className="text-sm font-medium">Stored Entities</h4>
             <div className="grid grid-cols-2 gap-2">
-              {Object.entries(stats.entityCounts).map(([entityType, count]) => (
+              {Object.entries(stats.entityCounts)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([entityType, count]) => (
                 <div
                   key={entityType}
                   className="flex items-center justify-between p-2 bg-muted/50 rounded-md text-sm"
                 >
-                  <span className="capitalize">{entityType}</span>
+                  <span className="capitalize">
+                    {entityType.replace(/([A-Z])/g, ' $1').toLowerCase().replace('soap templates', 'SOAP Templates')}
+                  </span>
                   <Badge variant="secondary">{count as number}</Badge>
                 </div>
               ))}

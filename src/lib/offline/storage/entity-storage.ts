@@ -15,7 +15,7 @@ import type {
   BatchOperationResult,
 } from '../types/storage.types';
 import { validateEntity, validateMetadata, sanitizeData, estimateSize } from '../utils/validation';
-import { generateTempId, isTempId } from '../utils/encryption';
+import { generateTempId, isTempId, deriveKey, encryptObject, decryptObject } from '../utils/encryption';
 import {
   ValidationError,
   EntityNotFoundError,
@@ -116,11 +116,11 @@ export async function saveEntity<T extends { id?: number | string }>(
 
     console.log('[EntityStorage] Generated metadata:', metadata);
 
-    const entity: OfflineEntity<T> = {
-      id: entityId,
-      data: sanitizeData({ ...data, id: entityId }),
-      metadata,
-    };
+    const plaintext = sanitizeData({ ...data, id: entityId });
+    const aad = new TextEncoder().encode(`${context.tenantId}|${context.practiceId}|${normalizeEntityType(entityType)}|${entityId}`);
+    const key = await deriveKey(context.tenantId, context.practiceId);
+    const encBlob = await encryptObject(plaintext, key, aad);
+    const entity: OfflineEntity<any> = { id: entityId, data: encBlob, metadata };
 
     console.log('[EntityStorage] Entity to validate:', JSON.stringify(entity, null, 2));
 
@@ -161,7 +161,8 @@ export async function saveEntity<T extends { id?: number | string }>(
     });
 
     console.log(`[EntityStorage] Saved ${entityType} ${entityId} (${syncStatus})`);
-    return entity;
+    const returned: OfflineEntity<T> = { id: entityId, data: plaintext as T, metadata };
+    return returned;
   } catch (error) {
     console.error('[EntityStorage] Save error:', error);
     console.error('[EntityStorage] Error type:', error?.constructor?.name);
@@ -266,7 +267,10 @@ export async function getEntity<T>(
       throw new TenantMismatchError(context.tenantId, entity.metadata.tenantId);
     }
 
-    return entity.data;
+    const aad = new TextEncoder().encode(`${context.tenantId}|${context.practiceId}|${normalizeEntityType(entityType)}|${entityId}`);
+    const key = await deriveKey(context.tenantId, context.practiceId);
+    const decrypted = await decryptObject<T>(entity.data as any, key, aad);
+    return decrypted;
   } catch (error) {
     if (error instanceof TenantMismatchError) {
       throw error;
@@ -302,7 +306,7 @@ export async function getAllEntities<T>(
     }
     
     // Use verified db connection for getAll
-    let entities = await new Promise<OfflineEntity<T>[]>((resolve, reject) => {
+    let entities = await new Promise<OfflineEntity<any>[]>((resolve, reject) => {
       try {
         const tx = db.transaction(storeName, 'readonly');
         const store = tx.objectStore(storeName);
@@ -317,10 +321,16 @@ export async function getAllEntities<T>(
 
     // Apply filters
     if (query) {
-      entities = applyFilters(entities, query, context.tenantId);
+      entities = applyFilters(entities as any, query, context.tenantId);
     }
-
-    return entities.map((e) => e.data);
+    const key = await deriveKey(context.tenantId, context.practiceId);
+    const results: T[] = [];
+    for (const e of entities) {
+      const aad = new TextEncoder().encode(`${context.tenantId}|${context.practiceId}|${normalizeEntityType(entityType)}|${e.id}`);
+      const dec = await decryptObject<T>(e.data as any, key, aad);
+      results.push(dec);
+    }
+    return results;
   } catch (error) {
     console.error('[EntityStorage] Get all error:', error);
     throw new DatabaseError(`Failed to get all ${entityType}: ${(error as Error).message}`, error as Error);
@@ -413,10 +423,12 @@ export async function updateEntity<T extends { id: number | string }>(
       throw new TenantMismatchError(context.tenantId, existing.metadata.tenantId);
     }
 
-    // Merge updates
-    const updatedData = { ...existing.data, ...updates, id: entityId };
-    
-    existing.data = sanitizeData(updatedData);
+    const key = await deriveKey(context.tenantId, context.practiceId);
+    const aad = new TextEncoder().encode(`${context.tenantId}|${context.practiceId}|${normalizeEntityType(entityType)}|${entityId}`);
+    const existingPlain = await decryptObject<any>(existing.data as any, key, aad);
+    const updatedData = { ...existingPlain, ...updates, id: entityId };
+    const encBlob = await encryptObject(updatedData, key, aad);
+    existing.data = encBlob as any;
     existing.metadata.lastModified = Date.now();
     existing.metadata.syncStatus = syncStatus;
     existing.metadata.version += 1;
@@ -494,10 +506,15 @@ export async function deleteEntity(
       throw new TenantMismatchError(context.tenantId, existing.metadata.tenantId);
     }
 
-    // Mark as deleted (tombstone) instead of hard delete
     existing.metadata.syncStatus = 'pending';
     existing.metadata.lastModified = Date.now();
-    (existing.data as any)._deleted = true;
+    {
+      const key = await deriveKey(context.tenantId, context.practiceId);
+      const aad = new TextEncoder().encode(`${context.tenantId}|${context.practiceId}|${normalizeEntityType(entityType)}|${entityId}`);
+      const plain = await decryptObject<any>(existing.data as any, key, aad);
+      plain._deleted = true;
+      existing.data = await encryptObject(plain, key, aad);
+    }
 
     // Put using verified connection
     await new Promise<void>((resolve, reject) => {
@@ -637,7 +654,7 @@ export async function queryEntities<T = any>(
     }
 
     // Query by index using verified connection
-    const entities = await new Promise<OfflineEntity<T>[]>((resolve, reject) => {
+    const entities = await new Promise<OfflineEntity<any>[]>((resolve, reject) => {
       try {
         const tx = db.transaction(storeName, 'readonly');
         const store = tx.objectStore(storeName);
@@ -651,7 +668,14 @@ export async function queryEntities<T = any>(
       }
     });
 
-    return entities.map((e) => e.data);
+    const key = await deriveKey(context.tenantId, context.practiceId);
+    const results: T[] = [];
+    for (const e of entities) {
+      const aad = new TextEncoder().encode(`${context.tenantId}|${context.practiceId}|${normalizeEntityType(entityType)}|${e.id}`);
+      const dec = await decryptObject<T>(e.data as any, key, aad);
+      results.push(dec);
+    }
+    return results;
   } catch (error) {
     console.error('[EntityStorage] Get by status error:', error);
     throw new DatabaseError(`Failed to get ${entityType} by status: ${(error as Error).message}`, error as Error);

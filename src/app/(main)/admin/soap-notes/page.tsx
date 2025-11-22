@@ -53,9 +53,14 @@ import {
   Eye,
   Image as ImageIcon,
   ChevronDown,
+  WifiOff,
 } from "lucide-react";
 import { PrescriptionForm } from "@/components/prescriptions/prescription-form";
 import { PrescriptionList } from "@/components/prescriptions/prescription-list";
+import { useNetworkStatus } from "@/hooks/use-network-status";
+import { useOfflineSoapTemplates } from "@/hooks/offline/soap-templates/use-offline-soap-templates";
+import { useOfflineSoapNotes } from "@/hooks/offline/soap-notes/use-offline-soap-notes";
+import { useOfflinePets } from "@/hooks/offline/clients_pets/use-offline-pets";
 import { TreatmentList } from "@/components/treatments/treatment-list";
 import { TreatmentForm } from "@/components/treatments/treatment-form";
 import { FileUpload, type UploadedFile } from "@/components/shared/file-upload";
@@ -169,6 +174,10 @@ function SOAPNotesList({
     )
   );
 
+  // Offline hooks
+  const { isOnline } = useNetworkStatus();
+  const offlineSoapNotes = useOfflineSoapNotes();
+
   // Use the petIdOverride or get it from URL if present
   let petId = petIdOverride || undefined;
   if (!petId) {
@@ -245,7 +254,9 @@ function SOAPNotesList({
       const response = await fetch(`/api/users?practiceId=${userPracticeId}`);
       if (!response.ok) {
         // Fallback: try to fetch users without practice filter if endpoint doesn't support it
-        console.warn("Could not fetch practitioners for practice, using fallback approach");
+        console.warn(
+          "Could not fetch practitioners for practice, using fallback approach"
+        );
         return [];
       }
       return response.json();
@@ -268,20 +279,89 @@ function SOAPNotesList({
     if (!allPractitioners) return {};
     const map: Record<string, string> = {};
     allPractitioners.forEach((practitioner: any) => {
-      map[practitioner.id.toString()] = practitioner.name || practitioner.email || `User ${practitioner.id}`;
+      map[practitioner.id.toString()] =
+        practitioner.name || practitioner.email || `User ${practitioner.id}`;
     });
     return map;
   }, [allPractitioners]);
 
-  // Fetch SOAP notes, with optional petId filter and additional filtering
+  // Fetch SOAP notes, with optional petId filter and additional filtering and offline fallback
   const {
     data: notes,
     isLoading,
     error,
     refetch: refetchSoap,
   } = useQuery({
-    queryKey: ["/api/soap-notes"],
+    queryKey: ["/api/soap-notes", petId, filter, user?.id, searchQuery],
     queryFn: async () => {
+      // Check if we're offline - use offline data first
+      if (!isOnline) {
+        try {
+          const offlineNotes = offlineSoapNotes.soapNotes;
+
+          // Apply filters to offline data
+          let filteredNotes = offlineNotes.filter((note) => {
+            // Filter by petId if provided
+            if (petId && Number(note.petId) !== Number(petId)) {
+              return false;
+            }
+
+            // Filter by practitioner if "my-notes" filter is selected
+            if (
+              filter === "my-notes" &&
+              user?.id &&
+              Number(note.practitionerId) !== Number(user.id)
+            ) {
+              return false;
+            }
+
+            // Filter by search query if provided
+            if (searchQuery.trim()) {
+              const query = searchQuery.toLowerCase();
+              const searchableText = [
+                note.subjective,
+                note.objective,
+                note.assessment,
+                note.plan,
+                note.chiefComplaint?.join(" ") || "",
+                note.primaryDiagnosis?.join(" ") || "",
+                note.differentialDiagnoses?.join(" ") || "",
+              ]
+                .join(" ")
+                .toLowerCase();
+
+              if (!searchableText.includes(query)) {
+                return false;
+              }
+            }
+
+            return true;
+          });
+
+          // Apply "recent" filter (last 30 days) if selected
+          if (filter === "recent") {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            filteredNotes = filteredNotes.filter(
+              (note) => new Date(note.createdAt || 0) >= thirtyDaysAgo
+            );
+          }
+
+          console.log(
+            "SOAPNotesList - Using offline SOAP notes:",
+            filteredNotes.length
+          );
+          return filteredNotes;
+        } catch (offlineError) {
+          console.error(
+            "SOAPNotesList - Failed to load offline SOAP notes:",
+            offlineError
+          );
+          throw new Error("Failed to load offline SOAP notes");
+        }
+      }
+
+      // Online mode - fetch from API
       const params = new URLSearchParams();
 
       if (petId) {
@@ -308,7 +388,17 @@ function SOAPNotesList({
       if (!response.ok) {
         throw new Error("Failed to fetch SOAP notes");
       }
-      return response.json();
+      const data = await response.json();
+
+      // Cache the data in offline storage for future offline use
+      try {
+        // This would typically be handled by the API response caching
+        // or a separate sync mechanism, but for now we'll just return the data
+      } catch (cacheError) {
+        console.warn("SOAPNotesList - Failed to cache SOAP notes:", cacheError);
+      }
+
+      return data;
     },
   });
 
@@ -508,11 +598,7 @@ function SOAPNotesList({
                     </CardTitle>
                     <CardDescription className="flex flex-wrap gap-3 mt-1">
                       <span className="flex items-center text-xs text-gray-500">
-                        📅{" "}
-                        {format(
-                          new Date(note.createdAt),
-                          "MMM d, yyyy"
-                        )}
+                        📅 {format(new Date(note.createdAt), "MMM d, yyyy")}
                       </span>
                       <span className="flex items-center text-xs text-gray-500">
                         👨‍⚕️ {`Dr. ${practitionerNameMap[note.practitionerId]}`}
@@ -1013,6 +1099,8 @@ function SOAPNoteDetailsDialog({
   noteId: number;
   practiceId?: string;
 }) {
+  const { isOnline } = useNetworkStatus();
+  const offlineSoapNotes = useOfflineSoapNotes();
   const { toast } = useToast();
   const [isPrescriptionFormOpen, setIsPrescriptionFormOpen] = useState(false);
   const [showTreatmentForm, setShowTreatmentForm] = useState(false);
@@ -1023,7 +1111,7 @@ function SOAPNoteDetailsDialog({
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [attachments, setAttachments] = useState<UploadedFile[]>([]);
 
-  // Fetch the SOAP note with its ID
+  // Fetch the SOAP note with its ID (with offline fallback)
   const {
     data: note,
     isLoading,
@@ -1031,6 +1119,34 @@ function SOAPNoteDetailsDialog({
   } = useQuery<SOAPNote>({
     queryKey: ["/api/soap-notes", noteId],
     queryFn: async () => {
+      // Check if we're offline - use offline data first
+      if (!isOnline) {
+        try {
+          // Use the offline SOAP notes hook
+          const offlineSoapNotes = useOfflineSoapNotes();
+          const offlineNote = await offlineSoapNotes.getSoapNote(
+            Number(noteId)
+          );
+
+          if (offlineNote) {
+            console.log(
+              "SOAPNoteDetailsDialog - Using offline SOAP note:",
+              offlineNote
+            );
+            return offlineNote;
+          }
+
+          throw new Error("SOAP note not found offline");
+        } catch (offlineError) {
+          console.error(
+            "SOAPNoteDetailsDialog - Failed to load offline SOAP note:",
+            offlineError
+          );
+          throw new Error("Failed to load offline SOAP note");
+        }
+      }
+
+      // Online mode - fetch from API
       const response = await fetch(`/api/soap-notes/${noteId}`);
       if (!response.ok) {
         throw new Error("Failed to fetch SOAP note");
@@ -1303,16 +1419,17 @@ function SOAPNoteDetailsDialog({
                         Subjective (S)
                       </h3>
                       <div className="space-y-3 bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg">
-                        {note.chiefComplaint && note.chiefComplaint.length > 0 && (
-                          <div>
-                            <span className="font-medium text-gray-700 dark:text-gray-300">
-                              Chief Complaints:{" "}
-                            </span>
-                            <span className="text-gray-600 dark:text-gray-400">
-                              {note.chiefComplaint.join(", ")}
-                            </span>
-                          </div>
-                        )}
+                        {note.chiefComplaint &&
+                          note.chiefComplaint.length > 0 && (
+                            <div>
+                              <span className="font-medium text-gray-700 dark:text-gray-300">
+                                Chief Complaints:{" "}
+                              </span>
+                              <span className="text-gray-600 dark:text-gray-400">
+                                {note.chiefComplaint.join(", ")}
+                              </span>
+                            </div>
+                          )}
                         {note.patientHistory && (
                           <div>
                             <span className="font-medium text-gray-700 dark:text-gray-300">
@@ -1370,7 +1487,9 @@ function SOAPNoteDetailsDialog({
                             </h4>
                             {note.temperature && (
                               <div className="text-sm">
-                                <span className="font-medium">Temperature:</span>{" "}
+                                <span className="font-medium">
+                                  Temperature:
+                                </span>{" "}
                                 <span className="text-gray-600 dark:text-gray-400">
                                   {note.temperature}°F
                                 </span>
@@ -1386,7 +1505,9 @@ function SOAPNoteDetailsDialog({
                             )}
                             {note.respiratoryRate && (
                               <div className="text-sm">
-                                <span className="font-medium">Respiratory Rate:</span>{" "}
+                                <span className="font-medium">
+                                  Respiratory Rate:
+                                </span>{" "}
                                 <span className="text-gray-600 dark:text-gray-400">
                                   {note.respiratoryRate} RPM
                                 </span>
@@ -1402,7 +1523,9 @@ function SOAPNoteDetailsDialog({
                             )}
                             {note.bloodPressure && (
                               <div className="text-sm">
-                                <span className="font-medium">Blood Pressure:</span>{" "}
+                                <span className="font-medium">
+                                  Blood Pressure:
+                                </span>{" "}
                                 <span className="text-gray-600 dark:text-gray-400">
                                   {note.bloodPressure}
                                 </span>
@@ -1410,7 +1533,9 @@ function SOAPNoteDetailsDialog({
                             )}
                             {note.oxygenSaturation && (
                               <div className="text-sm">
-                                <span className="font-medium">Oxygen Saturation:</span>{" "}
+                                <span className="font-medium">
+                                  Oxygen Saturation:
+                                </span>{" "}
                                 <span className="text-gray-600 dark:text-gray-400">
                                   {note.oxygenSaturation}%
                                 </span>
@@ -1425,7 +1550,9 @@ function SOAPNoteDetailsDialog({
                             </h4>
                             {note.generalAppearance && (
                               <div className="text-sm">
-                                <span className="font-medium">General Appearance:</span>{" "}
+                                <span className="font-medium">
+                                  General Appearance:
+                                </span>{" "}
                                 <span className="text-gray-600 dark:text-gray-400">
                                   {note.generalAppearance}
                                 </span>
@@ -1441,7 +1568,9 @@ function SOAPNoteDetailsDialog({
                             )}
                             {note.heartSounds && (
                               <div className="text-sm">
-                                <span className="font-medium">Heart Sounds:</span>{" "}
+                                <span className="font-medium">
+                                  Heart Sounds:
+                                </span>{" "}
                                 <span className="text-gray-600 dark:text-gray-400">
                                   {note.heartSounds}
                                 </span>
@@ -1449,7 +1578,9 @@ function SOAPNoteDetailsDialog({
                             )}
                             {note.lungSounds && (
                               <div className="text-sm">
-                                <span className="font-medium">Lung Sounds:</span>{" "}
+                                <span className="font-medium">
+                                  Lung Sounds:
+                                </span>{" "}
                                 <span className="text-gray-600 dark:text-gray-400">
                                   {note.lungSounds}
                                 </span>
@@ -1457,7 +1588,9 @@ function SOAPNoteDetailsDialog({
                             )}
                             {note.mentalStatus && (
                               <div className="text-sm">
-                                <span className="font-medium">Mental Status:</span>{" "}
+                                <span className="font-medium">
+                                  Mental Status:
+                                </span>{" "}
                                 <span className="text-gray-600 dark:text-gray-400">
                                   {note.mentalStatus}
                                 </span>
@@ -1473,7 +1606,9 @@ function SOAPNoteDetailsDialog({
                             )}
                             {note.skinCondition && (
                               <div className="text-sm">
-                                <span className="font-medium">Skin Condition:</span>{" "}
+                                <span className="font-medium">
+                                  Skin Condition:
+                                </span>{" "}
                                 <span className="text-gray-600 dark:text-gray-400">
                                   {note.skinCondition}
                                 </span>
@@ -1502,26 +1637,28 @@ function SOAPNoteDetailsDialog({
                         Assessment (A)
                       </h3>
                       <div className="space-y-3 bg-amber-50 dark:bg-amber-950/20 p-4 rounded-lg">
-                        {note.primaryDiagnosis && note.primaryDiagnosis.length > 0 && (
-                          <div>
-                            <span className="font-medium text-gray-700 dark:text-gray-300">
-                              Primary Diagnosis:{" "}
-                            </span>
-                            <span className="text-gray-600 dark:text-gray-400">
-                              {note.primaryDiagnosis.join(", ")}
-                            </span>
-                          </div>
-                        )}
-                        {note.differentialDiagnoses && note.differentialDiagnoses.length > 0 && (
-                          <div>
-                            <span className="font-medium text-gray-700 dark:text-gray-300">
-                              Differential Diagnosis:{" "}
-                            </span>
-                            <span className="text-gray-600 dark:text-gray-400">
-                              {note.differentialDiagnoses.join(", ")}
-                            </span>
-                          </div>
-                        )}
+                        {note.primaryDiagnosis &&
+                          note.primaryDiagnosis.length > 0 && (
+                            <div>
+                              <span className="font-medium text-gray-700 dark:text-gray-300">
+                                Primary Diagnosis:{" "}
+                              </span>
+                              <span className="text-gray-600 dark:text-gray-400">
+                                {note.primaryDiagnosis.join(", ")}
+                              </span>
+                            </div>
+                          )}
+                        {note.differentialDiagnoses &&
+                          note.differentialDiagnoses.length > 0 && (
+                            <div>
+                              <span className="font-medium text-gray-700 dark:text-gray-300">
+                                Differential Diagnosis:{" "}
+                              </span>
+                              <span className="text-gray-600 dark:text-gray-400">
+                                {note.differentialDiagnoses.join(", ")}
+                              </span>
+                            </div>
+                          )}
                         {note.progressStatus && (
                           <div>
                             <span className="font-medium text-gray-700 dark:text-gray-300">
@@ -1576,18 +1713,19 @@ function SOAPNoteDetailsDialog({
                                 </div>
                               </div>
                             )}
-                            {note.diagnostics && note.diagnostics.length > 0 && (
-                              <div className="mt-3">
-                                <span className="font-medium text-gray-700 dark:text-gray-300 text-sm">
-                                  Diagnostics:{" "}
-                                </span>
-                                <div className="text-gray-600 dark:text-gray-400 text-sm mt-1">
-                                  {note.diagnostics.map((diag, idx) => (
-                                    <div key={idx}>• {diag}</div>
-                                  ))}
+                            {note.diagnostics &&
+                              note.diagnostics.length > 0 && (
+                                <div className="mt-3">
+                                  <span className="font-medium text-gray-700 dark:text-gray-300 text-sm">
+                                    Diagnostics:{" "}
+                                  </span>
+                                  <div className="text-gray-600 dark:text-gray-400 text-sm mt-1">
+                                    {note.diagnostics.map((diag, idx) => (
+                                      <div key={idx}>• {diag}</div>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              )}
                           </div>
 
                           <div className="space-y-2">
@@ -1813,6 +1951,9 @@ export function SOAPNoteForm({
 }) {
   const { toast } = useToast();
   const { user, userPracticeId } = useUser();
+  const { isOnline } = useNetworkStatus();
+  const offlinePets = useOfflinePets();
+  const offlineSoapNotes = useOfflineSoapNotes();
   const [searchParams] = useState(() => {
     if (typeof window !== "undefined") {
       return new URLSearchParams(window.location.search);
@@ -1825,12 +1966,19 @@ export function SOAPNoteForm({
   const { data: pets, isLoading: petsLoading } = useQuery({
     queryKey: ["/api/pets", "list", userPracticeId],
     queryFn: async () => {
+      if (!isOnline && offlinePets.pets.length > 0) {
+        return offlinePets.pets.filter(
+          (pet) => pet.practiceId === Number(userPracticeId) || !pet.practiceId
+        );
+      }
       if (!userPracticeId) {
         throw new Error("Practice ID is required");
       }
       const response = await fetch(`/api/pets?practiceId=${userPracticeId}`);
       if (!response.ok) {
-        throw new Error("Failed to fetch pets");
+        return offlinePets.pets.filter(
+          (pet) => pet.practiceId === Number(userPracticeId) || !pet.practiceId
+        );
       }
       return response.json();
     },
@@ -1840,6 +1988,23 @@ export function SOAPNoteForm({
   // Create or update mutation
   const mutation = useMutation({
     mutationFn: async (data: SoapNoteFormValues) => {
+      if (!isOnline) {
+        const payload = {
+          petId: Number(data.petId),
+          practitionerId: Number(user?.id || 0),
+          subjective: data.subjective,
+          objective: data.objective,
+          assessment: data.assessment,
+          plan: data.plan,
+        } as any;
+        if (initialData && initialData.id) {
+          return await offlineSoapNotes.updateSoapNote(
+            Number(initialData.id),
+            payload
+          );
+        }
+        return await offlineSoapNotes.createSoapNote(payload);
+      }
       const url = initialData
         ? `/api/soap-notes/${initialData.id}`
         : "/api/soap-notes";
@@ -1848,13 +2013,14 @@ export function SOAPNoteForm({
       return await res.json();
     },
     onSuccess: (data) => {
-      toast({
-        title: initialData ? "SOAP note updated" : "SOAP note created",
-        description: initialData
-          ? "Your changes have been saved"
-          : "New SOAP note has been created",
-      });
-      // Invalidate and immediately refetch SOAP notes
+      if (isOnline) {
+        toast({
+          title: initialData ? "SOAP note updated" : "SOAP note created",
+          description: initialData
+            ? "Your changes have been saved"
+            : "New SOAP note has been created",
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/soap-notes"] });
       if (refetchSoap) {
         refetchSoap();
@@ -2073,6 +2239,8 @@ export function SOAPNoteForm({
 function SOAPTemplatesList() {
   const { toast } = useToast();
   const { user, userPracticeId } = useUser(); // Move useUser hook here
+  const { isOnline } = useNetworkStatus();
+  const offlineSoapTemplates = useOfflineSoapTemplates();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<SOAPTemplate | null>(
     null
@@ -2097,6 +2265,12 @@ function SOAPTemplatesList() {
     },
   });
 
+  const displayTemplates: SOAPTemplate[] = isOnline
+    ? templates || []
+    : (offlineSoapTemplates.soapTemplates as any);
+  const displayLoading = isOnline ? isLoading : offlineSoapTemplates.isLoading;
+  const displayError = isOnline ? error : (offlineSoapTemplates.error as any);
+
   // Create or update mutation
   const templateMutation = useMutation({
     mutationFn: async (data: SoapTemplateFormValues) => {
@@ -2118,6 +2292,27 @@ function SOAPTemplatesList() {
       console.log("Template mutation - User:", user);
       console.log("Template mutation - Practice ID:", userPracticeId);
 
+      if (!isOnline) {
+        if (editingTemplate) {
+          const updated = await offlineSoapTemplates.updateTemplate(
+            editingTemplate.id,
+            {
+              ...apiData,
+              practiceId: Number(userPracticeId || 0),
+              createdById: Number(user?.id || 0),
+            } as any
+          );
+          return updated;
+        } else {
+          const created = await offlineSoapTemplates.createTemplate({
+            ...apiData,
+            practiceId: Number(userPracticeId || 0),
+            createdById: Number(user?.id || 0),
+          } as any);
+          return created;
+        }
+      }
+
       const url = editingTemplate
         ? `/api/soap-templates/${editingTemplate.id}`
         : "/api/soap-templates";
@@ -2129,6 +2324,7 @@ function SOAPTemplatesList() {
       // Invalidate and immediately refetch templates
       queryClient.invalidateQueries({ queryKey: ["/api/soap-templates"] });
       refetchTemplates();
+      offlineSoapTemplates.refresh();
       toast({
         title: editingTemplate ? "Template updated" : "Template created",
         description: editingTemplate
@@ -2150,12 +2346,17 @@ function SOAPTemplatesList() {
   // Delete mutation
   const deleteTemplateMutation = useMutation({
     mutationFn: async (id: number) => {
+      if (!isOnline) {
+        await offlineSoapTemplates.deleteTemplate(id);
+        return;
+      }
       await apiRequest("DELETE", `/api/soap-templates/${id}`);
     },
     onSuccess: () => {
       // Invalidate and immediately refetch templates
       queryClient.invalidateQueries({ queryKey: ["/api/soap-templates"] });
       refetchTemplates();
+      offlineSoapTemplates.refresh();
       toast({
         title: "Template deleted",
         description: "The template has been deleted successfully",
@@ -2196,7 +2397,7 @@ function SOAPTemplatesList() {
     templateMutation.mutate(data);
   };
 
-  if (isLoading) {
+  if (displayLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-12 w-full" />
@@ -2206,7 +2407,7 @@ function SOAPTemplatesList() {
     );
   }
 
-  if (error) {
+  if (displayError) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -2227,7 +2428,7 @@ function SOAPTemplatesList() {
         </Button>
       </div>
 
-      {templates?.length === 0 ? (
+      {displayTemplates?.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
             <div className="text-center py-12">
@@ -2244,7 +2445,7 @@ function SOAPTemplatesList() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {templates?.map((template: SOAPTemplate) => (
+          {displayTemplates?.map((template: SOAPTemplate) => (
             <Card key={template.id}>
               <CardHeader>
                 <div className="flex justify-between items-start">
@@ -2381,6 +2582,8 @@ function ApplyTemplateSection({
   onApplyTemplate: (template: SOAPTemplate) => void;
   categoryFilter?: string;
 }) {
+  const { isOnline } = useNetworkStatus();
+  const offlineSoapTemplates = useOfflineSoapTemplates();
   const { data: templates, isLoading } = useQuery({
     queryKey: ["/api/soap-templates"],
     queryFn: async () => {
@@ -2390,17 +2593,22 @@ function ApplyTemplateSection({
       }
       return response.json();
     },
+    enabled: isOnline,
   });
 
   // Filter templates by category if needed
-  const filteredTemplates = templates?.filter(
+  const sourceTemplates: SOAPTemplate[] = isOnline
+    ? templates || []
+    : (offlineSoapTemplates.soapTemplates as any);
+  const filteredTemplates = sourceTemplates?.filter(
     (template: SOAPTemplate) =>
       !categoryFilter || template.category === categoryFilter
   );
 
-  if (isLoading) return <Skeleton className="h-32 w-full" />;
+  if (isOnline ? isLoading : offlineSoapTemplates.isLoading)
+    return <Skeleton className="h-32 w-full" />;
 
-  if (!templates || templates.length === 0) {
+  if (!sourceTemplates || sourceTemplates.length === 0) {
     return (
       <Card>
         <CardContent className="p-4 text-center">
@@ -2741,6 +2949,7 @@ function PetSOAPNotesView() {
 
 // Main page component
 export default function SOAPNotesPage() {
+  const { isOnline } = useNetworkStatus();
   const searchParams = new URLSearchParams(
     typeof window !== "undefined" ? window.location.search : ""
   );
@@ -2760,8 +2969,14 @@ export default function SOAPNotesPage() {
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-2xl font-bold mb-6 flex items-center gap-3">
             {petId ? `Medical Records: ${petName}` : "SOAP Notes"}
+            {!isOnline && (
+              <Badge variant="secondary" className="gap-1.5">
+                <WifiOff className="h-3 w-3" />
+                Offline Mode
+              </Badge>
+            )}
           </h1>
           {petId && (
             <p className="text-gray-500 mt-1">
