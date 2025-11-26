@@ -7,8 +7,8 @@ module.exports = {
       env: {
         PORT: 3000,
         NODE_ENV: "production",
-        DATABASE_URL: "your_db_url_here",
-        OWNER_DATABASE_URL: "your_owner_db_url_here"
+        DATABASE_URL: "postgresql://smartdvm_admin:Rootless123%23@smartdvm.cnug2qlw9kof.eu-north-1.rds.amazonaws.com:5432/smartdvm?sslmode=require",
+        OWNER_DATABASE_URL: "postgresql://smartdvm_admin:Rootless123%23@smartdvm.cnug2qlw9kof.eu-north-1.rds.amazonaws.com:5432/smartdvm_owner?sslmode=require"
       }
     },
     {
@@ -17,8 +17,8 @@ module.exports = {
       args: "run ws:production",
       env: {
         NODE_ENV: "production",
-        DATABASE_URL: "your_db_url_here",
-        OWNER_DATABASE_URL: "your_owner_db_url_here"
+        DATABASE_URL: "postgresql://smartdvm_admin:Rootless123%23@smartdvm.cnug2qlw9kof.eu-north-1.rds.amazonaws.com:5432/smartdvm?sslmode=require",
+        OWNER_DATABASE_URL: "postgresql://smartdvm_admin:Rootless123%23@smartdvm.cnug2qlw9kof.eu-north-1.rds.amazonaws.com:5432/smartdvm_owner?sslmode=require"
       }
     }
   ]
