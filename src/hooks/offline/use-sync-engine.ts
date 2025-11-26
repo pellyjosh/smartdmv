@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { getSyncEngine, performSync } from '@/lib/offline/sync/sync-engine';
+import { pullFreshDataIfNeeded } from '@/lib/sync-service';
 import { useNetworkStatus } from '@/hooks/offline/use-network-status';
 import { syncQueueManager } from '@/lib/offline/managers/sync-queue-manager';
 import { syncEventEmitter } from '@/lib/offline/events/sync-events';
@@ -232,6 +233,8 @@ export function useSyncEngine(config?: Partial<SyncConfig>): UseSyncEngineReturn
         if (stats.pending > 0) {
           console.log(`[useSyncEngine] Periodic auto-sync: ${stats.pending} pending operations`);
           await sync();
+        } else {
+          await pullFreshDataIfNeeded();
         }
       } catch (error) {
         console.error('[useSyncEngine] Auto-sync check error:', error);

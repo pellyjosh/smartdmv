@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useSyncEngine } from "@/hooks/offline/use-sync-engine";
 import { useNetworkStatus as useOfflineNetworkStatus } from "@/hooks/offline/use-network-status";
 import { useToast } from "@/hooks/use-toast";
+import { useOfflineAuth } from "@/hooks/offline/use-offline-auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -62,6 +63,7 @@ export function SyncEnginePanel() {
 
   const { isOnline, isOffline, isSlow } = useOfflineNetworkStatus();
   const { toast } = useToast();
+  const { isAuthenticated } = useOfflineAuth();
 
   const [selectedConflict, setSelectedConflict] = useState<Conflict | null>(
     null
@@ -70,6 +72,10 @@ export function SyncEnginePanel() {
 
   const handleSync = async () => {
     try {
+      if (!isAuthenticated) {
+        toast({ title: "Authentication required", description: "Please log in to sync.", variant: "destructive" });
+        return;
+      }
       console.log("[SyncEnginePanel] Starting sync...");
       const result = await sync();
       if (result) {
@@ -116,6 +122,10 @@ export function SyncEnginePanel() {
 
   const handlePullFreshData = async () => {
     try {
+      if (!isAuthenticated) {
+        toast({ title: "Authentication required", description: "Please log in to refresh.", variant: "destructive" });
+        return;
+      }
       console.log("[SyncEnginePanel] Pulling fresh data from server...");
 
       // Get practice context from cached tenant information
@@ -244,7 +254,7 @@ export function SyncEnginePanel() {
           <div className="flex gap-2">
             <Button
               onClick={handleSync}
-              disabled={isSyncing || isOffline}
+              disabled={isSyncing || isOffline || !isAuthenticated}
               className="flex-1"
               size="lg"
             >
@@ -263,7 +273,7 @@ export function SyncEnginePanel() {
             <Button
               onClick={handlePullFreshData}
               variant="outline"
-              disabled={isSyncing || isOffline}
+              disabled={isSyncing || isOffline || !isAuthenticated}
               title="Pull fresh data from server even if no local changes"
             >
               <Database className="h-4 w-4" />

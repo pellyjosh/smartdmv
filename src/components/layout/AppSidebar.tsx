@@ -761,25 +761,25 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "Theme Customization",
-        href: "/theme-customization",
+        href: "/admin/theme-customization",
         icon: AppWindow,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"],
       },
       {
         title: "Custom Fields",
-        href: "/custom-fields",
+        href: "/admin/custom-fields",
         icon: FolderOpen,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
       },
       {
         title: "Dashboard Config",
-        href: "/dashboard-config",
+        href: "/admin/dashboard-config",
         icon: LayoutDashboard,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
       },
       {
         title: "Custom Field Demo",
-        href: "/custom-field-demo",
+        href: "/admin/custom-field-demo",
         icon: ClipboardList,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
       },

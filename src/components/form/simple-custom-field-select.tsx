@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { indexedDBManager } from "@/lib/offline/db";
 
 export type SimpleCustomFieldOption = {
   id: number;
@@ -82,6 +83,16 @@ export function SimpleCustomFieldSelect({
     queryKey: [`/api/custom-fields/categories/practice/${practiceId}`],
     enabled: !!practiceId && !!categoryName,
     queryFn: async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        try {
+          const cached = (await indexedDBManager.get('cache', `custom_fields_${practiceId}`)) as any;
+          const arr = Array.isArray(cached?.data?.categories) ? cached.data.categories : [];
+          return arr;
+        } catch {
+          return [];
+        }
+      }
       const res = await fetch(`/api/custom-fields/categories/practice/${practiceId}`);
       if (!res.ok) throw new Error('Failed to fetch categories');
       return res.json();
@@ -105,6 +116,16 @@ export function SimpleCustomFieldSelect({
     queryKey: [`/api/custom-fields/groups/practice/${practiceId}`],
     enabled: !!practiceId,
     queryFn: async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        try {
+          const cached = (await indexedDBManager.get('cache', `custom_fields_${practiceId}`)) as any;
+          const arr = Array.isArray(cached?.data?.groups) ? cached.data.groups : [];
+          return arr;
+        } catch {
+          return [];
+        }
+      }
       const res = await fetch(`/api/custom-fields/groups/practice/${practiceId}`);
       if (!res.ok) throw new Error('Failed to fetch groups');
       return res.json();
@@ -136,6 +157,17 @@ export function SimpleCustomFieldSelect({
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     queryFn: async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        try {
+          const cached = (await indexedDBManager.get('cache', `custom_fields_${practiceId}`)) as any;
+          const allValues = Array.isArray(cached?.data?.values) ? cached.data.values : [];
+          const filtered = (allValues || []).filter((v: any) => v.groupId === groupId);
+          return filtered;
+        } catch {
+          return [];
+        }
+      }
       const res = await fetch(`/api/custom-fields/values/group/${groupId}`);
       if (!res.ok) throw new Error('Failed to fetch values');
       return res.json();

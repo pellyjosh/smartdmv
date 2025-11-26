@@ -2,6 +2,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useUser } from "@/context/UserContext";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { indexedDBManager } from "@/lib/offline/db";
 
 export type CustomFieldCategory = {
   id: number;
@@ -69,10 +70,10 @@ export type CustomFieldAuditLog = {
  * Custom hook for accessing and managing custom fields
  */
 export function useCustomFields() {
-  const { user } = useUser();
+  const { user, userPracticeId } = useUser();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const practiceId = user?.practiceId;
+  const practiceId = userPracticeId || indexedDBManager.getCurrentTenant().practiceId || undefined;
 
   // Fetch all categories for the current practice
   const { 
@@ -84,8 +85,19 @@ export function useCustomFields() {
     queryKey: [`/api/custom-fields/categories/practice/${practiceId}`, practiceId],
     enabled: !!practiceId,
     queryFn: async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        try {
+          const { indexedDBManager } = await import('@/lib/offline/db');
+          const cached = (await indexedDBManager.get('cache', `custom_fields_${practiceId}`)) as any;
+          const arr = Array.isArray(cached?.data?.categories) ? cached.data.categories : [];
+          return arr;
+        } catch {
+          return [];
+        }
+      }
       const res = await apiRequest("GET", `/api/custom-fields/categories/practice/${practiceId}`);
-      return res;
+      return await res.json();
     }
   });
 
@@ -99,8 +111,19 @@ export function useCustomFields() {
     queryKey: [`/api/custom-fields/groups/practice/${practiceId}`, practiceId],
     enabled: !!practiceId,
     queryFn: async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        try {
+          const { indexedDBManager } = await import('@/lib/offline/db');
+          const cached = (await indexedDBManager.get('cache', `custom_fields_${practiceId}`)) as any;
+          const arr = Array.isArray(cached?.data?.groups) ? cached.data.groups : [];
+          return arr;
+        } catch {
+          return [];
+        }
+      }
       const res = await apiRequest("GET", `/api/custom-fields/groups/practice/${practiceId}`);
-      return res;
+      return await res.json();
     }
   });
 
@@ -114,8 +137,19 @@ export function useCustomFields() {
     queryKey: [`/api/custom-fields/values/practice/${practiceId}`, practiceId],
     enabled: !!practiceId,
     queryFn: async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        try {
+          const { indexedDBManager } = await import('@/lib/offline/db');
+          const cached = (await indexedDBManager.get('cache', `custom_fields_${practiceId}`)) as any;
+          const arr = Array.isArray(cached?.data?.values) ? cached.data.values : [];
+          return arr;
+        } catch {
+          return [];
+        }
+      }
       const res = await apiRequest("GET", `/api/custom-fields/values/practice/${practiceId}`);
-      return res;
+      return await res.json();
     }
   });
 
@@ -129,8 +163,19 @@ export function useCustomFields() {
     queryKey: [`/api/custom-fields/dependencies/practice/${practiceId}`, practiceId],
     enabled: !!practiceId,
     queryFn: async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        try {
+          const { indexedDBManager } = await import('@/lib/offline/db');
+          const cached = (await indexedDBManager.get('cache', `custom_fields_${practiceId}`)) as any;
+          const arr = Array.isArray(cached?.data?.dependencies) ? cached.data.dependencies : [];
+          return arr;
+        } catch {
+          return [];
+        }
+      }
       const res = await apiRequest("GET", `/api/custom-fields/dependencies/practice/${practiceId}`);
-      return res;
+      return await res.json();
     }
   });
 
@@ -145,7 +190,7 @@ export function useCustomFields() {
     enabled: !!practiceId,
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/custom-fields/audit-logs/practice/${practiceId}`);
-      return res;
+      return await res.json();
     }
   });
 

@@ -70,6 +70,7 @@ import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useOfflineAppointments } from "@/hooks/offline/appointments";
 import type { Appointment } from "@/hooks/offline/appointments/use-offline-appointments";
 import { Badge } from "@/components/ui/badge";
+import { SimpleCustomFieldSelect } from "@/components/form/simple-custom-field-select";
 
 // Form schema for creating appointments
 const appointmentFormSchema = z.object({
@@ -587,44 +588,30 @@ export default function AppointmentsPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Type</FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select appointment type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="virtual">
-                                Virtual Consultation
-                              </SelectItem>
-                              <SelectItem value="telemedicine">
-                                Telemedicine
-                              </SelectItem>
-                              <SelectItem value="in-person">
-                                In-Person Visit
-                              </SelectItem>
-                              <SelectItem value="wellness">
-                                Wellness Check
-                              </SelectItem>
-                              <SelectItem value="surgery">Surgery</SelectItem>
-                              <SelectItem value="emergency">
-                                Emergency
-                              </SelectItem>
-                              <SelectItem value="follow-up">
-                                Follow-up
-                              </SelectItem>
-                              <SelectItem value="vaccination">
-                                Vaccination
-                              </SelectItem>
-                              <SelectItem value="dental">
-                                Dental Care
-                              </SelectItem>
-                              <SelectItem value="grooming">Grooming</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <FormControl>
+                            <SimpleCustomFieldSelect
+                              name="type"
+                              groupKey="types"
+                              categoryName="Appointments"
+                              createIfNotExists
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="Select appointment type"
+                              fallbackOptions={[
+                                {
+                                  value: "virtual",
+                                  label: "Virtual (Telemedicine)",
+                                },
+                                { value: "in-person", label: "In-Person" },
+                                { value: "surgery", label: "Surgery" },
+                                { value: "dental", label: "Dental" },
+                                { value: "vaccination", label: "Vaccination" },
+                                { value: "checkup", label: "Checkup" },
+                                { value: "wellness", label: "Wellness" },
+                                { value: "emergency", label: "Emergency" },
+                              ]}
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}

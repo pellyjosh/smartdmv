@@ -29,10 +29,10 @@ const {
   referrals,
   notifications,
   inventory,
-  billingPlans,
+  
   customFieldCategories,
   customFieldGroups,
-  customFields,
+  
   customFieldValues,
   healthResources,
   contacts,
@@ -52,9 +52,13 @@ interface SeedOptions {
   contacts?: number;
   all?: boolean;
   clear?: boolean;
+  customFields?: boolean;
+  customFieldsReset?: boolean;
 }
 
-const DEFAULT_COUNTS: Required<Omit<SeedOptions, 'all' | 'clear'>> = {
+type NumericSeedKeys = 'healthPlans' | 'appointments' | 'soapNotes' | 'prescriptions' | 'vaccinations' | 'referrals' | 'notifications' | 'inventoryItems' | 'healthResources' | 'contacts';
+type NumericSeedOptions = Required<Pick<SeedOptions, NumericSeedKeys>>;
+const DEFAULT_COUNTS: NumericSeedOptions = {
   healthPlans: 5,
   appointments: 10,
   soapNotes: 15,
@@ -88,6 +92,8 @@ async function seedTenantData() {
     console.log(`  --contacts=N         Seed N contacts (default: ${DEFAULT_COUNTS.contacts})`);
     console.log(`  --all                Seed all data types with default counts`);
     console.log(`  --clear              Clear existing data before seeding (DANGEROUS!)`);
+    console.log(`  --custom-fields      Seed default custom fields for each practice`);
+    console.log(`  --custom-fields-reset Reset custom fields to defaults for each practice`);
     process.exit(1);
   }
 
@@ -101,6 +107,10 @@ async function seedTenantData() {
       Object.assign(options, DEFAULT_COUNTS);
     } else if (arg === '--clear') {
       options.clear = true;
+    } else if (arg === '--custom-fields') {
+      options.customFields = true;
+    } else if (arg === '--custom-fields-reset') {
+      options.customFieldsReset = true;
     } else if (arg.startsWith('--')) {
       const [key, value] = arg.slice(2).split('=');
       const normalizedKey = key.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
@@ -217,9 +227,9 @@ async function seedTenantData() {
     }
   }
 
-  if (existingUsers.length === 0 || existingPets.length === 0) {
-    console.log(`⚠️  No users or pets found. Creating basic data using existing practice...`);
-    await seedBasicData(tenantDb, existingPractices[0]);
+    if (existingUsers.length === 0 || existingPets.length === 0) {
+      console.log(`⚠️  No users or pets found. Creating basic data using existing practice...`);
+      await seedBasicData(tenantDb, existingPractices[0]);
 
     // Refetch the data
     const practices = await tenantDb.query.practices.findMany();
@@ -229,6 +239,22 @@ async function seedTenantData() {
     await seedAllDataTypes(tenantDb, options, practices, users, pets);
   } else {
     await seedAllDataTypes(tenantDb, options, existingPractices, existingUsers, existingPets);
+
+    // Seed or reset custom fields if requested
+    if (options.customFieldsReset) {
+      console.log(`🔄 Resetting custom fields to defaults for all practices...`);
+      for (const practice of existingPractices) {
+        await resetCustomFieldsForPractice(tenantDb, practice.id);
+        await seedDefaultCustomFieldsForPractice(tenantDb, practice.id);
+      }
+      console.log(`✅ Custom fields reset and seeded.`);
+    } else if (options.customFields || options.all) {
+      console.log(`🌱 Seeding default custom fields for all practices...`);
+      for (const practice of existingPractices) {
+        await seedDefaultCustomFieldsForPractice(tenantDb, practice.id);
+      }
+      console.log(`✅ Default custom fields seeded.`);
+    }
   }
 
     await pool.end();
@@ -238,6 +264,132 @@ async function seedTenantData() {
     console.error('❌ Error:', error);
     process.exit(1);
   }
+}
+
+// ---- Custom Fields Seeding Helpers ----
+
+async function seedDefaultCustomFieldsForPractice(db: any, practiceId: number) {
+  // Avoid duplicates by checking for an existing known category
+  // Proceed even if some records exist; we insert missing ones idempotently by name/key
+
+  const categoriesSpec = [
+    { name: 'Appointments', description: 'Default appointment dropdowns' },
+    { name: 'Pet Information', description: 'Default pet information dropdowns' },
+  ];
+
+  const categoryIds: Record<string, number> = {};
+
+  for (const cat of categoriesSpec) {
+    const found = await db.query.customFieldCategories.findFirst({
+      where: (t: any, { and, eq }: any) => and(eq(t.practiceId, practiceId), eq(t.name, cat.name)),
+    });
+    const [inserted] = found
+      ? [found]
+      : await db.insert(customFieldCategories).values({ practiceId, name: cat.name, description: cat.description }).returning();
+    categoryIds[cat.name] = inserted.id;
+  }
+
+  // Groups spec per category
+  const groupsSpec: { category: string; name: string; key: string; description?: string }[] = [
+    // Appointments
+    { category: 'Appointments', name: 'Types', key: 'types' },
+    { category: 'Appointments', name: 'Appointment Types', key: 'appointment_types' },
+    // Pet Information
+    { category: 'Pet Information', name: 'Color', key: 'color' },
+    { category: 'Pet Information', name: 'Pet Type', key: 'pet_type' },
+    { category: 'Pet Information', name: 'Species', key: 'species' },
+    { category: 'Pet Information', name: 'Feline Breed', key: 'feline_breed' },
+    { category: 'Pet Information', name: 'Canine Breed', key: 'canine_breed' },
+  ];
+
+  const groupIds: Record<string, number> = {};
+
+  for (const grp of groupsSpec) {
+    const categoryId = categoryIds[grp.category];
+    const found = await db.query.customFieldGroups.findFirst({
+      where: (t: any, { and, eq }: any) => and(eq(t.practiceId, practiceId), eq(t.categoryId, categoryId), eq(t.key, grp.key)),
+    });
+    const [inserted] = found
+      ? [found]
+      : await db.insert(customFieldGroups).values({ practiceId, categoryId, name: grp.name, key: grp.key, description: grp.description || null }).returning();
+    groupIds[grp.key] = inserted.id;
+  }
+
+  // Values spec per group
+  const valuesSpec: { groupKey: string; label: string; value?: string }[] = [
+    // Appointments: Types and Appointment Types share same values
+    { groupKey: 'types', label: 'Virtual Consultation', value: 'virtual' },
+    { groupKey: 'types', label: 'In-Person Appointment', value: 'in-person' },
+    { groupKey: 'types', label: 'Surgery', value: 'surgery' },
+    { groupKey: 'types', label: 'Dental Procedure', value: 'dental' },
+    { groupKey: 'types', label: 'Vaccination', value: 'vaccination' },
+    { groupKey: 'types', label: 'Checkup', value: 'checkup' },
+    { groupKey: 'types', label: 'Wellness Exam', value: 'wellness' },
+    { groupKey: 'types', label: 'Emergency', value: 'emergency' },
+
+    { groupKey: 'appointment_types', label: 'Virtual Consultation', value: 'virtual' },
+    { groupKey: 'appointment_types', label: 'In-Person Appointment', value: 'in-person' },
+    { groupKey: 'appointment_types', label: 'Surgery', value: 'surgery' },
+    { groupKey: 'appointment_types', label: 'Dental Procedure', value: 'dental' },
+    { groupKey: 'appointment_types', label: 'Vaccination', value: 'vaccination' },
+    { groupKey: 'appointment_types', label: 'Checkup', value: 'checkup' },
+    { groupKey: 'appointment_types', label: 'Wellness Exam', value: 'wellness' },
+    { groupKey: 'appointment_types', label: 'Emergency', value: 'emergency' },
+
+    // Pet Information: Color
+    { groupKey: 'color', label: 'White', value: 'white' },
+    { groupKey: 'color', label: 'Brown', value: 'brown' },
+
+    // Pet Information: Pet Type
+    { groupKey: 'pet_type', label: 'Dog - Small Breed', value: 'dog_small' },
+    { groupKey: 'pet_type', label: 'Dog - Medium Breed', value: 'dog_medium' },
+    { groupKey: 'pet_type', label: 'Dog - Large Breed', value: 'dog_large' },
+    { groupKey: 'pet_type', label: 'Cat - Domestic', value: 'cat_domestic' },
+    { groupKey: 'pet_type', label: 'Cat - Exotic', value: 'cat_exotic' },
+    { groupKey: 'pet_type', label: 'Bird - Small', value: 'bird_small' },
+    { groupKey: 'pet_type', label: 'Bird - Large', value: 'bird_large' },
+    { groupKey: 'pet_type', label: 'Reptile', value: 'reptile' },
+    { groupKey: 'pet_type', label: 'Small Mammal', value: 'small_mammal' },
+    { groupKey: 'pet_type', label: 'Exotic', value: 'exotic' },
+
+    // Pet Information: Species
+    { groupKey: 'species', label: 'Canine', value: 'canine' },
+    { groupKey: 'species', label: 'Feline', value: 'feline' },
+
+    // Pet Information: Feline Breed
+    { groupKey: 'feline_breed', label: 'Abyssinian', value: 'abyssinian' },
+    { groupKey: 'feline_breed', label: 'Maine Coon', value: 'maine_coon' },
+    { groupKey: 'feline_breed', label: 'Bengal', value: 'bengal' },
+
+    // Pet Information: Canine Breed
+    { groupKey: 'canine_breed', label: 'German Shepherd', value: 'german_shepherd' },
+    { groupKey: 'canine_breed', label: 'Bulldog', value: 'bulldog' },
+    { groupKey: 'canine_breed', label: 'Labrador Retriever', value: 'labrador_retriever' },
+    { groupKey: 'canine_breed', label: 'Golden Retriever', value: 'golden_retriever' },
+  ];
+
+  for (const val of valuesSpec) {
+    const groupId = groupIds[val.groupKey];
+    if (!groupId) continue;
+    const found = await db.query.customFieldValues.findFirst({
+      where: (t: any, { and, eq }: any) => and(eq(t.practiceId, practiceId), eq(t.groupId, groupId), eq(t.value, val.value || val.label.toLowerCase().replace(/\s+/g, '_'))),
+    });
+    if (found) continue;
+    await db.insert(customFieldValues).values({
+      practiceId,
+      groupId,
+      value: val.value || val.label.toLowerCase().replace(/\s+/g, '_'),
+      label: val.label,
+      isActive: true,
+    });
+  }
+}
+
+async function resetCustomFieldsForPractice(db: any, practiceId: number) {
+  // Delete values -> groups -> categories for practice
+  await db.delete(customFieldValues).where(eq(customFieldValues.practiceId, practiceId));
+  await db.delete(customFieldGroups).where(eq(customFieldGroups.practiceId, practiceId));
+  await db.delete(customFieldCategories).where(eq(customFieldCategories.practiceId, practiceId));
 }
 
 async function clearTenantData(db: any) {

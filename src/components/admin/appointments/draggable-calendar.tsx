@@ -42,7 +42,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, FormProvider } from "react-hook-form";
 import { z } from "zod";
-// import { SimpleCustomFieldSelect } from "@/components/form/simple-custom-field-select";
+import { SimpleCustomFieldSelect } from "@/components/form/simple-custom-field-select";
 
 interface DraggableCalendarProps {
   practiceId: string | undefined;
@@ -75,7 +75,7 @@ const appointmentSchema = z.object({
   practitionerId: z.string({ message: "Please select a practitioner" }),
   practiceId: z.string(),
   notes: z.string().optional(),
-  status: z.enum(["completed", "approved", "rejected", "pending"]).default("pending"),
+  status: z.enum(["scheduled", "completed", "approved", "rejected", "pending", "cancelled"]).default("scheduled"),
 });
 
 type AppointmentFormValues = z.infer<typeof appointmentSchema> & { time: string };
@@ -237,10 +237,16 @@ export function DraggableCalendar({ practiceId, userRole, userId }: DraggableCal
         const { time, ...appointmentData } = data;
         
         // Update with the combined date/time
-        const finalAppointmentData = {
+        const finalAppointmentData: any = {
           ...appointmentData,
           date: dateTime.toISOString(),
           petId: parseInt(appointmentData.petId, 10),
+          practitionerId: parseInt(appointmentData.practitionerId, 10),
+          practiceId: appointmentData.practiceId ? parseInt(appointmentData.practiceId, 10) : undefined,
+          // Map UI "scheduled" to API "pending"
+          status: appointmentData.status === "scheduled" ? "pending" : appointmentData.status,
+          // API expects numeric duration separately; route converts it to durationMinutes
+          duration: appointmentData.duration,
         };
         
         const response = await apiRequest("POST", "/api/appointments", finalAppointmentData);
@@ -284,6 +290,22 @@ export function DraggableCalendar({ practiceId, userRole, userId }: DraggableCal
         // If petId is a string, parse it to a number for the API
         if (finalData.petId && typeof finalData.petId === 'string') {
           finalData.petId = parseInt(finalData.petId, 10);
+        }
+
+        // Map practitionerId to number if present
+        if (finalData.practitionerId && typeof finalData.practitionerId === 'string') {
+          finalData.practitionerId = parseInt(finalData.practitionerId, 10);
+        }
+
+        // Map status "scheduled" to backend "pending"
+        if (finalData.status === 'scheduled') {
+          finalData.status = 'pending';
+        }
+
+        // Map duration to durationMinutes (string) for PATCH route
+        if (typeof finalData.duration !== 'undefined') {
+          finalData.durationMinutes = String(finalData.duration);
+          delete finalData.duration;
         }
         
         console.log(`Sending update data for appointment ${id}:`, finalData);
@@ -401,7 +423,7 @@ export function DraggableCalendar({ practiceId, userRole, userId }: DraggableCal
     
     // Submit the updated appointment
     updateAppointmentMutation.mutate({ 
-      id: editingAppointment.id,
+      id: Number(editingAppointment.id),
       data
     });
   };
@@ -448,7 +470,7 @@ export function DraggableCalendar({ practiceId, userRole, userId }: DraggableCal
     
     // Update the appointment
     updateAppointmentMutation.mutate({
-      id: draggedAppointment.id,
+      id: Number(draggedAppointment.id),
       data: { date: dayDate.toISOString() }
     });
     
@@ -465,8 +487,9 @@ export function DraggableCalendar({ practiceId, userRole, userId }: DraggableCal
     const timeString = appointmentDate.toTimeString().slice(0, 5); // "HH:MM" format
     
     // Ensure type is one of the valid enum values
-    const validAppointmentType = (["virtual", "in-person", "surgery", "dental", "vaccination", "checkup", "wellness", "emergency"].includes(appointment.type)) 
-      ? appointment.type as "virtual" | "in-person" | "surgery" | "dental" | "vaccination" | "checkup" | "wellness" | "emergency"
+    const typeCandidate = appointment.type || '';
+    const validAppointmentType = (["virtual", "in-person", "surgery", "dental", "vaccination", "checkup", "wellness", "emergency"].includes(typeCandidate)) 
+      ? typeCandidate as "virtual" | "in-person" | "surgery" | "dental" | "vaccination" | "checkup" | "wellness" | "emergency"
       : "in-person";
     
     // Reset and populate the edit form
@@ -475,12 +498,12 @@ export function DraggableCalendar({ practiceId, userRole, userId }: DraggableCal
       type: validAppointmentType,
       date: dateString,
       time: timeString,
-      duration: appointment.duration,
-      petId: String(appointment.petId),
-      practitionerId: appointment.practitionerId,
+      duration: parseInt(appointment.durationMinutes || '30'),
+      petId: String(appointment.petId || ''),
+      practitionerId: String(appointment.practitionerId || selectedPractitioner),
       practiceId: appointment.practiceId,
       notes: appointment.notes || "",
-      status: appointment.status,
+      status: (appointment.status === 'pending' ? 'scheduled' : appointment.status) as any,
     });
     
     setIsEditDialogOpen(true);
@@ -546,7 +569,7 @@ export function DraggableCalendar({ practiceId, userRole, userId }: DraggableCal
   // Confirm delete action
   const confirmDeleteAppointment = () => {
     if (!editingAppointment) return;
-    deleteAppointmentMutation.mutate(editingAppointment.id);
+    deleteAppointmentMutation.mutate(Number(editingAppointment.id));
     setIsDeleteDialogOpen(false);
   };
 
@@ -635,7 +658,7 @@ export function DraggableCalendar({ practiceId, userRole, userId }: DraggableCal
             </SelectTrigger>
             <SelectContent>
               {practitioners.map((practitioner: User) => (
-                <SelectItem key={practitioner.id} value={practitioner.id}>
+                <SelectItem key={practitioner.id} value={String(practitioner.id)}>
                   {practitioner.name || practitioner.username}
                 </SelectItem>
               ))}
@@ -730,7 +753,7 @@ export function DraggableCalendar({ practiceId, userRole, userId }: DraggableCal
                             {new Date(appointment.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                           <span className="bg-white text-xs px-1 rounded">
-                            {appointment.duration}m
+                            {parseInt(appointment.durationMinutes || '30')}m
                           </span>
                         </div>
                         <GripVertical className="h-3 w-3 absolute top-1 right-1 text-gray-400" />
@@ -842,26 +865,26 @@ export function DraggableCalendar({ practiceId, userRole, userId }: DraggableCal
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Type</FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="virtual">Virtual</SelectItem>
-                        <SelectItem value="in-person">In-Person</SelectItem>
-                        <SelectItem value="surgery">Surgery</SelectItem>
-                        <SelectItem value="dental">Dental</SelectItem>
-                        <SelectItem value="vaccination">Vaccination</SelectItem>
-                        <SelectItem value="checkup">Checkup</SelectItem>
-                        <SelectItem value="wellness">Wellness</SelectItem>
-                        <SelectItem value="emergency">Emergency</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SimpleCustomFieldSelect
+                        name="type"
+                        groupKey="types"
+                        categoryName="Appointments"
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Select type"
+                        fallbackOptions={[
+                          { value: "virtual", label: "Virtual Consultation" },
+                          { value: "in-person", label: "In-Person Appointment" },
+                          { value: "surgery", label: "Surgery" },
+                          { value: "dental", label: "Dental Procedure" },
+                          { value: "vaccination", label: "Vaccination" },
+                          { value: "checkup", label: "Checkup" },
+                          { value: "wellness", label: "Wellness Exam" },
+                          { value: "emergency", label: "Emergency" },
+                        ]}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1051,26 +1074,26 @@ export function DraggableCalendar({ practiceId, userRole, userId }: DraggableCal
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Type</FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
-                      value={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="virtual">Virtual</SelectItem>
-                        <SelectItem value="in-person">In-Person</SelectItem>
-                        <SelectItem value="surgery">Surgery</SelectItem>
-                        <SelectItem value="dental">Dental</SelectItem>
-                        <SelectItem value="vaccination">Vaccination</SelectItem>
-                        <SelectItem value="checkup">Checkup</SelectItem>
-                        <SelectItem value="wellness">Wellness</SelectItem>
-                        <SelectItem value="emergency">Emergency</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SimpleCustomFieldSelect
+                        name="type"
+                        groupKey="types"
+                        categoryName="Appointments"
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Select type"
+                        fallbackOptions={[
+                          { value: "virtual", label: "Virtual Consultation" },
+                          { value: "in-person", label: "In-Person Appointment" },
+                          { value: "surgery", label: "Surgery" },
+                          { value: "dental", label: "Dental Procedure" },
+                          { value: "vaccination", label: "Vaccination" },
+                          { value: "checkup", label: "Checkup" },
+                          { value: "wellness", label: "Wellness Exam" },
+                          { value: "emergency", label: "Emergency" },
+                        ]}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

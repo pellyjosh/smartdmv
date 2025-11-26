@@ -14,14 +14,14 @@ export async function GET(
   const tenantDb = await getCurrentTenantDb();
 
   try {
-    const { groupId } = await params;
+    const { groupId } = params;
 
     if (!groupId) {
       return NextResponse.json({ error: 'Group ID is required' }, { status: 400 });
     }
 
     const values = await tenantDb.query.customFieldValues.findMany({
-      where: eq(customFieldValues.groupId, parseInt(groupId)),
+      where: eq(customFieldValues.groupId, parseInt(groupId, 10)),
     });
 
     return NextResponse.json(values);

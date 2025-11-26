@@ -129,6 +129,11 @@ export class SyncEngine {
     if (!context) {
       throw new Error('No tenant context available');
     }
+    const { isAuthenticatedOffline } = await import('../storage/auth-storage');
+    const authed = await isAuthenticatedOffline(context.userId, context.tenantId);
+    if (!authed) {
+      return this.createEmptyResult(startTime);
+    }
 
     // Get pending operations from sync queue
     const pendingOps = await syncQueueStorage.getPendingOperations(
@@ -160,6 +165,11 @@ export class SyncEngine {
     if (!context) {
       console.error('[SyncEngine] No tenant context available');
       throw new Error('No tenant context available');
+    }
+    const { isAuthenticatedOffline } = await import('../storage/auth-storage');
+    const authed = await isAuthenticatedOffline(context.userId, context.tenantId);
+    if (!authed) {
+      return this.createEmptyResult(startTime);
     }
 
     console.log('📥 Fetching changes from server...', { practiceId: context.practiceId, tenantId: context.tenantId });

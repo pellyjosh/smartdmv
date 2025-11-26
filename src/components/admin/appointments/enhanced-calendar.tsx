@@ -20,7 +20,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useOfflineAppointments } from "@/hooks/offline/appointments/use-offline-appointments";
-// import { useCustomFields } from "@/hooks/use-custom-fields";
+import { useCustomFields } from "@/hooks/use-custom-fields";
 import {
   Dialog,
   DialogContent,
@@ -62,7 +62,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, FormProvider } from "react-hook-form";
 import { z } from "zod";
 // import { insertAppointmentSchema } from "@shared/schema";
-// import { SimpleCustomFieldSelect } from "@/components/form/simple-custom-field-select";
+import { SimpleCustomFieldSelect } from "@/components/form/simple-custom-field-select";
 
 // Debug component for custom fields
 // Debug component removed
@@ -96,6 +96,47 @@ export function EnhancedCalendar({
   // Offline appointments hook for offline support
   const { createAppointment: createOfflineAppointment } =
     useOfflineAppointments();
+
+  const { getValuesByGroupKey, groups, getValuesByGroupId } = useCustomFields();
+  const groupsArray: any[] = Array.isArray(groups) ? (groups as any[]) : [];
+  const appointmentTypeOptions = (() => {
+    try {
+      const possibleKeys = [
+        "appointment_type",
+        "appointment_types",
+        "appointment_category",
+        "appointment_kind",
+        "appointment",
+      ];
+      for (const key of possibleKeys) {
+        const vals = getValuesByGroupKey(key);
+        if (vals && vals.length > 0) {
+          return vals.map((v: any) => ({ value: v.value, label: v.label }));
+        }
+      }
+      const typeGroup = groupsArray.find(
+        (g: any) =>
+          g.name?.toLowerCase().includes("appointment") ||
+          g.key?.toLowerCase().includes("appointment")
+      );
+      if (typeGroup) {
+        const vals = getValuesByGroupId(typeGroup.id);
+        if (vals && vals.length > 0) {
+          return vals.map((v: any) => ({ value: v.value, label: v.label }));
+        }
+      }
+    } catch {}
+    return [
+      { value: "virtual", label: "Virtual (Telemedicine)" },
+      { value: "in-person", label: "In-Person" },
+      { value: "surgery", label: "Surgery" },
+      { value: "dental", label: "Dental" },
+      { value: "vaccination", label: "Vaccination" },
+      { value: "checkup", label: "Checkup" },
+      { value: "wellness", label: "Wellness" },
+      { value: "emergency", label: "Emergency" },
+    ];
+  })();
 
   // Format date for API query
   const formattedDate = selectedDate.toISOString().split("T")[0];
@@ -883,37 +924,34 @@ export function EnhancedCalendar({
                     )}
                   />
 
-                  {/* Appointment Type Field - with fallback if custom fields don't work */}
+                  {/* Appointment Type (Custom Field) */}
                   <FormField
                     control={form.control}
                     name="type"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Type</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select appointment type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="virtual">
-                              Virtual (Telemedicine)
-                            </SelectItem>
-                            <SelectItem value="in-person">In-Person</SelectItem>
-                            <SelectItem value="surgery">Surgery</SelectItem>
-                            <SelectItem value="dental">Dental</SelectItem>
-                            <SelectItem value="vaccination">
-                              Vaccination
-                            </SelectItem>
-                            <SelectItem value="checkup">Checkup</SelectItem>
-                            <SelectItem value="wellness">Wellness</SelectItem>
-                            <SelectItem value="emergency">Emergency</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <SimpleCustomFieldSelect
+                            name="type"
+                            groupKey="types"
+                            categoryName="Appointments"
+                            createIfNotExists
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="Select appointment type"
+                            fallbackOptions={[
+                              { value: "virtual", label: "Virtual (Telemedicine)" },
+                              { value: "in-person", label: "In-Person" },
+                              { value: "surgery", label: "Surgery" },
+                              { value: "dental", label: "Dental" },
+                              { value: "vaccination", label: "Vaccination" },
+                              { value: "checkup", label: "Checkup" },
+                              { value: "wellness", label: "Wellness" },
+                              { value: "emergency", label: "Emergency" },
+                            ]}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1287,35 +1325,34 @@ export function EnhancedCalendar({
                 )}
               />
 
-              {/* Appointment Type Field - with fallback if custom fields don't work */}
+              {/* Appointment Type (Custom Field) */}
               <FormField
                 control={form.control}
                 name="type"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Type</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select appointment type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="virtual">
-                          Virtual (Telemedicine)
-                        </SelectItem>
-                        <SelectItem value="in-person">In-Person</SelectItem>
-                        <SelectItem value="surgery">Surgery</SelectItem>
-                        <SelectItem value="dental">Dental</SelectItem>
-                        <SelectItem value="vaccination">Vaccination</SelectItem>
-                        <SelectItem value="checkup">Checkup</SelectItem>
-                        <SelectItem value="wellness">Wellness</SelectItem>
-                        <SelectItem value="emergency">Emergency</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SimpleCustomFieldSelect
+                        name="type"
+                        groupKey="types"
+                        categoryName="Appointments"
+                        createIfNotExists
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Select appointment type"
+                        fallbackOptions={[
+                          { value: "virtual", label: "Virtual (Telemedicine)" },
+                          { value: "in-person", label: "In-Person" },
+                          { value: "surgery", label: "Surgery" },
+                          { value: "dental", label: "Dental" },
+                          { value: "vaccination", label: "Vaccination" },
+                          { value: "checkup", label: "Checkup" },
+                          { value: "wellness", label: "Wellness" },
+                          { value: "emergency", label: "Emergency" },
+                        ]}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

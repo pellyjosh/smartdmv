@@ -12,6 +12,7 @@ import { initializeOfflineSystem, clearOfflineSystem, switchOfflinePractice } fr
 import { cacheTenantData, type CachedTenantInfo } from '@/lib/offline/storage/tenant-storage';
 import { saveSession } from '@/lib/offline/storage/auth-storage';
 import { savePermissions } from '@/lib/offline/storage/permission-storage';
+import { pullFreshDataIfNeeded } from '@/lib/sync-service';
 
 /**
  * Cache additional offline data in background (non-blocking)
@@ -100,6 +101,37 @@ async function cacheAdditionalOfflineData(tenantId: string, practiceIdNum: numbe
     } catch (permError) {
       console.error('[useOfflineInit] ❌ Failed to cache permissions:', permError);
       console.warn('[useOfflineInit] ⚠️ Failed to cache permissions (non-critical):', permError);
+    }
+
+    try {
+      const categoriesRes = await fetch(`/api/custom-fields/categories/practice/${practiceIdNum}`);
+      const groupsRes = await fetch(`/api/custom-fields/groups/practice/${practiceIdNum}`);
+      const valuesRes = await fetch(`/api/custom-fields/values/practice/${practiceIdNum}`);
+      const depsRes = await fetch(`/api/custom-fields/dependencies/practice/${practiceIdNum}`);
+
+      const categories = categoriesRes.ok ? await categoriesRes.json() : [];
+      const groups = groupsRes.ok ? await groupsRes.json() : [];
+      const values = valuesRes.ok ? await valuesRes.json() : [];
+      const dependencies = depsRes.ok ? await depsRes.json() : [];
+
+      const { indexedDBManager } = await import('@/lib/offline/db');
+      const cacheKey = `custom_fields_${practiceIdNum}`;
+      const existing = (await indexedDBManager.get('cache', cacheKey)) as any;
+      const payload = {
+        id: cacheKey,
+        key: cacheKey,
+        data: {
+          categories,
+          groups,
+          values,
+          dependencies,
+        },
+        timestamp: Date.now(),
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      };
+      await indexedDBManager.put('cache', existing ? { ...existing, ...payload, data: { ...(existing?.data || {}), ...payload.data } } : payload);
+    } catch (cfError) {
+      console.warn('[useOfflineInit] ⚠️ Failed to cache custom fields (non-critical):', cfError);
     }
   } catch (error) {
     console.warn('[useOfflineInit] ⚠️ Background caching failed (non-critical):', error);
@@ -363,6 +395,10 @@ export function useOfflineInitialization() {
           previousPracticeId.current = practiceIdNum.toString();
           initializationPromise.current = null;
           console.log('[useOfflineInit] ✅ Initialization complete');
+
+          if (isOnline) {
+            await pullFreshDataIfNeeded();
+          }
 
           // Cache tenant data immediately (critical for offline functionality)
           try {

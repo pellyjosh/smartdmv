@@ -4,6 +4,7 @@ import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 ;
 import { customFieldCategories } from '@/db/schemas/customFieldsSchema';
 import { eq, and } from 'drizzle-orm';
+import { log } from 'console';
 
 export async function GET(
     req: Request,
@@ -13,8 +14,7 @@ export async function GET(
   const tenantDb = await getCurrentTenantDb();
 
   try {
-    const resolvedParams = await params;
-    const { practiceId } = resolvedParams;
+    const { practiceId } = params;
 
     if (!practiceId) {
       return NextResponse.json({ error: 'Practice ID is required' }, { status: 400 });
@@ -39,7 +39,8 @@ export async function POST(req: Request) {
     const data = await req.json();
 
     // Validate required fields
-    if (!data.practiceId || !data.name) {
+    const practiceId = typeof data.practiceId === 'string' ? parseInt(data.practiceId, 10) : data.practiceId;
+    if (!practiceId || !data.name) {
       return NextResponse.json(
         { error: 'Practice ID and name are required' },
         { status: 400 }
@@ -50,7 +51,7 @@ export async function POST(req: Request) {
     const existingCategory = await tenantDb.query.customFieldCategories.findFirst({
       where: and(
         eq(customFieldCategories.name, data.name),
-        eq(customFieldCategories.practiceId, data.practiceId)
+        eq(customFieldCategories.practiceId, practiceId)
       ),
     });
 
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
 
     const newCategory = await tenantDb
       .insert(customFieldCategories)
-      .values(data)
+      .values({ practiceId, name: data.name, description: data.description })
       .returning();
 
     return NextResponse.json(newCategory[0], { status: 201 });

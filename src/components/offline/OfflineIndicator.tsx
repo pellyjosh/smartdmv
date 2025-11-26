@@ -25,11 +25,13 @@ import {
 import { cn } from "@/lib/utils";
 
 export function OfflineIndicator() {
-  const { isOnline, isTransitioning } = useNetworkStatus();
+  const { isOnline, wasOnline, isTransitioning } = useNetworkStatus();
   const { stats } = useSyncQueue();
   const { sync, isSyncing } = useSyncEngine();
-  const [show, setShow] = useState(true);
+  const [show, setShow] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [syncJustCompleted, setSyncJustCompleted] = useState(false);
+  const [lastPending, setLastPending] = useState<number | null>(null);
 
   // Check if offline system is initialized
   useEffect(() => {
@@ -44,23 +46,39 @@ export function OfflineIndicator() {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-hide logic: only hide when online, no pending operations, and some time has passed
+  // Track when a sync completes (pending transitions from >0 to 0)
   useEffect(() => {
-    // Always show when offline
+    if (!stats) return;
+    const prev = lastPending ?? stats.pending;
+    const current = stats.pending;
+    const completed = prev > 0 && current === 0;
+    setSyncJustCompleted(completed);
+    setLastPending(current);
+  }, [stats, lastPending]);
+
+  // Display logic: show only when offline, recently came online, or a sync just completed, or there are pending changes
+  useEffect(() => {
+    if (!isInitialized) return;
+
     if (!isOnline) {
       setShow(true);
       return;
     }
 
-    // When online with no pending operations, auto-hide after 5 seconds
-    if (isOnline && stats && stats.pending === 0) {
-      const timer = setTimeout(() => setShow(false), 5000);
-      return () => clearTimeout(timer);
-    } else {
-      // Show if there are pending operations
+    const hasPending = !!stats && stats.pending > 0;
+    const recentlyCameOnline = wasOnline === false;
+    const shouldShow = hasPending || recentlyCameOnline || syncJustCompleted;
+
+    if (shouldShow) {
       setShow(true);
+      if (!hasPending) {
+        const timer = setTimeout(() => setShow(false), 5000);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      setShow(false);
     }
-  }, [isOnline, stats]);
+  }, [isInitialized, isOnline, wasOnline, stats, syncJustCompleted]);
 
   // Don't render until offline system is initialized
   if (!isInitialized) {

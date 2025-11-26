@@ -1,34 +1,34 @@
 import { NextResponse } from 'next/server';
-import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
-;
 import { customFieldGroups } from '@/db/schemas/customFieldsSchema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 export async function GET(
   req: Request,
-  { params }: { params: { practiceId: string; categoryId: string } }
+  { params }: { params: Promise<{ practiceId: string }> }
 ) {
   // Get the tenant-specific database
   const tenantDb = await getCurrentTenantDb();
 
   try {
     const resolvedParams = await params;
-    const { practiceId, categoryId } = resolvedParams;
-
+    const { practiceId } = resolvedParams;
+    const { searchParams } = new URL(req.url);
+    const categoryIdParam = searchParams.get('categoryId');
+    const categoryId = categoryIdParam ? parseInt(categoryIdParam, 10) : undefined;
 
     if (!practiceId) {
       return NextResponse.json({ error: 'Practice ID is required' }, { status: 400 });
     }
 
     let groups;
-    if (categoryId) {
+    if (typeof categoryId === 'number' && !Number.isNaN(categoryId)) {
       groups = await tenantDb.query.customFieldGroups.findMany({
-        where: eq(customFieldGroups.categoryId, parseInt(categoryId)),
+        where: eq(customFieldGroups.categoryId, categoryId),
       });
     } else {
       groups = await tenantDb.query.customFieldGroups.findMany({
-        where: eq(customFieldGroups.practiceId, practiceId),
+        where: eq(customFieldGroups.practiceId, parseInt(practiceId, 10)),
       });
     }
 
@@ -45,9 +45,16 @@ export async function POST(req: Request) {
 
   try {
     const data = await req.json();
+    const rawPracticeId = data.practiceId;
+    const rawCategoryId = data.categoryId;
+    const name: string | undefined = data.name;
+    const key: string | undefined = data.key;
+    const description: string | undefined = data.description;
 
-    // Validate required fields
-    if (!data.practiceId || !data.categoryId || !data.name || !data.key) {
+    const practiceId = typeof rawPracticeId === 'string' ? parseInt(rawPracticeId, 10) : rawPracticeId;
+    const categoryId = typeof rawCategoryId === 'string' ? parseInt(rawCategoryId, 10) : rawCategoryId;
+
+    if (!practiceId || !categoryId || !name || !key) {
       return NextResponse.json(
         { error: 'Practice ID, category ID, name, and key are required' },
         { status: 400 }
@@ -56,7 +63,7 @@ export async function POST(req: Request) {
 
     // Check for existing group with the same key in the same practice
     const existingGroup = await tenantDb.query.customFieldGroups.findFirst({
-      where: eq(customFieldGroups.key, data.key),
+      where: and(eq(customFieldGroups.practiceId, practiceId), eq(customFieldGroups.key, key)),
     });
 
     if (existingGroup) {
@@ -66,7 +73,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const newGroup = await tenantDb.insert(customFieldGroups).values(data).returning();
+    const newGroup = await tenantDb
+      .insert(customFieldGroups)
+      .values({ practiceId, categoryId, name, key, description })
+      .returning();
 
     return NextResponse.json(newGroup[0], { status: 201 });
   } catch (error) {

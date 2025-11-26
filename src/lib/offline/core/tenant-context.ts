@@ -232,6 +232,12 @@ function triggerInitialSyncIfNeeded(context: TenantContext): void {
 
       // Import the sync service dynamically to avoid circular deps
       const { pullFreshDataIfNeeded } = await import('../../sync-service');
+      const { isAuthenticatedOffline } = await import('../storage/auth-storage');
+      const authed = await isAuthenticatedOffline(context.userId, context.tenantId);
+      if (!authed) {
+        hideInitialSyncNotification();
+        return;
+      }
 
       try {
         console.log('[InitialSync] ⏳ Starting sync operation...');

@@ -132,6 +132,20 @@ async function processSyncItem(item: SyncOperation): Promise<boolean> {
  * @returns A promise that resolves with a summary of the sync results
  */
 export async function processQueue(onProgress?: ProgressCallback): Promise<SyncProgress> {
+  const { getOfflineTenantContext } = await import('@/lib/offline/core/tenant-context');
+  const { isAuthenticatedOffline } = await import('@/lib/offline/storage/auth-storage');
+  const context = await getOfflineTenantContext();
+  if (!context) {
+    const progress: SyncProgress = { total: 0, completed: 0, failed: 0, inProgress: false };
+    if (onProgress) onProgress({ ...progress });
+    return progress;
+  }
+  const authed = await isAuthenticatedOffline(context.userId, context.tenantId);
+  if (!authed) {
+    const progress: SyncProgress = { total: 0, completed: 0, failed: 0, inProgress: false };
+    if (onProgress) onProgress({ ...progress });
+    return progress;
+  }
   const queue = await syncQueueManager.getPending();
   
   const progress: SyncProgress = {
@@ -212,10 +226,17 @@ export async function pullFreshDataIfNeeded(): Promise<void> {
     const lastSyncTimestamp = await getLastSyncTimestamp();
 
     const { getOfflineTenantContext } = await import('@/lib/offline/core/tenant-context');
+    const { isAuthenticatedOffline } = await import('@/lib/offline/storage/auth-storage');
     const context = await getOfflineTenantContext();
 
     if (!context) {
       console.log('[SyncService] No tenant context, skipping fresh pull');
+      return;
+    }
+
+    const authed = await isAuthenticatedOffline(context.userId, context.tenantId);
+    if (!authed) {
+      console.log('[SyncService] Skipping fresh data pull - user not authenticated');
       return;
     }
 
@@ -327,9 +348,15 @@ async function pullDataFromServer(): Promise<void> {
     console.log('[SyncService] Pulling fresh data from server...');
 
     const { getOfflineTenantContext } = await import('@/lib/offline/core/tenant-context');
+    const { isAuthenticatedOffline } = await import('@/lib/offline/storage/auth-storage');
     const context = await getOfflineTenantContext();
     if (!context) {
       console.error('[SyncService] No tenant context for fresh pull');
+      return;
+    }
+    const authed = await isAuthenticatedOffline(context.userId, context.tenantId);
+    if (!authed) {
+      console.log('[SyncService] Skipping pull - user not authenticated');
       return;
     }
 

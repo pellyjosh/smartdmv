@@ -128,6 +128,12 @@ export default function PracticeSettingsPage() {
   const [logoPreview, setLogoPreview] = useState<string>(
     practice?.logoPath ? `/uploads/${practice.logoPath}` : ""
   );
+  const [securitySessionTimeout, setSecuritySessionTimeout] = useState<number>(30);
+  const [securityMaxLoginAttempts, setSecurityMaxLoginAttempts] = useState<number>(5);
+  const [securityLockoutMinutes, setSecurityLockoutMinutes] = useState<number>(30);
+  const [apiSettingsData, setApiSettingsData] = useState<any>(null);
+  const canConfigureSecurity = !!user && (user as any).role === 'SUPER_ADMIN';
+  const [isSavingSecurity, setIsSavingSecurity] = useState(false);
 
   // Update form values when practice data changes
   useEffect(() => {
@@ -173,6 +179,64 @@ export default function PracticeSettingsPage() {
     },
     enabled: !!practice?.id,
   });
+  const { data: integrationSettingsData } = useQuery({
+    queryKey: ["/api/integration-settings"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/integration-settings");
+      if (!res.ok) throw new Error("Failed to load integration settings");
+      return await res.json();
+    },
+    enabled: !!practice?.id,
+  });
+  useEffect(() => {
+    if (integrationSettingsData && integrationSettingsData.apiSettings) {
+      const apiSettings = integrationSettingsData.apiSettings || {};
+      const sec = apiSettings.security || {};
+      setApiSettingsData(apiSettings);
+      setSecuritySessionTimeout(
+        typeof sec.sessionTimeoutMinutes === 'number' ? sec.sessionTimeoutMinutes : 30
+      );
+      setSecurityMaxLoginAttempts(
+        typeof sec.maxLoginAttempts === 'number' ? sec.maxLoginAttempts : 5
+      );
+      setSecurityLockoutMinutes(
+        typeof sec.accountLockoutMinutes === 'number' ? sec.accountLockoutMinutes : 30
+      );
+    }
+  }, [integrationSettingsData]);
+  const handleSaveSecurity = async () => {
+    try {
+      setIsSavingSecurity(true);
+      const apiSettings = {
+        ...(apiSettingsData || {}),
+        security: {
+          sessionTimeoutMinutes: securitySessionTimeout,
+          maxLoginAttempts: securityMaxLoginAttempts,
+          accountLockoutMinutes: securityLockoutMinutes,
+        },
+      };
+      const res = await apiRequest("POST", "/api/integration-settings", {
+        apiSettings,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err?.error || "Failed to save security settings");
+      }
+      toast({
+        title: "Security settings updated",
+        description: "Changes have been saved successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/integration-settings"] });
+    } catch (error: any) {
+      toast({
+        title: "Failed to save security settings",
+        description: error?.message || "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingSecurity(false);
+    }
+  };
 
   // Check if we should render auth state instead of the main content
   const authStateComponent = renderAuthState();
@@ -194,23 +258,37 @@ export default function PracticeSettingsPage() {
     if (!practice) return;
 
     try {
-      // Only send fields that are known to exist in the current database
       const updateData: any = {};
 
       if (practiceName !== practice.name) {
         updateData.name = practiceName;
       }
+      if (practiceEmail !== (practice.email || "")) {
+        updateData.email = practiceEmail;
+      }
+      if (practicePhone !== (practice.phone || "")) {
+        updateData.phone = practicePhone;
+      }
+      if (practiceAddress !== (practice.address || "")) {
+        updateData.address = practiceAddress;
+      }
+      if (practiceCity !== (practice.city || "")) {
+        updateData.city = practiceCity;
+      }
+      if (practiceState !== (practice.state || "")) {
+        updateData.state = practiceState;
+      }
+      if (practiceZipCode !== (practice.zipCode || "")) {
+        updateData.zipCode = practiceZipCode;
+      }
+      if (practiceCountry !== (practice.country || "")) {
+        updateData.country = practiceCountry;
+      }
 
-      // Try to update currency if it has changed
       if (defaultCurrencyId && defaultCurrencyId !== (practice as any)?.defaultCurrencyId) {
         updateData.defaultCurrencyId = defaultCurrencyId;
         console.log('Updating currency from', (practice as any)?.defaultCurrencyId, 'to', defaultCurrencyId);
       }
-
-      // For now, only update the name and currency fields to avoid database column errors
-      // The other fields (email, phone, address, etc.) need database schema updates first
-
-      console.log('Update data being sent:', updateData);
 
       if (Object.keys(updateData).length === 0) {
         toast({
@@ -233,19 +311,11 @@ export default function PracticeSettingsPage() {
     } catch (err: any) {
       console.error('Form submission error:', err);
 
-      if (err?.message?.includes('Database schema mismatch')) {
-        toast({
-          title: "Database update needed",
-          description: "Some form fields require database updates. Please contact your administrator.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Failed to update practice",
-          description: err?.message || "An unknown error occurred",
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Failed to update practice",
+        description: err?.message || "An unknown error occurred",
+        variant: "destructive",
+      });
     }
   };
 
@@ -839,8 +909,9 @@ export default function PracticeSettingsPage() {
                           type="number"
                           min="5"
                           max="120"
-                          value={(practice as any)?.sessionTimeoutMinutes || 30}
-                          disabled
+                          value={securitySessionTimeout}
+                          onChange={(e) => setSecuritySessionTimeout(parseInt(e.target.value))}
+                          disabled={!canConfigureSecurity}
                         />
                         <p className="text-xs text-muted-foreground">
                           Time in minutes before an inactive session is logged
@@ -857,8 +928,9 @@ export default function PracticeSettingsPage() {
                           type="number"
                           min="3"
                           max="10"
-                          value={(practice as any)?.maxLoginAttempts || 5}
-                          disabled
+                          value={securityMaxLoginAttempts}
+                          onChange={(e) => setSecurityMaxLoginAttempts(parseInt(e.target.value))}
+                          disabled={!canConfigureSecurity}
                         />
                         <p className="text-xs text-muted-foreground">
                           Number of failed attempts before account is locked
@@ -875,8 +947,9 @@ export default function PracticeSettingsPage() {
                         type="number"
                         min="15"
                         max="1440"
-                        value={(practice as any)?.accountLockoutMinutes || 30}
-                        disabled
+                        value={securityLockoutMinutes}
+                        onChange={(e) => setSecurityLockoutMinutes(parseInt(e.target.value))}
+                        disabled={!canConfigureSecurity}
                       />
                       <p className="text-xs text-muted-foreground">
                         Time an account remains locked after exceeding max login
@@ -885,13 +958,18 @@ export default function PracticeSettingsPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4">
-                    <p className="text-sm text-amber-600 flex items-center gap-2">
-                      <ShieldAlert className="h-4 w-4" />
-                      Security settings can only be configured by a system
-                      administrator
-                    </p>
-                  </div>
+                  {canConfigureSecurity ? (
+                    <Button onClick={handleSaveSecurity} disabled={isSavingSecurity}>
+                      {isSavingSecurity ? "Saving..." : "Save Security Settings"}
+                    </Button>
+                  ) : (
+                    <div className="mt-4">
+                      <p className="text-sm text-amber-600 flex items-center gap-2">
+                        <ShieldAlert className="h-4 w-4" />
+                        Security settings can only be configured by a system administrator
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -982,7 +1060,7 @@ export default function PracticeSettingsPage() {
 
                 <Button
                   onClick={() =>
-                    (window.location.href = "/theme-customization")
+                    (window.location.href = "/admin/theme-customization")
                   }
                 >
                   Customize Theme
