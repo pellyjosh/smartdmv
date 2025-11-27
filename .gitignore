@@ -32,3 +32,5 @@ logs
 .idea/
 *.sublime-workspace
 *.sublime-project
+
+ecosystem.config.js

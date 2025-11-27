@@ -242,7 +242,7 @@ export async function GET(req: NextRequest) {
     
     if (process.env.NODE_ENV === 'production') {
       // Production: Use custom domain if available, otherwise prefix subdomain to owner domain
-      const ownerDomain = process.env.OWNER_DOMAIN || 'version3demo.smartdvm.com';
+      const ownerDomain = (process.env.OWNER_DOMAIN || process.env.NEXT_PUBLIC_OWNER_DOMAIN || 'version3demo.smartdvm.com').replace(/^https?:\/\//, '').replace(/\/$/, '');
       
       if (tenant.customDomain) {
         // Use tenant's custom domain
@@ -256,8 +256,9 @@ export async function GET(req: NextRequest) {
       }
     } else {
       // Development: Use localhost with subdomain pattern
-      if (tenant.subdomain && process.env.OWNER_DOMAIN?.includes('localhost')) {
-        const port = process.env.OWNER_DOMAIN.split(':')[1] || '9002';
+      if (tenant.subdomain && (process.env.OWNER_DOMAIN || process.env.NEXT_PUBLIC_OWNER_DOMAIN)?.includes('localhost')) {
+        const base = (process.env.OWNER_DOMAIN || process.env.NEXT_PUBLIC_OWNER_DOMAIN || 'localhost:9002');
+        const port = base.split(':')[1] || '9002';
         redirectUrl = `${protocol}://${tenant.subdomain}.localhost:${port}/marketplace?payment=success&message=Payment completed successfully`;
       } else {
         redirectUrl = `${protocol}://localhost:9002/marketplace?payment=success&message=Payment completed successfully`;

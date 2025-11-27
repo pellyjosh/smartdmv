@@ -456,7 +456,7 @@ export async function createMarketplacePayment(params: {
         },
         // Use OWNER_DOMAIN for the callback URL since this is an owner API endpoint
         // This ensures Paystack redirects to the owner domain, not a tenant subdomain
-        callbackUrl: `${process.env.NODE_ENV === 'production' ? 'https' : 'http'}://${process.env.OWNER_DOMAIN || 'localhost:9002'}/api/owner/marketplace/verify-payment?transactionId=${transaction.id}&provider=paystack`,
+        callbackUrl: `${process.env.NODE_ENV === 'production' ? 'https' : 'http'}://${(process.env.OWNER_DOMAIN || process.env.NEXT_PUBLIC_OWNER_DOMAIN || 'localhost:9002').replace(/^https?:\/\//, '')}/api/owner/marketplace/verify-payment?transactionId=${transaction.id}&provider=paystack`,
       });
 
       // Update transaction with Paystack reference

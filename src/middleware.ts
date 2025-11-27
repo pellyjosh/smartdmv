@@ -30,7 +30,7 @@ function extractTenantFromHostname(hostname: string): string | null {
     return null;
   }
 
-  const ownerDomainEnv = (process.env.OWNER_DOMAIN || '').toLowerCase();
+  const ownerDomainEnv = (process.env.OWNER_DOMAIN || process.env.NEXT_PUBLIC_OWNER_DOMAIN || '').toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
   const ownerDomainHost = ownerDomainEnv.split(':')[0];
 
   // Strip www.
@@ -62,7 +62,7 @@ export async function middleware(request: NextRequest) {
   const hostnameNoPort = hostname.split(':')[0];
 
   // Normalize owner domain (ignore port when comparing)
-  const ownerDomainEnv = (process.env.OWNER_DOMAIN || 'localhost:9002').toLowerCase();
+  const ownerDomainEnv = (process.env.OWNER_DOMAIN || process.env.NEXT_PUBLIC_OWNER_DOMAIN || 'localhost:9002').toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
   const ownerDomainHost = ownerDomainEnv.split(':')[0];
   const isOwnerDomain = hostnameNoPort === ownerDomainHost;
   
