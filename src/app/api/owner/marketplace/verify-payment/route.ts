@@ -242,7 +242,7 @@ export async function GET(req: NextRequest) {
     
     if (process.env.NODE_ENV === 'production') {
       // Production: Use custom domain if available, otherwise prefix subdomain to owner domain
-      const ownerDomain = (process.env.OWNER_DOMAIN || process.env.NEXT_PUBLIC_OWNER_DOMAIN || 'version3demo.smartdvm.com').replace(/^https?:\/\//, '').replace(/\/$/, '');
+      const ownerDomain = (process.env.OWNER_DOMAIN || process.env.NEXT_PUBLIC_OWNER_DOMAIN || (req.headers.get('host') || '')).replace(/^https?:\/\//, '').replace(/\/$/, '');
       
       if (tenant.customDomain) {
         // Use tenant's custom domain

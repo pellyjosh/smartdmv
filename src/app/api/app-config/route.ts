@@ -1,13 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     // Get the base URL from environment variables with proper fallback hierarchy
     const baseUrl = process.env.APP_BASE_URL || 
                    process.env.NEXT_PUBLIC_APP_URL || 
-                   (process.env.NODE_ENV === 'production' 
-                     ? 'https://version3demo.smartdvm.com' 
-                     : 'http://localhost:9002');
+                   (() => {
+                     const host = req.headers.get('host') || 'localhost:9002';
+                     const proto = req.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+                     return `${proto}://${host}`;
+                   })();
 
     const config = {
       baseUrl,

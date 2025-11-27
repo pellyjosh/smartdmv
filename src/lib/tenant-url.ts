@@ -1,20 +1,4 @@
-/**
- * Utility helpers for constructing tenant & owner URLs in both
- * development and production environments.
- *
- * Goals:
- *  - Remove hard-coded localhost:9002 occurrences
- *  - Centralize logic for subdomain vs custom domain resolution
- *  - Support deriving tenant base domain from owner domain if not explicitly set
- *  - Allow overriding dev port via NEXT_PUBLIC_DEV_PORT
- *
- * Public Environment Variables Used (must start with NEXT_PUBLIC_ so they are exposed to the client):
- *  - NEXT_PUBLIC_OWNER_DOMAIN            (e.g. version3demo.smartdvm.com)
- *  - NEXT_PUBLIC_TENANT_BASE_DOMAIN      (e.g. smartdvm.com OR version3demo.smartdvm.com)
- *  - NEXT_PUBLIC_APP_URL                 (e.g. https://version3demo.smartdvm.com/)
- *  - NEXT_PUBLIC_DEV_PORT                (defaults to 9002 if not set)
- *  - NEXT_PUBLIC_FORCE_HTTP              (optional, force http in production if set to 'true')
- */
+
 
 const DEV = process.env.NODE_ENV !== 'production';
 const DEV_PORT = process.env.NEXT_PUBLIC_DEV_PORT || '9002';
@@ -24,10 +8,7 @@ const EXPLICIT_TENANT_BASE = (process.env.NEXT_PUBLIC_TENANT_BASE_DOMAIN || '').
 function deriveTenantBaseDomain(): string | undefined {
   if (EXPLICIT_TENANT_BASE) return EXPLICIT_TENANT_BASE;
   if (!OWNER_DOMAIN) return undefined;
-  // Heuristic: if owner domain has 3+ labels (e.g. version3demo.smartdvm.com)
-  // we assume tenants will live one level deeper: <tenant>.<owner_domain>
-  // so we keep the full owner domain as the base. This avoids accidentally
-  // collapsing environment-specific prefixes (version3demo) that might be required.
+
   return OWNER_DOMAIN;
 }
 
