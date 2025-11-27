@@ -761,25 +761,25 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "Theme Customization",
-        href: "/admin/theme-customization",
+        href: "/theme-customization",
         icon: AppWindow,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN"],
       },
       {
         title: "Custom Fields",
-        href: "/admin/custom-fields",
+        href: "/custom-fields",
         icon: FolderOpen,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
       },
       {
         title: "Dashboard Config",
-        href: "/admin/dashboard-config",
+        href: "/dashboard-config",
         icon: LayoutDashboard,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
       },
       {
         title: "Custom Field Demo",
-        href: "/admin/custom-field-demo",
+        href: "/custom-field-demo",
         icon: ClipboardList,
         roles: ["ADMINISTRATOR", "PRACTICE_ADMIN", "PRACTICE_MANAGER"],
       },
@@ -807,7 +807,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       {
         title: "FAQ",
-        href: "/admin/faq",
+        href: "/faq",
         icon: BadgeHelp,
         roles: [
           "ADMINISTRATOR",
@@ -821,7 +821,7 @@ const menuGroups: MenuGroup[] = [
       },
       {
         title: "Support",
-        href: "/admin/support",
+        href: "/support",
         icon: Users,
         roles: [
           "ADMINISTRATOR",
@@ -832,95 +832,6 @@ const menuGroups: MenuGroup[] = [
           "RECEPTIONIST",
           "ACCOUNTANT",
         ],
-      },
-    ],
-  },
-  {
-    id: "superAdmin",
-    title: "System Admin",
-    icon: ShieldAlert,
-    roles: ["ADMINISTRATOR"],
-    items: [
-      {
-        title: "Super Admin",
-        href: "/super-admin",
-        icon: ShieldAlert,
-        roles: ["ADMINISTRATOR"],
-      },
-      {
-        title: "System Governance",
-        href: "/system-governance",
-        icon: Gauge,
-        roles: ["ADMINISTRATOR"],
-      },
-      {
-        title: "Governance Audit",
-        href: "/governance-audit",
-        icon: ShieldCheck,
-        roles: ["ADMINISTRATOR"],
-      },
-      {
-        title: "Onboarding",
-        href: "/onboarding",
-        icon: AppWindow,
-        roles: ["ADMINISTRATOR"],
-      },
-      {
-        title: "Subscription Management",
-        href: "/admin/subscription-management",
-        icon: CreditCard,
-        roles: ["ADMINISTRATOR"],
-      },
-      {
-        title: "Tenant Deployments",
-        href: "/tenant-deployments",
-        icon: Boxes,
-        roles: ["ADMINISTRATOR"],
-      },
-      {
-        title: "Marketplace Management",
-        href: "/admin/marketplace",
-        icon: ShoppingCart,
-        roles: ["ADMINISTRATOR"],
-      },
-      {
-        title: "Email Templates",
-        href: "/admin/email-templates",
-        icon: Mail,
-        roles: ["ADMINISTRATOR"],
-        offlineSupported: false,
-        offlineMessage:
-          "Email templates cannot be edited offline as they require server-side validation and storage.",
-      },
-      {
-        title: "Email Service",
-        href: "/admin/email-service",
-        icon: AtSign,
-        roles: ["ADMINISTRATOR"],
-        offlineSupported: false,
-        offlineMessage:
-          "Email service configuration requires internet connection to test and validate email server settings.",
-      },
-      {
-        title: "Onboarding Settings",
-        href: "/admin/onboarding-settings",
-        icon: Settings2,
-        roles: ["ADMINISTRATOR"],
-      },
-      {
-        title: "Billing Management",
-        href: "/admin/billing-management",
-        icon: Receipt,
-        roles: ["ADMINISTRATOR"],
-      },
-      {
-        title: "Billing Analytics",
-        href: "/admin/billing-analytics",
-        icon: LineChart,
-        roles: ["ADMINISTRATOR"],
-        offlineSupported: false,
-        offlineMessage:
-          "Billing analytics require real-time access to financial data and payment processing systems.",
       },
     ],
   },

@@ -36,7 +36,11 @@ const {
   customFieldValues,
   healthResources,
   contacts,
-  administratorAccessiblePractices
+  administratorAccessiblePractices,
+  permissionCategories,
+  permissionResources,
+  permissionActions,
+  roles
 } = schema;
 
 interface SeedOptions {
@@ -54,6 +58,9 @@ interface SeedOptions {
   clear?: boolean;
   customFields?: boolean;
   customFieldsReset?: boolean;
+  minimal?: boolean;
+  roles?: boolean;
+  permissions?: boolean;
 }
 
 type NumericSeedKeys = 'healthPlans' | 'appointments' | 'soapNotes' | 'prescriptions' | 'vaccinations' | 'referrals' | 'notifications' | 'inventoryItems' | 'healthResources' | 'contacts';
@@ -73,7 +80,7 @@ const DEFAULT_COUNTS: NumericSeedOptions = {
 
 async function seedTenantData() {
   const args = process.argv.slice(2);
-  const tenantSlug = args[0];
+  const tenantSlug = args.find(a => !a.startsWith('--'));
   
   if (!tenantSlug) {
     console.log(`🌱 Seed Tenant Database`);
@@ -94,13 +101,16 @@ async function seedTenantData() {
     console.log(`  --clear              Clear existing data before seeding (DANGEROUS!)`);
     console.log(`  --custom-fields      Seed default custom fields for each practice`);
     console.log(`  --custom-fields-reset Reset custom fields to defaults for each practice`);
+    console.log(`  --minimal            Minimal setup (no sample appointments/SOAP/etc). Default when no options passed`);
+    console.log(`  --roles              Seed system roles for each practice`);
+    console.log(`  --permissions        Seed permission categories/resources/actions for each practice`);
     process.exit(1);
   }
 
   // Parse options
   const options: SeedOptions = {};
 
-  args.slice(1).forEach(arg => {
+  args.filter(arg => arg.startsWith('--')).forEach(arg => {
     if (arg === '--all') {
       options.all = true;
       // When --all is specified, use default counts
@@ -111,6 +121,12 @@ async function seedTenantData() {
       options.customFields = true;
     } else if (arg === '--custom-fields-reset') {
       options.customFieldsReset = true;
+    } else if (arg === '--minimal') {
+      options.minimal = true;
+    } else if (arg === '--roles') {
+      options.roles = true;
+    } else if (arg === '--permissions') {
+      options.permissions = true;
     } else if (arg.startsWith('--')) {
       const [key, value] = arg.slice(2).split('=');
       const normalizedKey = key.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
@@ -123,13 +139,18 @@ async function seedTenantData() {
 
   console.log(`🔧 Options after parsing:`, options);
 
-  // If no specific seeding options and no --all, default to all types
+  // If no specific seeding options and no --all, default to minimal
   const hasAnySeeding = Object.keys(options).some(key => key !== 'clear' && key !== 'all' && key in DEFAULT_COUNTS);
   console.log(`🔧 Has any seeding: ${hasAnySeeding}, Options.all: ${options.all}`);
 
   if (!hasAnySeeding && !options.all) {
-    console.log(`🔧 Applying default counts`);
-    Object.assign(options, DEFAULT_COUNTS);
+    console.log(`🔧 Applying minimal mode (no sample operational data)`);
+    options.minimal = true;
+    if (options.customFields === undefined && !options.customFieldsReset) {
+      options.customFields = true;
+    }
+    if (options.roles === undefined) options.roles = true;
+    if (options.permissions === undefined) options.permissions = true;
   }
 
   console.log(`🔧 Final options:`, options);
@@ -227,20 +248,51 @@ async function seedTenantData() {
     }
   }
 
+  if (options.minimal) {
+    console.log(`🔧 Minimal mode: skipping sample users/pets and operational records`);
+    // Only seed/reset custom fields as requested
+    if (options.customFieldsReset) {
+      console.log(`🔄 Resetting custom fields to defaults for all practices...`);
+      for (const practice of existingPractices) {
+        await resetCustomFieldsForPractice(tenantDb, practice.id);
+        await seedDefaultCustomFieldsForPractice(tenantDb, practice.id);
+      }
+      console.log(`✅ Custom fields reset and seeded.`);
+    } else if (options.customFields) {
+      console.log(`🌱 Seeding default custom fields for all practices...`);
+      for (const practice of existingPractices) {
+        await seedDefaultCustomFieldsForPractice(tenantDb, practice.id);
+      }
+      console.log(`✅ Default custom fields seeded.`);
+    }
+    if (options.permissions) {
+      console.log(`🌱 Seeding permission categories/resources/actions for all practices...`);
+      for (const practice of existingPractices) {
+        await seedPermissionCategoriesForPractice(tenantDb, practice.id);
+      }
+      console.log(`✅ Permission categories/resources/actions seeded.`);
+    }
+    if (options.roles) {
+      console.log(`🌱 Seeding system roles for all practices...`);
+      for (const practice of existingPractices) {
+        await seedSystemRolesForPractice(tenantDb, practice.id);
+      }
+      console.log(`✅ System roles seeded.`);
+    }
+  } else {
     if (existingUsers.length === 0 || existingPets.length === 0) {
       console.log(`⚠️  No users or pets found. Creating basic data using existing practice...`);
       await seedBasicData(tenantDb, existingPractices[0]);
 
-    // Refetch the data
-    const practices = await tenantDb.query.practices.findMany();
-    const users = await tenantDb.query.users.findMany();
-    const pets = await tenantDb.query.pets.findMany({ with: { owner: true } });
+      const practices = await tenantDb.query.practices.findMany();
+      const users = await tenantDb.query.users.findMany();
+      const pets = await tenantDb.query.pets.findMany({ with: { owner: true } });
 
-    await seedAllDataTypes(tenantDb, options, practices, users, pets);
-  } else {
-    await seedAllDataTypes(tenantDb, options, existingPractices, existingUsers, existingPets);
+      await seedAllDataTypes(tenantDb, options, practices, users, pets);
+    } else {
+      await seedAllDataTypes(tenantDb, options, existingPractices, existingUsers, existingPets);
+    }
 
-    // Seed or reset custom fields if requested
     if (options.customFieldsReset) {
       console.log(`🔄 Resetting custom fields to defaults for all practices...`);
       for (const practice of existingPractices) {
@@ -254,6 +306,20 @@ async function seedTenantData() {
         await seedDefaultCustomFieldsForPractice(tenantDb, practice.id);
       }
       console.log(`✅ Default custom fields seeded.`);
+    }
+    if (options.permissions || options.all) {
+      console.log(`🌱 Seeding permission categories/resources/actions for all practices...`);
+      for (const practice of existingPractices) {
+        await seedPermissionCategoriesForPractice(tenantDb, practice.id);
+      }
+      console.log(`✅ Permission categories/resources/actions seeded.`);
+    }
+    if (options.roles || options.all) {
+      console.log(`🌱 Seeding system roles for all practices...`);
+      for (const practice of existingPractices) {
+        await seedSystemRolesForPractice(tenantDb, practice.id);
+      }
+      console.log(`✅ System roles seeded.`);
     }
   }
 
@@ -293,7 +359,6 @@ async function seedDefaultCustomFieldsForPractice(db: any, practiceId: number) {
   const groupsSpec: { category: string; name: string; key: string; description?: string }[] = [
     // Appointments
     { category: 'Appointments', name: 'Types', key: 'types' },
-    { category: 'Appointments', name: 'Appointment Types', key: 'appointment_types' },
     // Pet Information
     { category: 'Pet Information', name: 'Color', key: 'color' },
     { category: 'Pet Information', name: 'Pet Type', key: 'pet_type' },
@@ -326,15 +391,6 @@ async function seedDefaultCustomFieldsForPractice(db: any, practiceId: number) {
     { groupKey: 'types', label: 'Checkup', value: 'checkup' },
     { groupKey: 'types', label: 'Wellness Exam', value: 'wellness' },
     { groupKey: 'types', label: 'Emergency', value: 'emergency' },
-
-    { groupKey: 'appointment_types', label: 'Virtual Consultation', value: 'virtual' },
-    { groupKey: 'appointment_types', label: 'In-Person Appointment', value: 'in-person' },
-    { groupKey: 'appointment_types', label: 'Surgery', value: 'surgery' },
-    { groupKey: 'appointment_types', label: 'Dental Procedure', value: 'dental' },
-    { groupKey: 'appointment_types', label: 'Vaccination', value: 'vaccination' },
-    { groupKey: 'appointment_types', label: 'Checkup', value: 'checkup' },
-    { groupKey: 'appointment_types', label: 'Wellness Exam', value: 'wellness' },
-    { groupKey: 'appointment_types', label: 'Emergency', value: 'emergency' },
 
     // Pet Information: Color
     { groupKey: 'color', label: 'White', value: 'white' },
@@ -390,6 +446,115 @@ async function resetCustomFieldsForPractice(db: any, practiceId: number) {
   await db.delete(customFieldValues).where(eq(customFieldValues.practiceId, practiceId));
   await db.delete(customFieldGroups).where(eq(customFieldGroups.practiceId, practiceId));
   await db.delete(customFieldCategories).where(eq(customFieldCategories.practiceId, practiceId));
+}
+
+async function seedPermissionCategoriesForPractice(db: any, practiceId: number) {
+  const categories = [
+    { name: 'Users & Access', description: 'User and role management', displayOrder: 1, icon: 'users' },
+    { name: 'Patients & Records', description: 'Patient and medical records', displayOrder: 2, icon: 'file-text' },
+    { name: 'Operations', description: 'Operational resources', displayOrder: 3, icon: 'settings' },
+    { name: 'Financial', description: 'Billing and payments', displayOrder: 4, icon: 'dollar-sign' },
+    { name: 'System', description: 'System administration', displayOrder: 5, icon: 'cpu' },
+  ];
+  const resourcesByCategory: Record<string, { name: string; description: string }[]> = {
+    'Users & Access': [
+      { name: 'users', description: 'User accounts' },
+      { name: 'roles', description: 'Roles' },
+      { name: 'permissions', description: 'Permissions' },
+    ],
+    'Patients & Records': [
+      { name: 'patients', description: 'Patients' },
+      { name: 'appointments', description: 'Appointments' },
+      { name: 'medical_records', description: 'Medical records' },
+    ],
+    Operations: [
+      { name: 'inventory', description: 'Inventory' },
+      { name: 'checklists', description: 'Checklists' },
+    ],
+    Financial: [
+      { name: 'billing', description: 'Billing' },
+      { name: 'payments', description: 'Payments' },
+    ],
+    System: [
+      { name: 'admin', description: 'Administration' },
+      { name: 'system_settings', description: 'System settings' },
+    ],
+  };
+  const actions = ['CREATE', 'READ', 'UPDATE', 'DELETE', 'MANAGE'];
+  const categoryIdMap: Record<string, number> = {};
+  for (const cat of categories) {
+    const existing = await db.query.permissionCategories.findFirst({ where: (t: any, { and, eq }: any) => and(eq(t.practiceId, practiceId), eq(t.name, cat.name)) });
+    const [row] = existing ? [existing] : await db.insert(permissionCategories).values({ practiceId, name: cat.name, description: cat.description, displayOrder: cat.displayOrder, icon: cat.icon, isActive: true, isSystemDefined: true }).returning();
+    categoryIdMap[cat.name] = row.id;
+  }
+  for (const [catName, resList] of Object.entries(resourcesByCategory)) {
+    const catId = categoryIdMap[catName];
+    for (const res of resList) {
+      const existingRes = await db.query.permissionResources.findFirst({ where: (t: any, { and, eq }: any) => and(eq(t.categoryId, catId), eq(t.name, res.name)) });
+      const [resRow] = existingRes ? [existingRes] : await db.insert(permissionResources).values({ categoryId: catId, name: res.name, description: res.description, isActive: true }).returning();
+      for (const act of actions) {
+        const existingAct = await db.query.permissionActions.findFirst({ where: (t: any, { and, eq }: any) => and(eq(t.resourceId, resRow.id), eq(t.name, act)) });
+        if (!existingAct) {
+          await db.insert(permissionActions).values({ resourceId: resRow.id, name: act, description: act.toLowerCase(), isActive: true });
+        }
+      }
+    }
+  }
+}
+
+async function seedSystemRolesForPractice(db: any, practiceId: number) {
+  const rolesSpec = [
+    {
+      name: 'SUPER_ADMIN',
+      displayName: 'Super Administrator',
+      description: 'Full system access',
+      permissions: [
+        { id: 'users_manage', resource: 'users', action: 'MANAGE', granted: true, category: 'Users & Access' },
+        { id: 'roles_manage', resource: 'roles', action: 'MANAGE', granted: true, category: 'Users & Access' },
+        { id: 'permissions_manage', resource: 'permissions', action: 'MANAGE', granted: true, category: 'Users & Access' },
+        { id: 'appointments_manage', resource: 'appointments', action: 'MANAGE', granted: true, category: 'Patients & Records' },
+        { id: 'medical_records_manage', resource: 'medical_records', action: 'MANAGE', granted: true, category: 'Patients & Records' },
+        { id: 'inventory_manage', resource: 'inventory', action: 'MANAGE', granted: true, category: 'Operations' },
+        { id: 'billing_manage', resource: 'billing', action: 'MANAGE', granted: true, category: 'Financial' },
+        { id: 'admin_all', resource: 'admin', action: 'ALL', granted: true, category: 'System' },
+      ],
+    },
+    {
+      name: 'PRACTICE_ADMINISTRATOR',
+      displayName: 'Practice Administrator',
+      description: 'Practice-level administration',
+      permissions: [
+        { id: 'users_manage_basic', resource: 'users', action: 'MANAGE', granted: true, category: 'Users & Access' },
+        { id: 'appointments_manage', resource: 'appointments', action: 'MANAGE', granted: true, category: 'Patients & Records' },
+        { id: 'medical_records_read', resource: 'medical_records', action: 'READ', granted: true, category: 'Patients & Records' },
+        { id: 'inventory_manage', resource: 'inventory', action: 'MANAGE', granted: true, category: 'Operations' },
+        { id: 'billing_read', resource: 'billing', action: 'READ', granted: true, category: 'Financial' },
+      ],
+    },
+    {
+      name: 'VETERINARIAN',
+      displayName: 'Veterinarian',
+      description: 'Clinical operations',
+      permissions: [
+        { id: 'appointments_manage', resource: 'appointments', action: 'MANAGE', granted: true, category: 'Patients & Records' },
+        { id: 'medical_records_manage', resource: 'medical_records', action: 'MANAGE', granted: true, category: 'Patients & Records' },
+      ],
+    },
+    {
+      name: 'CLIENT',
+      displayName: 'Client',
+      description: 'Client access',
+      permissions: [
+        { id: 'appointments_read', resource: 'appointments', action: 'READ', granted: true, category: 'Patients & Records' },
+      ],
+    },
+  ];
+  for (const r of rolesSpec) {
+    const existing = await db.query.roles.findFirst({ where: (t: any, { and, eq }: any) => and(eq(t.practiceId, practiceId), eq(t.name, r.name)) });
+    if (!existing) {
+      await db.insert(roles).values({ practiceId, name: r.name, displayName: r.displayName, description: r.description, isSystemDefined: true, isActive: true, permissions: r.permissions });
+    }
+  }
 }
 
 async function clearTenantData(db: any) {

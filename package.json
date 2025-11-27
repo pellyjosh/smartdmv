@@ -40,7 +40,8 @@
     "db:tenant:studio:smartvet": "NODE_TLS_REJECT_UNAUTHORIZED=0 DATABASE_URL='postgresql://smartdvm_admin:Rootless123%23@smartdvm.cnug2qlw9kof.eu-north-1.rds.amazonaws.com:5432/tenant_smartvet?sslmode=require' npx drizzle-kit studio --config=drizzle.config.ts",
     "db:tenant:view": "tsx scripts/view-tenant-db.ts",
     "db:tenant:list": "tsx scripts/list-tenant-dbs.ts",
-    "db:tenant:seed": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx scripts/seed-tenant-data.ts"
+    "db:tenant:seed": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx scripts/seed-tenant-data.ts --minimal",
+    "db:tenant:import:csv": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx scripts/import-clients-pets-from-csv.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

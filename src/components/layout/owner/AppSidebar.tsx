@@ -90,123 +90,88 @@ const menuGroups: MenuGroup[] = [
     roles: ["OWNER", "SYSTEM_ADMIN"],
   },
   {
-    id: "administration",
-    title: "Administration",
+    id: "owner-super-admin",
+    title: "Super Admin",
+    href: "/owner/super-admin",
     icon: ShieldAlert,
     roles: ["OWNER", "SYSTEM_ADMIN"],
-    items: [
-      {
-        title: "Super Admin",
-        href: "/owner/super-admin",
-        icon: ShieldAlert,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-        keywords: ["admin", "main", "overview", "owner dashboard"],
-      },
-      {
-        title: "System Governance",
-        href: "/owner/system-governance",
-        icon: Gauge,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-      },
-      {
-        title: "Governance Audit",
-        href: "/owner/governance-audit",
-        icon: ShieldCheck,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-      },
-    ],
   },
   {
-    id: "tenants",
-    title: "Tenant Management",
-    icon: Boxes,
+    id: "owner-system-governance",
+    title: "System Governance",
+    href: "/owner/system-governance",
+    icon: Gauge,
     roles: ["OWNER", "SYSTEM_ADMIN"],
-    items: [
-      {
-        title: "Tenant Deployments",
-        href: "/owner/tenant-deployments",
-        icon: Boxes,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-      },
-      {
-        title: "Tenant Management",
-        href: "/owner/tenant-management",
-        icon: Settings2,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-      },
-      {
-        title: "Onboarding",
-        href: "/owner/onboarding",
-        icon: AppWindow,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-      },
-      {
-        title: "Onboarding Settings",
-        href: "/owner/onboarding-settings",
-        icon: Settings2,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-      },
-    ],
   },
   {
-    id: "billing",
-    title: "Billing & Subscriptions",
+    id: "owner-governance-audit",
+    title: "Governance Audit",
+    href: "/owner/governance-audit",
+    icon: ShieldCheck,
+    roles: ["OWNER", "SYSTEM_ADMIN"],
+  },
+  {
+    id: "owner-onboarding",
+    title: "Onboarding",
+    href: "/owner/tenant-management",
+    icon: AppWindow,
+    roles: ["OWNER", "SYSTEM_ADMIN"],
+  },
+  {
+    id: "owner-subscription-management",
+    title: "Subscription Management",
+    href: "/owner/subscription-management",
     icon: CreditCard,
     roles: ["OWNER", "SYSTEM_ADMIN"],
-    items: [
-      {
-        title: "Subscription Management",
-        href: "/owner/subscription-management",
-        icon: CreditCard,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-      },
-      {
-        title: "Billing Management",
-        href: "/owner/billing-management",
-        icon: Receipt,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-      },
-      {
-        title: "Billing Analytics",
-        href: "/owner/billing-analytics",
-        icon: LineChart,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-      },
-    ],
   },
   {
-    id: "marketplace",
-    title: "Marketplace",
+    id: "owner-tenant-deployments",
+    title: "Tenant Deployments",
+    href: "/owner/tenant-deployments",
+    icon: Boxes,
+    roles: ["OWNER", "SYSTEM_ADMIN"],
+  },
+  {
+    id: "owner-marketplace",
+    title: "Marketplace Management",
+    href: "/owner/marketplace",
     icon: ShoppingCart,
     roles: ["OWNER", "SYSTEM_ADMIN"],
-    items: [
-      {
-        title: "Marketplace Management",
-        href: "/owner/marketplace",
-        icon: ShoppingCart,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-      },
-    ],
   },
   {
-    id: "communications",
-    title: "Communications",
+    id: "owner-email-templates",
+    title: "Email Templates",
+    href: "/owner/email-templates",
     icon: Mail,
     roles: ["OWNER", "SYSTEM_ADMIN"],
-    items: [
-      {
-        title: "Email Templates",
-        href: "/owner/email-templates",
-        icon: Mail,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-      },
-      {
-        title: "Email Service",
-        href: "/owner/email-service",
-        icon: AtSign,
-        roles: ["OWNER", "SYSTEM_ADMIN"],
-      },
-    ],
+  },
+  {
+    id: "owner-email-service",
+    title: "Email Service",
+    href: "/owner/email-service",
+    icon: AtSign,
+    roles: ["OWNER", "SYSTEM_ADMIN"],
+  },
+  {
+    id: "owner-onboarding-settings",
+    title: "Onboarding Settings",
+    href: "/owner/onboarding-settings",
+    icon: Settings2,
+    roles: ["OWNER", "SYSTEM_ADMIN"],
+  },
+  {
+    id: "owner-billing-management",
+    title: "Billing Management",
+    href: "/owner/billing-management",
+    icon: Receipt,
+    roles: ["OWNER", "SYSTEM_ADMIN"],
+  },
+  {
+    id: "owner-billing-analytics",
+    title: "Billing Analytics",
+    href: "/owner/billing-analytics",
+    icon: LineChart,
+    roles: ["OWNER", "SYSTEM_ADMIN"],
   },
 ];
 
@@ -354,7 +319,9 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
       <item.icon
         className={cn(
           "h-5 w-5",
-          currentViewCollapsed && !isSubmenuItem ? "mx-auto" : "mr-3 shrink-0",
+          currentViewCollapsed && !isSubmenuItem
+            ? "mr-3 shrink-0"
+            : "mr-3 shrink-0",
           isSubmenuItem && "h-4 w-4 mr-2"
         )}
       />
@@ -365,10 +332,10 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
     }
 
     return (
-      <>
+      <div className="flex items-center w-full justify-start text-left">
         {itemIcon}
         <span className="truncate flex-1">{item.title}</span>
-      </>
+      </div>
     );
   };
 
@@ -377,6 +344,15 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
       return filteredNavItems.map((item) => {
         const isActive = pathname === item.href;
         const isExpanded = expandedMenus[item.title];
+
+        const commonButtonClasses = cn(
+          "flex items-center w-full text-sm font-medium rounded-md transition-colors duration-150",
+          "group",
+          isActive
+            ? "bg-primary/10 text-primary"
+            : "text-foreground/70 hover:bg-accent hover:text-accent-foreground",
+          currentViewCollapsed ? "px-2 py-3" : "px-3 py-2.5"
+        );
 
         if (item.submenu) {
           return (
@@ -387,11 +363,10 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
                     <Button
                       variant="ghost"
                       className={cn(
-                        "w-full group",
+                        commonButtonClasses,
                         currentViewCollapsed
-                          ? "justify-center px-2"
-                          : "justify-between",
-                        isActive && "bg-accent text-accent-foreground"
+                          ? "justify-start text-left"
+                          : "justify-between"
                       )}
                       onClick={() => {
                         if (item.href) {
@@ -401,7 +376,7 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
                         }
                       }}
                     >
-                      <div className="flex items-center">
+                      <div className="flex items-center w-full justify-start text-left">
                         {renderNavItemContent(
                           item,
                           false,
@@ -435,8 +410,10 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
                         key={subItem.title}
                         variant="ghost"
                         className={cn(
-                          "w-full justify-start group text-sm",
-                          isSubActive && "bg-accent text-accent-foreground"
+                          "flex items-center w-full text-sm rounded-md transition-colors duration-150 group px-3 py-2 justify-start text-left",
+                          isSubActive
+                            ? "bg-primary/10 text-primary"
+                            : "text-foreground/70 hover:bg-accent hover:text-accent-foreground"
                         )}
                         onClick={() => router.push(subItem.href)}
                       >
@@ -457,13 +434,7 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  className={cn(
-                    "w-full group",
-                    currentViewCollapsed
-                      ? "justify-center px-2"
-                      : "justify-start",
-                    isActive && "bg-accent text-accent-foreground"
-                  )}
+                  className={cn(commonButtonClasses, "justify-start text-left")}
                   onClick={() => item.href && router.push(item.href)}
                 >
                   {renderNavItemContent(item, false, currentViewCollapsed)}
@@ -528,10 +499,7 @@ export function AppSidebar({ isCollapsed, onToggleCollapse }: AppSidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 pb-4 scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-gray-300 scrollbar-track-gray-100">
         <ul
-          className={cn(
-            "space-y-1",
-            currentViewCollapsed ? "items-center" : ""
-          )}
+          className={cn("space-y-1", currentViewCollapsed ? "items-start" : "")}
         >
           {renderNavItems({ currentViewCollapsed })}
         </ul>
