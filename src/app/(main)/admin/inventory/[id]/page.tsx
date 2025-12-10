@@ -119,8 +119,8 @@ function InventoryItemDetailPageContent() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useUser();
-  const { practiceCurrency } = useCurrencyFormatter();
-  const currencySymbol = practiceCurrency?.symbol || "$";
+  const { format: formatCurrency, practiceCurrency } = useCurrencyFormatter();
+  const currencySymbol = practiceCurrency?.symbol;
   const [currentTab, setCurrentTab] = useState("details");
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
@@ -1101,8 +1101,7 @@ function InventoryItemDetailPageContent() {
                     <div>
                       <p className="text-sm font-medium">Cost</p>
                       <p className="text-sm text-muted-foreground">
-                        {currencySymbol}
-                        {item.cost}
+                        {formatCurrency(Number(item.cost))}
                       </p>
                     </div>
                   )}
@@ -1110,8 +1109,7 @@ function InventoryItemDetailPageContent() {
                     <div>
                       <p className="text-sm font-medium">Price</p>
                       <p className="text-sm text-muted-foreground">
-                        {currencySymbol}
-                        {item.price}
+                        {formatCurrency(Number(item.price))}
                       </p>
                     </div>
                   )}
@@ -1874,7 +1872,7 @@ function InventoryItemDetailPageContent() {
           </DialogHeader>
           <Form {...restockForm}>
             <form
-              onSubmit={restockForm.handleSubmit((data: any) =>
+              onSubmit={restockForm.handleSubmit((data) =>
                 restockMutation.mutate(data)
               )}
               className="space-y-4"

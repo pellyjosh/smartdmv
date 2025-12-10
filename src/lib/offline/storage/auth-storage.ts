@@ -57,15 +57,14 @@ export async function getAuthToken(
   tenantId: string
 ): Promise<OfflineAuthToken | null> {
   try {
-    const tokens = await indexedDBManager.queryByIndex<OfflineAuthToken>(
+    const tokensByTenant = await indexedDBManager.queryByIndex<OfflineAuthToken>(
       STORES.AUTH_TOKENS,
-      'userId',
-      userId
+      'tenantId',
+      tenantId
     );
 
-    // Find token for this tenant
-    const token = tokens.find((t) => t.tenantId === tenantId);
-    return token || null;
+    const token = tokensByTenant.find((t: any) => String(t.userId) === String(userId));
+    return token ?? null;
   } catch (error) {
     throw new DatabaseError('Failed to get auth token', error as Error);
   }
@@ -201,14 +200,14 @@ export async function getSession(
   tenantId: string
 ): Promise<OfflineSession | null> {
   try {
-    const sessions = await indexedDBManager.queryByIndex<OfflineSession>(
+    const sessionsByTenant = await indexedDBManager.queryByIndex<OfflineSession>(
       STORES.SESSIONS,
-      'userId',
-      userId
+      'tenantId',
+      tenantId
     );
 
-    const session = sessions.find((s) => s.tenantId === tenantId);
-    return session || null;
+    const session = sessionsByTenant.find((s: any) => String(s.userId) === String(userId));
+    return session ?? null;
   } catch (error) {
     throw new DatabaseError('Failed to get session', error as Error);
   }

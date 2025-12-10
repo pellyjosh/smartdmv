@@ -34,20 +34,19 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '5');
     const days = parseInt(searchParams.get('days') || '7'); // Show next 7 days by default
 
-    // Calculate the start time (current time in milliseconds)
+    // Calculate the start time (Date object for timestamp columns)
     const now = new Date();
-    const startTimeMs = now.getTime();
+    const startTime = now;
 
-    // Calculate end time (X days from now in milliseconds)
+    // Calculate end time (X days from now as Date, if needed later)
     const endTime = new Date();
     endTime.setDate(endTime.getDate() + days);
-    const endTimeMs = endTime.getTime();
 
     // Fetch upcoming appointments for the practice
     const upcomingAppointments = await tenantDb.query.appointments.findMany({
       where: and(
         eq(appointments.practiceId, userPractice.practiceId),
-        gte(appointments.date, startTimeMs) // Appointments from now onwards
+        gte(appointments.date, startTime) // Appointments from now onwards
       ),
       with: {
         pet: {

@@ -781,6 +781,14 @@ export function EnhancedCalendar({
     setQuickScheduleOpen(true);
   };
 
+  const visiblePets = [...pets]
+    .sort(
+      (a: any, b: any) =>
+        new Date(a.createdAt || 0).getTime() -
+        new Date(b.createdAt || 0).getTime()
+    )
+    .slice(-6);
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {/* Calendar picker */}
@@ -794,7 +802,7 @@ export function EnhancedCalendar({
         <div className="mt-6">
           <h3 className="font-medium text-lg mb-3">Pets</h3>
           <div className="flex flex-wrap gap-2">
-            {pets.map((pet: Pet) => (
+            {visiblePets.map((pet: Pet) => (
               <div
                 key={pet.id}
                 className="cursor-pointer"
@@ -817,6 +825,16 @@ export function EnhancedCalendar({
               </div>
             ))}
           </div>
+          {pets.length > 6 && (
+            <div className="mt-2">
+              <a
+                href="/admin/clients"
+                className="text-sm text-primary hover:underline"
+              >
+                Show more
+              </a>
+            </div>
+          )}
         </div>
       </div>
 
@@ -941,7 +959,10 @@ export function EnhancedCalendar({
                             onChange={field.onChange}
                             placeholder="Select appointment type"
                             fallbackOptions={[
-                              { value: "virtual", label: "Virtual (Telemedicine)" },
+                              {
+                                value: "virtual",
+                                label: "Virtual (Telemedicine)",
+                              },
                               { value: "in-person", label: "In-Person" },
                               { value: "surgery", label: "Surgery" },
                               { value: "dental", label: "Dental" },

@@ -1,12 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { customFieldValues } from '@/db/schemas/customFieldsSchema';
 import { eq } from 'drizzle-orm';
 
-export async function GET(req: Request, { params }: { params: { practiceId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ practiceId: string }> }) {
   const tenantDb = await getCurrentTenantDb();
   try {
-    const { practiceId } = params;
+    const { practiceId } = await params;
     if (!practiceId) {
       return NextResponse.json({ error: 'Practice ID is required' }, { status: 400 });
     }

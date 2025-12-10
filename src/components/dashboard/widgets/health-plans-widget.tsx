@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { WidgetConfig } from "@/hooks/use-dashboard-config"; // Assuming this path is correct
 import type { HealthPlan } from "@/db/schema";
@@ -12,14 +13,26 @@ interface HealthPlansWidgetProps {
 
 export function HealthPlansWidget({ widget }: HealthPlansWidgetProps) {
   // Fetch health plans
-  const { data: healthPlans, isLoading: loadingPlans } = useQuery<HealthPlan[]>({
-    queryKey: ['/api/health-plans'],
-    queryFn: async () => {
-      const response = await fetch('/api/health-plans');
-      if (!response.ok) throw new Error('Failed to fetch health plans');
-      return response.json();
-    },
-  });
+  const { data: healthPlans, isLoading: loadingPlans } = useQuery<HealthPlan[]>(
+    {
+      queryKey: ["/api/health-plans"],
+      queryFn: async () => {
+        const response = await fetch("/api/health-plans");
+        if (!response.ok) throw new Error("Failed to fetch health plans");
+        return response.json();
+      },
+    }
+  );
+
+  const [expanded, setExpanded] = React.useState(false);
+  const sizeMap: Record<"small" | "medium" | "large", string> = {
+    small: "h-48",
+    medium: "h-72",
+    large: "h-96",
+  };
+  const containerClass = expanded
+    ? "space-y-3"
+    : `${sizeMap[widget.size]} overflow-y-auto space-y-3`;
 
   const isLoading = loadingPlans;
 
@@ -39,10 +52,8 @@ export function HealthPlansWidget({ widget }: HealthPlansWidgetProps) {
     );
   }
 
-  // Filter to show only active plans and limit the number displayed
-  const filteredPlans = healthPlans
-    .filter(plan => plan.status === "active")
-    .slice(0, 4); // Show only first 4 active plans
+  const activePlans = healthPlans.filter((plan) => plan.status === "active");
+  const filteredPlans = activePlans;
 
   if (filteredPlans.length === 0) {
     return (
@@ -52,16 +63,21 @@ export function HealthPlansWidget({ widget }: HealthPlansWidgetProps) {
     );
   }
 
- 
-  // TODO: Implement actual progress calculation based on plan milestones
   const calculateProgress = (plan: HealthPlan) => {
-    // In a real implementation, this would be calculated based on completed milestones
-    // For now, return a random value between 0-100 as per the original code
-    return Math.floor(Math.random() * 100);
+    const anyPlan = plan as any;
+    const total = Number(anyPlan?.milestoneCount ?? 0);
+    const completed = Number(anyPlan?.milestoneCompletedCount ?? 0);
+    if (total > 0) {
+      const ratio = completed / total;
+      const percent = Math.round(Math.max(0, Math.min(1, ratio)) * 100);
+      return percent;
+    }
+    if (plan.status === "completed") return 100;
+    return 0;
   };
 
   return (
-    <div className="space-y-3">
+    <div className={containerClass}>
       {filteredPlans.map((plan) => (
         <div
           key={plan.id}
@@ -73,7 +89,9 @@ export function HealthPlansWidget({ widget }: HealthPlansWidgetProps) {
           </div>
           <div className="text-sm mb-2">{plan.name}</div>
           <div className="space-y-1">
-            <div className="flex justify-between text-xs text-muted-foreground"> {/* Added text-muted-foreground */}
+            <div className="flex justify-between text-xs text-muted-foreground">
+              {" "}
+              {/* Added text-muted-foreground */}
               <span>Progress</span>
               <span>{calculateProgress(plan)}%</span>
             </div>
@@ -81,6 +99,16 @@ export function HealthPlansWidget({ widget }: HealthPlansWidgetProps) {
           </div>
         </div>
       ))}
+      {activePlans.length > 4 && (
+        <div className="pt-2 border-t">
+          <button
+            className="w-full text-xs text-primary hover:underline"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? "Show less" : "Show more"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

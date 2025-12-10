@@ -203,9 +203,7 @@ export default function DashboardConfigPage() {
 
     updateConfig({
       id: selectedConfigId,
-      config: {
-        config: JSON.stringify(currentConfig)
-      }
+      config: JSON.stringify(currentConfig)
     });
   };
 

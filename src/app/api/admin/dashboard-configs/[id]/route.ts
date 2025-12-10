@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserPractice } from '@/lib/auth-utils';
 import { getCurrentTenantDb } from '@/lib/tenant-db-resolver';
 import { dashboardConfigs } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 
 interface RouteParams {
   params: {
@@ -11,7 +11,7 @@ interface RouteParams {
 }
 
 // GET /api/admin/dashboard-configs/[id] - Get specific dashboard configuration
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> | { id: string } }) {
   // Get the tenant-specific database
   const tenantDb = await getCurrentTenantDb();
 
@@ -21,7 +21,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const configId = parseInt(params.id);
+    const { id } = await context.params;
+    const configId = parseInt(id);
     if (isNaN(configId)) {
       return NextResponse.json({ error: 'Invalid config ID' }, { status: 400 });
     }
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // PATCH /api/admin/dashboard-configs/[id] - Update dashboard configuration
-export async function PATCH(request: NextRequest, { params }: RouteParams) {
+export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> | { id: string } }) {
   // Get the tenant-specific database
   const tenantDb = await getCurrentTenantDb();
 
@@ -61,7 +62,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const configId = parseInt(params.id);
+    const { id } = await context.params;
+    const configId = parseInt(id);
     if (isNaN(configId)) {
       return NextResponse.json({ error: 'Invalid config ID' }, { status: 400 });
     }
@@ -103,6 +105,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.isDefault !== undefined) updateData.isDefault = body.isDefault;
     if (body.role !== undefined) updateData.role = body.role;
 
+    // Always update timestamp and avoid empty updates
+    updateData.updated_at = sql`CURRENT_TIMESTAMP`;
+
     // Update the config
     const updatedConfig = await tenantDb
       .update(dashboardConfigs)
@@ -121,7 +126,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE /api/admin/dashboard-configs/[id] - Delete dashboard configuration
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> | { id: string } }) {
   // Get the tenant-specific database
   const tenantDb = await getCurrentTenantDb();
 
@@ -131,7 +136,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const configId = parseInt(params.id);
+    const { id } = await context.params;
+    const configId = parseInt(id);
     if (isNaN(configId)) {
       return NextResponse.json({ error: 'Invalid config ID' }, { status: 400 });
     }

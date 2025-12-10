@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { WidgetConfig } from "@/hooks/use-dashboard-config";
 import { WhiteboardItem } from "@/schemas/whiteboard-item";
 import { Loader2 } from "lucide-react";
@@ -9,11 +10,24 @@ interface WhiteboardWidgetProps {
 }
 
 export function WhiteboardWidget({ widget }: WhiteboardWidgetProps) {
-  const { data: whiteboardItems, isLoading: loadingItems } = useQuery<WhiteboardItem[]>({
-    queryKey: ['/api/whiteboard'],
+  const { data: whiteboardItems, isLoading: loadingItems } = useQuery<
+    WhiteboardItem[]
+  >({
+    queryKey: ["/api/whiteboard"],
   });
 
-  const isLoading = loadingItems || loadingPets;
+  const [expanded, setExpanded] = useState(false);
+
+  const sizeMap: Record<"small" | "medium" | "large", string> = {
+    small: "h-48",
+    medium: "h-72",
+    large: "h-96",
+  };
+  const containerClass = expanded
+    ? "space-y-3"
+    : `${sizeMap[widget.size]} overflow-y-auto space-y-3`;
+
+  const isLoading = loadingItems;
 
   if (isLoading) {
     return (
@@ -32,14 +46,17 @@ export function WhiteboardWidget({ widget }: WhiteboardWidgetProps) {
   }
 
   // Filter to show only active items and sort by urgency
-  const filteredItems = whiteboardItems
-    .filter(item => item.status === "active")
+  const sortedActive = whiteboardItems
+    .filter((item) => item.status === "active")
     .sort((a, b) => {
       const urgencyOrder = { high: 0, medium: 1, low: 2 };
-      return (urgencyOrder[a.urgency as keyof typeof urgencyOrder] || 3) - 
-             (urgencyOrder[b.urgency as keyof typeof urgencyOrder] || 3);
-    })
-    .slice(0, 5); // Show only the first 5
+      return (
+        (urgencyOrder[a.urgency as keyof typeof urgencyOrder] || 3) -
+        (urgencyOrder[b.urgency as keyof typeof urgencyOrder] || 3)
+      );
+    });
+
+  const filteredItems = sortedActive;
 
   if (filteredItems.length === 0) {
     return (
@@ -51,20 +68,21 @@ export function WhiteboardWidget({ widget }: WhiteboardWidgetProps) {
 
   const getUrgencyColor = (urgency: string | null) => {
     switch (urgency) {
-      case "high": return "bg-red-100 text-red-800";
-      case "medium": return "bg-yellow-100 text-yellow-800";
-      case "low": return "bg-green-100 text-green-800";
-      default: return "bg-gray-100 text-gray-800";
+      case "high":
+        return "bg-red-100 text-red-800";
+      case "medium":
+        return "bg-yellow-100 text-yellow-800";
+      case "low":
+        return "bg-green-100 text-green-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
   return (
-    <div className="space-y-3">
+    <div className={containerClass}>
       {filteredItems.map((item) => (
-        <div
-          key={item.id}
-          className="p-2 border rounded-md"
-        >
+        <div key={item.id} className="p-2 border rounded-md">
           <div className="flex justify-between items-start">
             <div className="font-medium">{item.petId}</div>
             {item.urgency && (
@@ -80,6 +98,16 @@ export function WhiteboardWidget({ widget }: WhiteboardWidgetProps) {
           )}
         </div>
       ))}
+      {sortedActive.length > 5 && (
+        <div className="pt-2 border-t">
+          <button
+            className="w-full text-xs text-primary hover:underline"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? "Show less" : "Show more"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

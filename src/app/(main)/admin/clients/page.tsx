@@ -312,7 +312,11 @@ export default function ClientsPage() {
   const [isEditClientDialogOpen, setIsEditClientDialogOpen] = useState(false);
   const [isDeleteClientDialogOpen, setIsDeleteClientDialogOpen] =
     useState(false);
+  const [isDeletePetDialogOpen, setIsDeletePetDialogOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<User | null>(null);
+  const [selectedPetToDelete, setSelectedPetToDelete] = useState<Pet | null>(
+    null
+  );
   const [petPhoto, setPetPhoto] = useState<File | null>(null);
   const [editPetId, setEditPetId] = useState<number | null>(null);
   const [selectedSpecies, setSelectedSpecies] = useState<string>("");
@@ -1204,6 +1208,9 @@ export default function ClientsPage() {
           description: "The pet has been removed.",
         });
       }
+
+      setIsDeletePetDialogOpen(false);
+      setSelectedPetToDelete(null);
     },
     onError: (error: Error) => {
       toast({
@@ -2268,9 +2275,10 @@ export default function ClientsPage() {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      onClick={() =>
-                                        deletePetMutation.mutate(Number(pet.id))
-                                      }
+                                      onClick={() => {
+                                        setSelectedPetToDelete(pet as Pet);
+                                        setIsDeletePetDialogOpen(true);
+                                      }}
                                       disabled={deletePetMutation.isPending}
                                     >
                                       {deletePetMutation.isPending ? (
@@ -2889,6 +2897,66 @@ export default function ClientsPage() {
           </Form>
         </DialogContent>
       </Dialog>
+      {/* Delete Pet Confirmation Dialog */}
+      <Dialog
+        open={isDeletePetDialogOpen}
+        onOpenChange={setIsDeletePetDialogOpen}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Pet</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this pet? This action cannot be
+              undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {selectedPetToDelete && (
+              <div className="flex items-center p-3 border rounded-md">
+                <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+                  <span className="text-primary-700 font-semibold">
+                    {selectedPetToDelete.name?.charAt(0)?.toUpperCase() || "?"}
+                  </span>
+                </div>
+                <div className="ml-3">
+                  <p className="font-medium text-slate-900">
+                    {selectedPetToDelete.name}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {selectedPetToDelete.species}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="flex space-x-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setIsDeletePetDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (selectedPetToDelete) {
+                  deletePetMutation.mutate(Number(selectedPetToDelete.id));
+                }
+              }}
+              disabled={deletePetMutation.isPending}
+            >
+              {deletePetMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Pet"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Client Dialog */}
       <Dialog
@@ -3317,7 +3385,7 @@ function ClientAppointmentsList({ clientId }: ClientAppointmentsListProps) {
             This client has no upcoming or past appointments.
           </p>
           <Button variant="outline" className="mt-4" asChild>
-            <Link href="/appointments">
+            <Link href="/admin/appointments">
               <Calendar className="mr-2 h-4 w-4" />
               Schedule Appointment
             </Link>

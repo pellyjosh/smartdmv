@@ -657,7 +657,7 @@ export default function OfflineDemoPage() {
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground">Database Name:</span>
                   <span className="font-mono">
-                    SmartDMV_Tenant_{tenant?.subdomain || tenant?.slug}
+                    SmartDMV_Tenant_{tenant?.id}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 border-b">

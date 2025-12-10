@@ -41,12 +41,14 @@ import { apiRequest } from "@/lib/queryClient";
 import type { BoardingStay, Kennel } from "@/db/schemas/boardingSchema";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 
 export default function BoardingPage() {
   const practiceId = usePracticeId();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("current");
+  const { format } = useCurrencyFormatter();
 
   // Offline hooks
   const { isOnline } = useNetworkStatus();
@@ -365,7 +367,7 @@ export default function BoardingPage() {
                           </div>
                           <div>
                             <p className="text-muted-foreground">Daily Rate:</p>
-                            <p className="font-medium">${stay.dailyRate}</p>
+                            <p className="font-medium">{format(Number(stay.dailyRate || 0))}</p>
                           </div>
                         </div>
                         {stay.specialInstructions && (
@@ -495,7 +497,7 @@ export default function BoardingPage() {
                           </div>
                           <div>
                             <p className="text-muted-foreground">Daily Rate:</p>
-                            <p className="font-medium">${stay.dailyRate}</p>
+                            <p className="font-medium">{format(Number(stay.dailyRate || 0))}</p>
                           </div>
                         </div>
                         {stay.specialInstructions && (

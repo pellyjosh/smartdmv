@@ -179,13 +179,15 @@ export async function cacheAuthForOffline(
     }
 
     // Save authentication token (use simplified format)
+    const uid = typeof user.id === 'string' ? parseInt(user.id, 10) : user.id;
+    const pidNum = typeof practiceId === 'string' ? parseInt(practiceId, 10) : practiceId;
     const tokenData = {
       id: session.id,
-      userId: user.id, // Keep as string
+      userId: uid,
       tenantId,
-      practiceId: practiceId || '',
-      obfuscatedToken: session.id, // Use session ID as token placeholder
-      obfuscatedRefreshToken: undefined,
+      practiceId: pidNum || 0,
+      encryptedToken: session.id,
+      encryptedRefreshToken: undefined,
       expiresAt: new Date(session.expiresAt).getTime(),
       refreshExpiresAt: undefined,
       createdAt: new Date(session.createdAt).getTime(),
@@ -199,9 +201,9 @@ export async function cacheAuthForOffline(
     // Save session data
     const sessionData = {
       id: session.id,
-      userId: user.id, // Keep as string
+      userId: uid,
       tenantId,
-      practiceId,
+      practiceId: pidNum,
       currentPracticeId,
       accessiblePracticeIds,
       email: user.email,
@@ -215,7 +217,7 @@ export async function cacheAuthForOffline(
         language: 'en',
         offlineEnabled: true,
         autoSync: true,
-        syncInterval: 30000, // 30 seconds
+        syncInterval: 30000,
       },
       expiresAt: session.expiresAt,
       createdAt: new Date(session.createdAt).getTime(),

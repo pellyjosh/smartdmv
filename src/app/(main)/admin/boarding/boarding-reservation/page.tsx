@@ -52,6 +52,7 @@ import { useToast } from "@/hooks/use-toast";
 import { usePracticeId } from "@/hooks/use-practice-id";
 import { useUser } from "@/context/UserContext";
 import { apiRequest } from "@/lib/queryClient";
+import { Combobox } from "@/components/ui/combobox";
 
 // Form schema
 const baseFormSchema = z.object({
@@ -182,6 +183,26 @@ export default function BoardingReservationPage() {
     enabled: !!practiceId,
   });
 
+  const { data: currency } = useQuery<{
+    code: string;
+    name: string;
+    symbol: string;
+    decimals: string;
+  }>({
+    queryKey: ["/api/practices", practiceId, "currency"],
+    queryFn: async () => {
+      if (!practiceId) throw new Error("Practice ID is required");
+      const res = await fetch(`/api/practices/${practiceId}/currency`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch currency");
+      return res.json();
+    },
+    enabled: !!practiceId,
+    staleTime: 300_000,
+  });
+  const currencySymbol = currency?.symbol;
+
   // Use API data when online, offline data when offline
   const displayKennels = isOnline
     ? kennels || []
@@ -250,6 +271,79 @@ export default function BoardingReservationPage() {
         title: "Success",
         description: "Boarding reservation created successfully",
       });
+
+      if (practiceId && isOnline && data?.pet?.owner?.id && data?.pet?.id) {
+        try {
+          const checkIn = new Date(data.checkInDate);
+          const plannedOut = new Date(data.plannedCheckOutDate);
+          const msPerDay = 1000 * 60 * 60 * 24;
+          const nights = Math.max(
+            1,
+            Math.ceil((plannedOut.getTime() - checkIn.getTime()) / msPerDay)
+          );
+          const rate = parseFloat(String(data.dailyRate || "0"));
+          const subtotal = (rate * nights).toFixed(2);
+
+          const invoicePayload = {
+            clientId: Number(data.pet.owner.id),
+            petId: Number(data.pet.id),
+            date: new Date().toISOString(),
+            dueDate: plannedOut.toISOString(),
+            notes: `Boarding stay scheduled for ${data.pet.name}`,
+            items: [
+              {
+                description: "Boarding stay",
+                quantity: nights,
+                subtotal,
+                taxable: true,
+              },
+            ],
+          };
+
+          apiRequest(
+            "POST",
+            `/api/practices/${practiceId}/invoices`,
+            invoicePayload
+          )
+            .then(async (res) => {
+              if (res.ok) {
+                const createdInvoice = await res.json();
+                toast({
+                  title: "Invoice Created",
+                  description: `Invoice #${createdInvoice.invoiceNumber} has been created for this stay`,
+                });
+                queryClient.invalidateQueries({
+                  queryKey: ["/api/practices", practiceId, "invoices"],
+                });
+              } else {
+                try {
+                  const err = await res.json();
+                  toast({
+                    title: "Invoice Error",
+                    description: err?.error || "Failed to create invoice",
+                    variant: "destructive",
+                  });
+                } catch {
+                  toast({
+                    title: "Invoice Error",
+                    description: "Failed to create invoice",
+                    variant: "destructive",
+                  });
+                }
+              }
+            })
+            .catch(() => {
+              toast({
+                title: "Invoice Error",
+                description: "Failed to create invoice",
+                variant: "destructive",
+              });
+            });
+        } catch {
+          // ignore invoice creation errors here
+        }
+      }
+
       router.push(`/admin/boarding/boarding-stay/${data.id}`);
     },
     onError: (error: Error) => {
@@ -452,42 +546,48 @@ export default function BoardingReservationPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Pet</FormLabel>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        disabled={isMutating}
-                      >
-                        <FormControl>
-                          <SelectTrigger
-                            className={
-                              form.formState.errors.petId
-                                ? "border-red-500"
-                                : ""
-                            }
-                          >
-                            <SelectValue placeholder="Select a pet" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {petsLoading ? (
-                            <SelectItem value="loading" disabled>
-                              Loading pets...
-                            </SelectItem>
-                          ) : displayPets.length === 0 ? (
-                            <SelectItem value="no-pets" disabled>
-                              No pets available
-                            </SelectItem>
-                          ) : (
-                            displayPets.map((pet: Pet) => (
-                              <SelectItem key={pet.id} value={String(pet.id)}>
-                                {pet.name} ({pet.ownerName || pet.owner?.name})
-                                - {pet.species}
-                                {pet.breed ? `, ${pet.breed}` : ""}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <Combobox
+                          options={
+                            petsLoading
+                              ? [
+                                  {
+                                    value: "loading",
+                                    label: "Loading pets...",
+                                  },
+                                ]
+                              : displayPets.length > 0
+                              ? displayPets.map((pet: Pet) => ({
+                                  value: String(pet.id),
+                                  label: `${pet.name} (${
+                                    pet.ownerName ||
+                                    pet.owner?.name ||
+                                    "Unknown"
+                                  }) - ${pet.species}${
+                                    pet.breed ? `, ${pet.breed}` : ""
+                                  }`,
+                                }))
+                              : [
+                                  {
+                                    value: "none",
+                                    label: "No pets available",
+                                  },
+                                ]
+                          }
+                          value={field.value}
+                          onSelect={field.onChange}
+                          placeholder="Select a pet"
+                          emptyText="No pets found."
+                          className={
+                            form.formState.errors.petId ? "border-red-500" : ""
+                          }
+                          disabled={
+                            isMutating ||
+                            petsLoading ||
+                            displayPets.length === 0
+                          }
+                        />
+                      </FormControl>
                       <FormDescription>
                         Select the pet for this boarding stay
                       </FormDescription>
@@ -502,43 +602,44 @@ export default function BoardingReservationPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Kennel</FormLabel>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        disabled={isMutating}
-                      >
-                        <FormControl>
-                          <SelectTrigger
-                            className={
-                              form.formState.errors.kennelId
-                                ? "border-red-500"
-                                : ""
-                            }
-                          >
-                            <SelectValue placeholder="Select a kennel" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {combinedKennelsLoading ? (
-                            <SelectItem value="loading" disabled>
-                              Loading kennels...
-                            </SelectItem>
-                          ) : displayKennels.length === 0 ? (
-                            <SelectItem value="no-kennels" disabled>
-                              No kennels available
-                            </SelectItem>
-                          ) : (
-                            displayKennels.map((kennel: Kennel) => (
-                              <SelectItem
-                                key={kennel.id}
-                                value={String(kennel.id)}
-                              >
-                                {kennel.name} - {kennel.type} ({kennel.size})
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <Combobox
+                          options={
+                            combinedKennelsLoading
+                              ? [
+                                  {
+                                    value: "loading",
+                                    label: "Loading kennels...",
+                                  },
+                                ]
+                              : displayKennels.length > 0
+                              ? displayKennels.map((kennel: Kennel) => ({
+                                  value: String(kennel.id),
+                                  label: `${kennel.name} - ${kennel.type} (${kennel.size})`,
+                                }))
+                              : [
+                                  {
+                                    value: "none",
+                                    label: "No kennels available",
+                                  },
+                                ]
+                          }
+                          value={field.value}
+                          onSelect={field.onChange}
+                          placeholder="Select a kennel"
+                          emptyText="No kennels found."
+                          className={
+                            form.formState.errors.kennelId
+                              ? "border-red-500"
+                              : ""
+                          }
+                          disabled={
+                            isMutating ||
+                            combinedKennelsLoading ||
+                            displayKennels.length === 0
+                          }
+                        />
+                      </FormControl>
                       <FormDescription>
                         Select an available kennel
                       </FormDescription>
@@ -650,7 +751,7 @@ export default function BoardingReservationPage() {
                   name="dailyRate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Daily Rate ($)</FormLabel>
+                      <FormLabel>{`Daily Rate (${currencySymbol})`}</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="0.00"

@@ -18,6 +18,8 @@ import type {
 } from '@/lib/offline/types/sync-engine.types';
 import * as conflictStorage from '@/lib/offline/storage/conflict-storage';
 import { indexedDBManager } from '@/lib/offline/db/manager';
+import { getOfflineTenantContext } from '@/lib/offline/core/tenant-context';
+import { initializeOfflineSystem } from '@/lib/offline/utils/offline-init';
 
 export interface UseSyncEngineReturn {
   // Sync operations
@@ -97,6 +99,33 @@ export function useSyncEngine(config?: Partial<SyncConfig>): UseSyncEngineReturn
       isSyncingRef.current = true;
       setIsSyncing(true);
       setStatus('preparing');
+
+      try {
+        const current = indexedDBManager.getCurrentTenant();
+        if (!current.tenantId) {
+          const ctx = await getOfflineTenantContext();
+          if (ctx) {
+            await initializeOfflineSystem({
+              tenantId: ctx.tenantId,
+              practiceId: ctx.practiceId,
+              userId: ctx.userId,
+            });
+          } else {
+            const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+            const me = meRes.ok ? await meRes.json() : null;
+            const tenantRes = await fetch('/api/tenant/current');
+            const tenantJson = tenantRes.ok ? await tenantRes.json() : null;
+            const tid = tenantJson?.tenant?.id?.toString();
+            const pidRaw = me?.currentPracticeId ?? me?.practiceId;
+            const uidRaw = me?.id;
+            const pid = typeof pidRaw === 'string' ? parseInt(pidRaw, 10) : pidRaw;
+            const uid = typeof uidRaw === 'string' ? parseInt(uidRaw, 10) : uidRaw;
+            if (tid && pid && uid) {
+              await initializeOfflineSystem({ tenantId: tid, practiceId: pid, userId: uid });
+            }
+          }
+        }
+      } catch (e) {}
       
       const result = await performSync(config);
       

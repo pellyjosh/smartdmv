@@ -53,6 +53,7 @@ import {
   Pill,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
+import { useCurrencyFormatter } from "@/hooks/use-currency-formatter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { RequirePermission, PermissionButton } from "@/lib/rbac/components";
 import { Inventory } from "@/db/schema";
@@ -72,6 +73,7 @@ export default function InventoryPage() {
     "adjust" | "delete" | "update"
   >("adjust");
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
+  const { format } = useCurrencyFormatter();
 
   // Single item adjustment state
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
@@ -678,7 +680,7 @@ export default function InventoryPage() {
                   </h4>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="cost">Cost Per Unit ($)</Label>
+                      <Label htmlFor="cost">Cost Per Unit</Label>
                       <Input
                         id="cost"
                         name="cost"
@@ -689,7 +691,7 @@ export default function InventoryPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="price">Selling Price Per Unit ($)</Label>
+                      <Label htmlFor="price">Selling Price Per Unit</Label>
                       <Input
                         id="price"
                         name="price"
@@ -849,7 +851,7 @@ export default function InventoryPage() {
             <CardDescription>Current inventory value</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">${totalValue.toFixed(2)}</div>
+            <div className="text-3xl font-bold">{format(totalValue)}</div>
           </CardContent>
         </Card>
       </div>
@@ -1243,6 +1245,7 @@ function InventoryTable({
   onAdjustClick,
 }: InventoryTableProps) {
   const hasSelectionEnabled = !!setSelectedItems;
+  const { format } = useCurrencyFormatter();
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!setSelectedItems) return;
@@ -1401,11 +1404,13 @@ function InventoryTable({
                   </TableCell>
                   <TableCell className="text-right">
                     {item.price
-                      ? `$${parseFloat(
-                          Array.isArray(item.price)
-                            ? item.price[0]
-                            : item.price || "0"
-                        ).toFixed(2)}`
+                      ? format(
+                          parseFloat(
+                            Array.isArray(item.price)
+                              ? item.price[0]
+                              : item.price || "0"
+                          )
+                        )
                       : "-"}
                   </TableCell>
                   <TableCell>

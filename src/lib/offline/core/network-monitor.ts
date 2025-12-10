@@ -153,14 +153,9 @@ class NetworkStatusMonitor {
         autoResolveSimple: true,
       });
 
-      // Check if there are any pending operations
+      // Check pending operations (for logging only)
       const pendingCount = await syncEngine.getPendingOperationsCount();
-      if (pendingCount === 0) {
-        console.log('[NetworkMonitor] No pending operations, skipping sync');
-        return;
-      }
-
-      console.log(`[NetworkMonitor] 🔄 Auto-sync starting: ${pendingCount} pending operations`);
+      console.log(`[NetworkMonitor] 🔄 Auto-sync starting (pending: ${pendingCount})`);
 
       const result = await syncEngine.bidirectionalSync();
 

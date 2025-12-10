@@ -172,6 +172,11 @@ export class SyncEngine {
       return this.createEmptyResult(startTime);
     }
 
+    try {
+      indexedDBManager.setCurrentTenant(context.tenantId, context.practiceId.toString());
+      await indexedDBManager.registerPractice(context.practiceId.toString(), context.tenantId);
+    } catch (_) {}
+
     console.log('📥 Fetching changes from server...', { practiceId: context.practiceId, tenantId: context.tenantId });
 
     try {
@@ -181,7 +186,7 @@ export class SyncEngine {
       // Check if we should pull fresh data to ensure local records are up to date
       await this.checkForFreshDataPull(context, lastSyncTimestamp);
 
-  const entityTypesToSync = 'appointments,pets,clients,practitioners,soapNotes,rooms,admissions,vaccinations,vaccine_types,kennels,boarding_stays';
+  const entityTypesToSync = 'appointments,pets,clients,practitioners,soapNotes,soapTemplates,rooms,admissions,vaccinations,vaccine_types,kennels,boarding_stays';
       const syncUrl = `/api/sync/pull?lastSyncTimestamp=${lastSyncTimestamp}&practiceId=${context.practiceId}&entityTypes=${entityTypesToSync}`;
       
       console.log('[SyncEngine] 🔄 Initiating sync pull...');
@@ -190,18 +195,9 @@ export class SyncEngine {
       console.log('[SyncEngine] 🕒 Last sync:', new Date(lastSyncTimestamp).toISOString());
       console.log('[SyncEngine] 🌐 Request URL:', syncUrl);
 
-      // Pull changes from server - include all offline-enabled entities
-      const response = await fetch(syncUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Sync pull failed: ${response.statusText}`);
-      }
-
+      // Pull changes from server using authenticated API helper
+      const { apiRequest } = await import('@/lib/queryClient');
+      const response = await apiRequest('GET', syncUrl);
       const pullResult = await response.json();
 
       const result: SyncResult = {
@@ -259,7 +255,6 @@ export class SyncEngine {
         }
       }
 
-      // Update last sync timestamp
       await this.updateLastSyncTimestamp(pullResult.timestamp);
 
       result.duration = Date.now() - startTime;
@@ -957,27 +952,11 @@ export class SyncEngine {
         userId: apiOperation.userId,
       });
 
-      // Send to sync/push endpoint
-      const response = await fetch('/api/sync/push', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          operations: [apiOperation],
-          clientTimestamp: Date.now(),
-        }),
+      const { apiRequest } = await import('@/lib/queryClient');
+      const response = await apiRequest('POST', '/api/sync/push', {
+        operations: [apiOperation],
+        clientTimestamp: Date.now(),
       });
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('❌ Sync push failed:', error);
-        return {
-          success: false,
-          error: `HTTP ${response.status}: ${error}`,
-        };
-      }
-
       const result = await response.json();
 
       // Check result for this specific operation
